@@ -1,0 +1,223 @@
+{
+  "entities": {
+    "UserSettings": {
+      "title": "UserSettings",
+      "description": "Per-user AI, voice, wake-word, autonomy, and appearance preferences for Aqua AI.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID." },
+        "preferredModel": { "type": "string", "description": "Selected Gemini model identifier." },
+        "thinkingEnabled": { "type": "boolean", "description": "Whether high thinking mode is active for complex queries." },
+        "searchGroundingEnabled": { "type": "boolean", "description": "Whether Google Search grounding is enabled." },
+        "mapsGroundingEnabled": { "type": "boolean", "description": "Whether Google Maps grounding is enabled." },
+        "wakeWordEnabled": { "type": "boolean", "description": "Whether Hey Aqua foreground wake-word listening is active." },
+        "wakeWordPhrase": { "type": "string", "description": "Configured wake phrase." },
+        "voiceLanguage": { "type": "string", "description": "BCP-47 voice language tag." },
+        "voiceSpeed": { "type": "number", "description": "TTS speech rate multiplier." },
+        "voicePitch": { "type": "number", "description": "TTS pitch multiplier." },
+        "useGeminiTts": { "type": "boolean", "description": "Prefer Gemini TTS model over device TTS." },
+        "autonomousReversibleActions": { "type": "boolean", "description": "Allow reversible tools to execute without confirmation." },
+        "darkThemeMode": { "type": "string", "description": "Selected Aqua theme mode." },
+        "useCustomDirectApiKey": { "type": "boolean", "description": "Whether local Keystore-encrypted Gemini API key mode is preferred." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." }
+      },
+      "required": [
+        "userId",
+        "preferredModel",
+        "thinkingEnabled",
+        "searchGroundingEnabled",
+        "mapsGroundingEnabled",
+        "wakeWordEnabled",
+        "wakeWordPhrase",
+        "voiceLanguage",
+        "voiceSpeed",
+        "voicePitch",
+        "useGeminiTts",
+        "autonomousReversibleActions",
+        "darkThemeMode",
+        "useCustomDirectApiKey",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Conversation": {
+      "title": "Conversation",
+      "description": "A persistent multi-turn Aqua AI conversation thread.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID." },
+        "title": { "type": "string", "description": "Conversation title." },
+        "summary": { "type": "string", "description": "Brief summary of latest context." },
+        "modelUsed": { "type": "string", "description": "Last Gemini model used." },
+        "messageCount": { "type": "integer", "description": "Number of messages in thread." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." }
+      },
+      "required": ["userId", "title", "summary", "modelUsed", "messageCount", "createdAt", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "An individual message inside a user's Aqua AI conversation.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID." },
+        "conversationId": { "type": "string", "description": "Parent conversation ID." },
+        "role": { "type": "string", "enum": ["user", "model", "agent", "tool"], "description": "Message author role." },
+        "content": { "type": "string", "description": "Message text content." },
+        "modelUsed": { "type": "string", "description": "Model name associated with message." },
+        "attachmentName": { "type": "string", "description": "Optional imported file display name." },
+        "attachmentMime": { "type": "string", "description": "Optional imported file MIME type." },
+        "toolActionsJson": { "type": "string", "description": "Serialized agent tool execution trace." },
+        "groundingSourcesJson": { "type": "string", "description": "Serialized grounding citations." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." }
+      },
+      "required": [
+        "userId",
+        "conversationId",
+        "role",
+        "content",
+        "modelUsed",
+        "attachmentName",
+        "attachmentMime",
+        "toolActionsJson",
+        "groundingSourcesJson",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "MemoryItem": {
+      "title": "MemoryItem",
+      "description": "A user-approved persistent memory, preference, or saved instruction.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID." },
+        "category": { "type": "string", "enum": ["instruction", "preference", "fact", "reminder"], "description": "Memory category." },
+        "title": { "type": "string", "description": "Short memory heading." },
+        "content": { "type": "string", "description": "Memory body text." },
+        "approvedByUser": { "type": "boolean", "description": "Explicit user approval flag." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." }
+      },
+      "required": ["userId", "category", "title", "content", "approvedByUser", "createdAt", "updatedAt"]
+    },
+    "AquaSkill": {
+      "title": "AquaSkill",
+      "description": "A validated, user-managed skill definition imported or authored for Aqua AI.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID." },
+        "name": { "type": "string", "description": "Skill display name." },
+        "description": { "type": "string", "description": "Skill description." },
+        "version": { "type": "string", "description": "Skill semantic version." },
+        "format": { "type": "string", "enum": ["json", "yaml", "markdown", "zip", "custom"], "description": "Skill source format." },
+        "instructions": { "type": "string", "description": "Declarative skill prompt instructions." },
+        "requiredPermissions": { "type": "array", "description": "Declared permission strings." },
+        "tools": { "type": "array", "description": "Declared tool names." },
+        "configJson": { "type": "string", "description": "Skill configuration parameters." },
+        "securityStatus": { "type": "string", "enum": ["verified", "warning", "blocked"], "description": "Security inspector verdict." },
+        "securityReport": { "type": "string", "description": "Security inspection summary." },
+        "enabled": { "type": "boolean", "description": "Whether the skill is active." },
+        "sourceLabel": { "type": "string", "description": "Import source label." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." }
+      },
+      "required": [
+        "userId",
+        "name",
+        "description",
+        "version",
+        "format",
+        "instructions",
+        "requiredPermissions",
+        "tools",
+        "configJson",
+        "securityStatus",
+        "securityReport",
+        "enabled",
+        "sourceLabel",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "WalletConfig": {
+      "title": "WalletConfig",
+      "description": "Non-sensitive Flash Crypto Wallet connection metadata and read-only endpoint config.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID." },
+        "walletProductName": { "type": "string", "description": "Official Flash Wallet product name." },
+        "developerName": { "type": "string", "description": "Official developer or publisher name." },
+        "packageName": { "type": "string", "description": "Android package name of the wallet app." },
+        "integrationMethod": { "type": "string", "enum": ["wallet_connect", "deep_link", "android_intent", "read_only_rpc", "unverified"], "description": "Discovered official integration channel." },
+        "networkName": { "type": "string", "description": "Blockchain network name." },
+        "rpcEndpoint": { "type": "string", "description": "Official public JSON-RPC endpoint URL if applicable." },
+        "publicAddress": { "type": "string", "description": "Public receiving address only; never private keys or seed phrases." },
+        "connectionStatus": { "type": "string", "enum": ["connected", "read_only", "disconnected", "unsupported"], "description": "Current wallet session state." },
+        "docsUrl": { "type": "string", "description": "Official integration documentation URL." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." }
+      },
+      "required": [
+        "userId",
+        "walletProductName",
+        "developerName",
+        "packageName",
+        "integrationMethod",
+        "networkName",
+        "rpcEndpoint",
+        "publicAddress",
+        "connectionStatus",
+        "docsUrl",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "BrowsingTab": {
+      "title": "BrowsingTab",
+      "description": "Saved Aqua Browser tab metadata and extracted page summary.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID." },
+        "title": { "type": "string", "description": "Webpage title." },
+        "url": { "type": "string", "description": "Webpage URL." },
+        "lastSummary": { "type": "string", "description": "AI summary of page content." },
+        "isActive": { "type": "boolean", "description": "Whether this tab is currently selected." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." }
+      },
+      "required": ["userId", "title", "url", "lastSummary", "isActive", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/UserSettings" },
+      "description": "User preferences and assistant configuration."
+    },
+    "/users/{userId}/conversations/{conversationId}": {
+      "schema": { "$ref": "#/entities/Conversation" },
+      "description": "User conversation threads."
+    },
+    "/users/{userId}/conversations/{conversationId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Messages belonging to a user conversation."
+    },
+    "/users/{userId}/memories/{memoryId}": {
+      "schema": { "$ref": "#/entities/MemoryItem" },
+      "description": "User-approved persistent memories and saved instructions."
+    },
+    "/users/{userId}/skills/{skillId}": {
+      "schema": { "$ref": "#/entities/AquaSkill" },
+      "description": "Validated Aqua skills created or imported by the user."
+    },
+    "/users/{userId}/wallets/{walletId}": {
+      "schema": { "$ref": "#/entities/WalletConfig" },
+      "description": "Non-sensitive Flash Crypto Wallet integration profiles."
+    },
+    "/users/{userId}/browser_tabs/{tabId}": {
+      "schema": { "$ref": "#/entities/BrowsingTab" },
+      "description": "Persisted Aqua Browser tabs."
+    }
+  }
+}

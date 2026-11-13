@@ -1,0 +1,6 @@
+{
+  "name": "Aqua AI",
+  "description": "Autonomous Android personal AI assistant with Gemini intelligence, voice conversations, browser automation, extensible skills, file analysis, device control, and Flash Wallet connector.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

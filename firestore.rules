@@ -1,0 +1,247 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 0: Default-deny global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Shared hardened primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidTimestampsOnCreate(data) {
+      return data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidTimestampsOnUpdate(data) {
+      return data.createdAt == existing().createdAt &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // Entity Validators
+    function isValidUserSettings(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.preferredModel is string && data.preferredModel.size() >= 1 && data.preferredModel.size() <= 100 &&
+             data.thinkingEnabled is bool &&
+             data.searchGroundingEnabled is bool &&
+             data.mapsGroundingEnabled is bool &&
+             data.wakeWordEnabled is bool &&
+             data.wakeWordPhrase is string && data.wakeWordPhrase.size() >= 1 && data.wakeWordPhrase.size() <= 64 &&
+             data.voiceLanguage is string && data.voiceLanguage.size() >= 2 && data.voiceLanguage.size() <= 32 &&
+             (data.voiceSpeed is float || data.voiceSpeed is int) && data.voiceSpeed >= 0.25 && data.voiceSpeed <= 3.0 &&
+             (data.voicePitch is float || data.voicePitch is int) && data.voicePitch >= 0.25 && data.voicePitch <= 3.0 &&
+             data.useGeminiTts is bool &&
+             data.autonomousReversibleActions is bool &&
+             data.darkThemeMode is string && data.darkThemeMode.size() >= 1 && data.darkThemeMode.size() <= 32 &&
+             data.useCustomDirectApiKey is bool;
+    }
+
+    function isValidConversation(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.summary is string && data.summary.size() <= 500 &&
+             data.modelUsed is string && data.modelUsed.size() >= 1 && data.modelUsed.size() <= 100 &&
+             data.messageCount is int && data.messageCount >= 0 && data.messageCount <= 100000;
+    }
+
+    function isValidChatMessage(data, userId, conversationId) {
+      return data.userId is string && data.userId == userId &&
+             data.conversationId is string && data.conversationId == conversationId &&
+             data.role is string && data.role in ['user', 'model', 'agent', 'tool'] &&
+             data.content is string && data.content.size() <= 32000 &&
+             data.modelUsed is string && data.modelUsed.size() <= 100 &&
+             data.attachmentName is string && data.attachmentName.size() <= 255 &&
+             data.attachmentMime is string && data.attachmentMime.size() <= 128 &&
+             data.toolActionsJson is string && data.toolActionsJson.size() <= 16000 &&
+             data.groundingSourcesJson is string && data.groundingSourcesJson.size() <= 16000;
+    }
+
+    function isValidMemoryItem(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.category is string && data.category in ['instruction', 'preference', 'fact', 'reminder'] &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.content is string && data.content.size() >= 1 && data.content.size() <= 4000 &&
+             data.approvedByUser is bool;
+    }
+
+    function isValidAquaSkill(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+             data.description is string && data.description.size() <= 1000 &&
+             data.version is string && data.version.size() >= 1 && data.version.size() <= 32 &&
+             data.format is string && data.format in ['json', 'yaml', 'markdown', 'zip', 'custom'] &&
+             data.instructions is string && data.instructions.size() >= 1 && data.instructions.size() <= 16000 &&
+             data.requiredPermissions is list && data.requiredPermissions.size() <= 20 &&
+             (data.requiredPermissions.size() == 0 || data.requiredPermissions[0] is string) &&
+             data.tools is list && data.tools.size() <= 20 &&
+             (data.tools.size() == 0 || data.tools[0] is string) &&
+             data.configJson is string && data.configJson.size() <= 8000 &&
+             data.securityStatus is string && data.securityStatus in ['verified', 'warning', 'blocked'] &&
+             data.securityReport is string && data.securityReport.size() <= 2000 &&
+             data.enabled is bool &&
+             data.sourceLabel is string && data.sourceLabel.size() <= 255;
+    }
+
+    function isValidWalletConfig(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.walletProductName is string && data.walletProductName.size() >= 1 && data.walletProductName.size() <= 100 &&
+             data.developerName is string && data.developerName.size() <= 100 &&
+             data.packageName is string && data.packageName.size() <= 150 &&
+             data.integrationMethod is string && data.integrationMethod in ['wallet_connect', 'deep_link', 'android_intent', 'read_only_rpc', 'unverified'] &&
+             data.networkName is string && data.networkName.size() >= 1 && data.networkName.size() <= 64 &&
+             data.rpcEndpoint is string && data.rpcEndpoint.size() <= 300 &&
+             data.publicAddress is string && data.publicAddress.size() <= 128 &&
+             data.connectionStatus is string && data.connectionStatus in ['connected', 'read_only', 'disconnected', 'unsupported'] &&
+             data.docsUrl is string && data.docsUrl.size() <= 300;
+    }
+
+    function isValidBrowsingTab(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.title is string && data.title.size() <= 200 &&
+             data.url is string && data.url.size() >= 1 && data.url.size() <= 2048 &&
+             data.lastSummary is string && data.lastSummary.size() <= 4000 &&
+             data.isActive is bool;
+    }
+
+    match /users/{userId} {
+      // Settings
+      match /settings/{settingId} {
+        allow get: if isOwner(userId) && isValidId(settingId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(settingId) &&
+                         incoming().keys().hasAll(['userId', 'preferredModel', 'thinkingEnabled', 'searchGroundingEnabled', 'mapsGroundingEnabled', 'wakeWordEnabled', 'wakeWordPhrase', 'voiceLanguage', 'voiceSpeed', 'voicePitch', 'useGeminiTts', 'autonomousReversibleActions', 'darkThemeMode', 'useCustomDirectApiKey', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'preferredModel', 'thinkingEnabled', 'searchGroundingEnabled', 'mapsGroundingEnabled', 'wakeWordEnabled', 'wakeWordPhrase', 'voiceLanguage', 'voiceSpeed', 'voicePitch', 'useGeminiTts', 'autonomousReversibleActions', 'darkThemeMode', 'useCustomDirectApiKey', 'createdAt', 'updatedAt']) &&
+                         isValidTimestampsOnCreate(incoming()) &&
+                         isValidUserSettings(incoming(), userId);
+        allow update: if isOwner(userId) && isValidId(settingId) &&
+                         isValidUserSettings(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         isValidTimestampsOnUpdate(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['preferredModel', 'thinkingEnabled', 'searchGroundingEnabled', 'mapsGroundingEnabled', 'wakeWordEnabled', 'wakeWordPhrase', 'voiceLanguage', 'voiceSpeed', 'voicePitch', 'useGeminiTts', 'autonomousReversibleActions', 'darkThemeMode', 'useCustomDirectApiKey', 'updatedAt']);
+        allow delete: if isOwner(userId) && isValidId(settingId);
+      }
+
+      // Conversations & nested Messages
+      match /conversations/{conversationId} {
+        allow get: if isOwner(userId) && isValidId(conversationId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(conversationId) &&
+                         incoming().keys().hasAll(['userId', 'title', 'summary', 'modelUsed', 'messageCount', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'title', 'summary', 'modelUsed', 'messageCount', 'createdAt', 'updatedAt']) &&
+                         isValidTimestampsOnCreate(incoming()) &&
+                         isValidConversation(incoming(), userId);
+        allow update: if isOwner(userId) && isValidId(conversationId) &&
+                         isValidConversation(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         isValidTimestampsOnUpdate(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'summary', 'modelUsed', 'messageCount', 'updatedAt']);
+        allow delete: if isOwner(userId) && isValidId(conversationId);
+
+        match /messages/{messageId} {
+          allow get: if isOwner(userId) && isValidId(conversationId) && isValidId(messageId);
+          allow list: if isOwner(userId) && isValidId(conversationId);
+          allow create: if isOwner(userId) && isValidId(conversationId) && isValidId(messageId) &&
+                           exists(/databases/$(database)/documents/users/$(userId)/conversations/$(conversationId)) &&
+                           incoming().keys().hasAll(['userId', 'conversationId', 'role', 'content', 'modelUsed', 'attachmentName', 'attachmentMime', 'toolActionsJson', 'groundingSourcesJson', 'createdAt', 'updatedAt']) &&
+                           incoming().keys().hasOnly(['userId', 'conversationId', 'role', 'content', 'modelUsed', 'attachmentName', 'attachmentMime', 'toolActionsJson', 'groundingSourcesJson', 'createdAt', 'updatedAt']) &&
+                           isValidTimestampsOnCreate(incoming()) &&
+                           isValidChatMessage(incoming(), userId, conversationId);
+          allow update: if isOwner(userId) && isValidId(conversationId) && isValidId(messageId) &&
+                           isValidChatMessage(incoming(), userId, conversationId) &&
+                           incoming().userId == existing().userId &&
+                           incoming().conversationId == existing().conversationId &&
+                           isValidTimestampsOnUpdate(incoming()) &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['content', 'modelUsed', 'toolActionsJson', 'groundingSourcesJson', 'updatedAt']);
+          allow delete: if isOwner(userId) && isValidId(conversationId) && isValidId(messageId);
+        }
+      }
+
+      // Memories
+      match /memories/{memoryId} {
+        allow get: if isOwner(userId) && isValidId(memoryId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(memoryId) &&
+                         incoming().keys().hasAll(['userId', 'category', 'title', 'content', 'approvedByUser', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'category', 'title', 'content', 'approvedByUser', 'createdAt', 'updatedAt']) &&
+                         isValidTimestampsOnCreate(incoming()) &&
+                         isValidMemoryItem(incoming(), userId);
+        allow update: if isOwner(userId) && isValidId(memoryId) &&
+                         isValidMemoryItem(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         isValidTimestampsOnUpdate(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['category', 'title', 'content', 'approvedByUser', 'updatedAt']);
+        allow delete: if isOwner(userId) && isValidId(memoryId);
+      }
+
+      // Skills
+      match /skills/{skillId} {
+        allow get: if isOwner(userId) && isValidId(skillId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(skillId) &&
+                         incoming().keys().hasAll(['userId', 'name', 'description', 'version', 'format', 'instructions', 'requiredPermissions', 'tools', 'configJson', 'securityStatus', 'securityReport', 'enabled', 'sourceLabel', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'name', 'description', 'version', 'format', 'instructions', 'requiredPermissions', 'tools', 'configJson', 'securityStatus', 'securityReport', 'enabled', 'sourceLabel', 'createdAt', 'updatedAt']) &&
+                         isValidTimestampsOnCreate(incoming()) &&
+                         isValidAquaSkill(incoming(), userId);
+        allow update: if isOwner(userId) && isValidId(skillId) &&
+                         isValidAquaSkill(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         isValidTimestampsOnUpdate(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'version', 'format', 'instructions', 'requiredPermissions', 'tools', 'configJson', 'securityStatus', 'securityReport', 'enabled', 'sourceLabel', 'updatedAt']);
+        allow delete: if isOwner(userId) && isValidId(skillId);
+      }
+
+      // Wallets (non-sensitive metadata only)
+      match /wallets/{walletId} {
+        allow get: if isOwner(userId) && isValidId(walletId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(walletId) &&
+                         incoming().keys().hasAll(['userId', 'walletProductName', 'developerName', 'packageName', 'integrationMethod', 'networkName', 'rpcEndpoint', 'publicAddress', 'connectionStatus', 'docsUrl', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'walletProductName', 'developerName', 'packageName', 'integrationMethod', 'networkName', 'rpcEndpoint', 'publicAddress', 'connectionStatus', 'docsUrl', 'createdAt', 'updatedAt']) &&
+                         isValidTimestampsOnCreate(incoming()) &&
+                         isValidWalletConfig(incoming(), userId);
+        allow update: if isOwner(userId) && isValidId(walletId) &&
+                         isValidWalletConfig(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         isValidTimestampsOnUpdate(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['walletProductName', 'developerName', 'packageName', 'integrationMethod', 'networkName', 'rpcEndpoint', 'publicAddress', 'connectionStatus', 'docsUrl', 'updatedAt']);
+        allow delete: if isOwner(userId) && isValidId(walletId);
+      }
+
+      // Browser tabs
+      match /browser_tabs/{tabId} {
+        allow get: if isOwner(userId) && isValidId(tabId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(tabId) &&
+                         incoming().keys().hasAll(['userId', 'title', 'url', 'lastSummary', 'isActive', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'title', 'url', 'lastSummary', 'isActive', 'createdAt', 'updatedAt']) &&
+                         isValidTimestampsOnCreate(incoming()) &&
+                         isValidBrowsingTab(incoming(), userId);
+        allow update: if isOwner(userId) && isValidId(tabId) &&
+                         isValidBrowsingTab(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         isValidTimestampsOnUpdate(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'url', 'lastSummary', 'isActive', 'updatedAt']);
+        allow delete: if isOwner(userId) && isValidId(tabId);
+      }
+    }
+  }
+}
