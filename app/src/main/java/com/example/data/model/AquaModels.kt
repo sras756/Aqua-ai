@@ -9,8 +9,8 @@ import com.google.firebase.firestore.ServerTimestamp
 data class UserSettings(
     @DocumentId val id: String = "preferences",
     val userId: String = "",
-    val preferredModel: String = MODEL_HYDROGEN,
-    val thinkingEnabled: Boolean = true,
+    val preferredModel: String = MODEL_FLASH_38,
+    val thinkingEnabled: Boolean = false,
     val searchGroundingEnabled: Boolean = true,
     val mapsGroundingEnabled: Boolean = false,
     val wakeWordEnabled: Boolean = false,
@@ -26,13 +26,13 @@ data class UserSettings(
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
     companion object {
-        const val MODEL_HYDROGEN = "gemini-4-hydrogen"
-        const val MODEL_ARGON = "gemini-4-argon"
-        const val MODEL_CARBON = "gemini-4-carbon"
-        const val MODEL_FLASH_LITE = "gemini-3.1-flash-lite"
         const val MODEL_FLASH_38 = "gemini-3.8-flash"
+        const val MODEL_FLASH_LITE = "gemini-3.5-flash-lite"
+        const val MODEL_ARGON = "gemini-4-argon"
+        const val MODEL_HYDROGEN = "gemini-3.8-flash"
+        const val MODEL_CARBON = "gemini-4-argon"
         const val MODEL_LIVE = "gemini-3.8-live"
-        const val MODEL_TTS = "gemini-3.8-flash-tts"
+        const val MODEL_TTS = "gemini-3.1-flash-tts-preview"
     }
 }
 
@@ -42,7 +42,7 @@ data class Conversation(
     val userId: String = "",
     val title: String = "New Conversation",
     val summary: String = "",
-    val modelUsed: String = UserSettings.MODEL_HYDROGEN,
+    val modelUsed: String = UserSettings.MODEL_FLASH_38,
     val messageCount: Long = 0L,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
@@ -121,6 +121,20 @@ data class BrowsingTab(
     val url: String = "",
     val lastSummary: String = "",
     val isActive: Boolean = true,
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+)
+
+@IgnoreExtraProperties
+data class AquaRoutine(
+    @DocumentId val id: String = "",
+    val userId: String = "",
+    val title: String = "",
+    val prompt: String = "",
+    val category: String = "productivity",
+    val speakResult: Boolean = false,
+    val runCount: Long = 0L,
+    val lastRunSummary: String = "",
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )

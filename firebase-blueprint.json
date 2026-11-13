@@ -188,6 +188,23 @@
         "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." }
       },
       "required": ["userId", "title", "url", "lastSummary", "isActive", "createdAt", "updatedAt"]
+    },
+    "AquaRoutine": {
+      "title": "AquaRoutine",
+      "description": "User-authored reusable multi-step autonomous AI prompt workflow.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID." },
+        "title": { "type": "string", "description": "Short workflow name." },
+        "prompt": { "type": "string", "description": "Autonomous prompt instructions executed by Aqua." },
+        "category": { "type": "string", "enum": ["productivity", "workspace", "device", "browser", "crypto", "custom"], "description": "Workflow domain category." },
+        "speakResult": { "type": "boolean", "description": "Whether Aqua reads the workflow summary aloud." },
+        "runCount": { "type": "integer", "description": "Completed execution counter." },
+        "lastRunSummary": { "type": "string", "description": "Snippet of most recent execution outcome." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." }
+      },
+      "required": ["userId", "title", "prompt", "category", "speakResult", "runCount", "lastRunSummary", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -218,6 +235,10 @@
     "/users/{userId}/browser_tabs/{tabId}": {
       "schema": { "$ref": "#/entities/BrowsingTab" },
       "description": "Persisted Aqua Browser tabs."
+    },
+    "/users/{userId}/routines/{routineId}": {
+      "schema": { "$ref": "#/entities/AquaRoutine" },
+      "description": "User-authored reusable autonomous workflows."
     }
   }
 }

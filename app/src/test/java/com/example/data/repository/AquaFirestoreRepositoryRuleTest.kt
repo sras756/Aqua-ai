@@ -1,11 +1,17 @@
 package com.example.data.repository
 
+import androidx.test.core.app.ApplicationProvider
+import com.example.ai.ToolCallingEngine
 import com.example.base.FirestoreEmulatorTestBase
+import com.example.browser.AquaBrowserController
+import com.example.data.model.AquaRoutine
 import com.example.data.model.AquaSkill
 import com.example.data.model.ChatMessage
 import com.example.data.model.MemoryItem
 import com.example.data.model.UserSettings
 import com.example.data.model.WalletConfig
+import com.example.device.AndroidDeviceController
+import com.example.wallet.FlashWalletConnector
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -161,6 +167,47 @@ class AquaFirestoreRepositoryRuleTest : FirestoreEmulatorTestBase() {
             denied = fsEx?.code == FirebaseFirestoreException.Code.PERMISSION_DENIED
         }
         assertTrue("Expected cross-user read to fail with PERMISSION_DENIED", denied)
+    }
+
+    @Test
+    fun authenticatedUser_canCreateObserveUpdateAndDeleteRoutines() = runBlocking {
+        signInTestUser(ALICE_EMAIL)
+        val repo = AquaFirestoreRepository(firestore)
+
+        val saveRes = withTimeout(TIMEOUT_MS) {
+            repo.saveRoutine(
+                AquaRoutine(
+                    title = "Battery & Mail Check",
+                    prompt = "Inspect device status and summarize unread Gmail messages.",
+                    category = "productivity",
+                    speakResult = false
+                )
+            )
+        }
+        assertTrue(saveRes.isSuccess)
+        val routineId = saveRes.getOrThrow()
+
+        val observed = withTimeout(FLOW_TIMEOUT_MS) {
+            repo.observeRoutines().first { list -> list.any { it.id == routineId } }
+        }
+        assertTrue(observed.any { it.id == routineId && it.title == "Battery & Mail Check" })
+
+        val recordRes = withTimeout(TIMEOUT_MS) {
+            repo.recordRoutineRun(routineId, "Completed cleanly")
+        }
+        assertTrue(recordRes.isSuccess)
+
+        val deleteRes = withTimeout(TIMEOUT_MS) { repo.deleteRoutine(routineId) }
+        assertTrue(deleteRes.isSuccess)
+
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val engine = ToolCallingEngine(
+            deviceController = AndroidDeviceController(ctx),
+            browserController = AquaBrowserController(ctx),
+            walletConnector = FlashWalletConnector(ctx),
+            firestoreRepo = repo
+        )
+        org.junit.Assert.assertNotNull(engine.buildToolDeclarations())
     }
 
     private companion object {

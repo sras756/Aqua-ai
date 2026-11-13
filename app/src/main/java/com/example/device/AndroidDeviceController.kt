@@ -1,6 +1,9 @@
 package com.example.device
 
 import android.app.Activity
+import android.app.ActivityManager
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -11,10 +14,20 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.BatteryManager
+import android.os.Environment
+import android.os.StatFs
 import android.provider.AlarmClock
 import android.provider.CalendarContract
 import android.provider.Settings
 import android.content.ComponentName
+
+data class StorageAndMemoryStats(
+    val storageFreeMb: Long,
+    val storageTotalMb: Long,
+    val ramAvailableMb: Long,
+    val ramTotalMb: Long,
+    val lowMemory: Boolean
+)
 
 data class DeviceTelemetry(
     val batteryPercent: Int,
@@ -213,6 +226,66 @@ class AndroidDeviceController(private val context: Context) {
 
     fun readRecentNotifications(): List<CapturedNotification> {
         return AquaNotificationListenerService.notifications.value
+    }
+
+    fun getStorageAndMemoryStats(): StorageAndMemoryStats {
+        val statFs = StatFs(Environment.getDataDirectory().path)
+        val totalStorageMb = statFs.totalBytes / (1024L * 1024L)
+        val freeStorageMb = statFs.availableBytes / (1024L * 1024L)
+
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val memInfo = ActivityManager.MemoryInfo()
+        am.getMemoryInfo(memInfo)
+        val totalRamMb = memInfo.totalMem / (1024L * 1024L)
+        val availRamMb = memInfo.availMem / (1024L * 1024L)
+
+        return StorageAndMemoryStats(
+            storageFreeMb = freeStorageMb,
+            storageTotalMb = totalStorageMb,
+            ramAvailableMb = availRamMb,
+            ramTotalMb = totalRamMb,
+            lowMemory = memInfo.lowMemory
+        )
+    }
+
+    fun readClipboardText(): Result<String> = runCatching {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = clipboard.primaryClip
+        if (clip == null || clip.itemCount == 0) {
+            ""
+        } else {
+            clip.getItemAt(0).coerceToText(context)?.toString().orEmpty()
+        }
+    }
+
+    fun copyTextToClipboard(label: String, text: String): Result<String> = runCatching {
+        require(text.isNotBlank()) { "Cannot copy empty text to clipboard." }
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText(label.ifBlank { "Aqua AI" }, text))
+        "Copied ${text.length} character(s) to Android clipboard."
+    }
+
+    fun shareTextExternally(title: String, text: String): Result<String> = runCatching {
+        require(text.isNotBlank()) { "Cannot share blank text." }
+        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, title.ifBlank { "Shared from Aqua AI" })
+            putExtra(Intent.EXTRA_TEXT, text)
+        }
+        val chooser = Intent.createChooser(sendIntent, title.ifBlank { "Share via" }).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(chooser)
+        "Opened Android Sharesheet for '${title.ifBlank { "Aqua AI content" }}'."
+    }
+
+    fun openExternalBrowser(url: String): Result<String> = runCatching {
+        val normalized = if (url.startsWith("http://") || url.startsWith("https://")) url else "https://$url"
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(normalized)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+        "Opened $normalized in external browser."
     }
 
     private fun findFlashCameraId(): String? {

@@ -2,6 +2,7 @@ package com.example.data.repository
 
 import android.content.Context
 import com.example.R
+import com.example.data.model.AquaRoutine
 import com.example.data.model.AquaSkill
 import com.example.data.model.BrowsingTab
 import com.example.data.model.ChatMessage
@@ -548,6 +549,91 @@ class AquaFirestoreRepository(
         if (e is CancellationException) throw e
         val uid = auth.currentUser?.uid ?: "unauthenticated"
         handleFirestoreError(e, OperationType.DELETE, "users/$uid/browser_tabs/$tabId")
+    }
+
+    // --- AUTONOMOUS ROUTINES ---
+
+    fun observeRoutines(): Flow<List<AquaRoutine>> = flow {
+        val uid = requireUserId()
+        val path = "users/$uid/routines"
+        emitAll(
+            userRoot(uid).collection("routines")
+                .orderBy("updatedAt", Query.Direction.DESCENDING)
+                .snapshots()
+                .map { snap ->
+                    snap.toObjects(
+                        AquaRoutine::class.java,
+                        DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                    )
+                }
+                .withFirestoreErrorLogging(uid, OperationType.LIST, path)
+        )
+    }
+
+    suspend fun saveRoutine(routine: AquaRoutine): Result<String> = runCatching {
+        val uid = requireUserId()
+        val colRef = userRoot(uid).collection("routines")
+        val docRef = if (routine.id.isNotBlank()) colRef.document(routine.id) else colRef.document()
+        val validCat = routine.category.lowercase().takeIf {
+            it in setOf("productivity", "workspace", "device", "browser", "crypto", "custom")
+        } ?: "custom"
+        if (routine.id.isNotBlank() && routine.createdAt != null) {
+            val updates = mapOf(
+                "title" to routine.title.ifBlank { "Aqua Routine" }.take(100),
+                "prompt" to routine.prompt.ifBlank { "Check device status" }.take(4000),
+                "category" to validCat,
+                "speakResult" to routine.speakResult,
+                "runCount" to routine.runCount.coerceIn(0L, 1_000_000L),
+                "lastRunSummary" to routine.lastRunSummary.take(1000),
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            docRef.update(updates).await()
+        } else {
+            val payload = mapOf(
+                "userId" to uid,
+                "title" to routine.title.ifBlank { "Aqua Routine" }.take(100),
+                "prompt" to routine.prompt.ifBlank { "Check device status" }.take(4000),
+                "category" to validCat,
+                "speakResult" to routine.speakResult,
+                "runCount" to routine.runCount.coerceIn(0L, 1_000_000L),
+                "lastRunSummary" to routine.lastRunSummary.take(1000),
+                "createdAt" to FieldValue.serverTimestamp(),
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            docRef.set(payload).await()
+        }
+        docRef.id
+    }.onFailure { e ->
+        if (e is CancellationException) throw e
+        val uid = auth.currentUser?.uid ?: "unauthenticated"
+        handleFirestoreError(e, OperationType.WRITE, "users/$uid/routines")
+    }
+
+    suspend fun recordRoutineRun(routineId: String, summary: String): Result<Unit> = runCatching {
+        val uid = requireUserId()
+        userRoot(uid).collection("routines").document(routineId)
+            .update(
+                mapOf(
+                    "runCount" to FieldValue.increment(1L),
+                    "lastRunSummary" to summary.take(1000),
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+        Unit
+    }.onFailure { e ->
+        if (e is CancellationException) throw e
+        val uid = auth.currentUser?.uid ?: "unauthenticated"
+        handleFirestoreError(e, OperationType.UPDATE, "users/$uid/routines/$routineId")
+    }
+
+    suspend fun deleteRoutine(routineId: String): Result<Unit> = runCatching {
+        val uid = requireUserId()
+        userRoot(uid).collection("routines").document(routineId).delete().await()
+        Unit
+    }.onFailure { e ->
+        if (e is CancellationException) throw e
+        val uid = auth.currentUser?.uid ?: "unauthenticated"
+        handleFirestoreError(e, OperationType.DELETE, "users/$uid/routines/$routineId")
     }
 
     // --- GOOGLE DRIVE HISTORY EXPORT / RESTORE ---

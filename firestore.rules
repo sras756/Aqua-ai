@@ -122,6 +122,16 @@ service cloud.firestore {
              data.isActive is bool;
     }
 
+    function isValidAquaRoutine(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 100 &&
+             data.prompt is string && data.prompt.size() >= 1 && data.prompt.size() <= 4000 &&
+             data.category is string && data.category in ['productivity', 'workspace', 'device', 'browser', 'crypto', 'custom'] &&
+             data.speakResult is bool &&
+             data.runCount is int && data.runCount >= 0 && data.runCount <= 1000000 &&
+             data.lastRunSummary is string && data.lastRunSummary.size() <= 1000;
+    }
+
     match /users/{userId} {
       // Settings
       match /settings/{settingId} {
@@ -241,6 +251,23 @@ service cloud.firestore {
                          isValidTimestampsOnUpdate(incoming()) &&
                          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'url', 'lastSummary', 'isActive', 'updatedAt']);
         allow delete: if isOwner(userId) && isValidId(tabId);
+      }
+
+      // Autonomous Routines
+      match /routines/{routineId} {
+        allow get: if isOwner(userId) && isValidId(routineId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(routineId) &&
+                         incoming().keys().hasAll(['userId', 'title', 'prompt', 'category', 'speakResult', 'runCount', 'lastRunSummary', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'title', 'prompt', 'category', 'speakResult', 'runCount', 'lastRunSummary', 'createdAt', 'updatedAt']) &&
+                         isValidTimestampsOnCreate(incoming()) &&
+                         isValidAquaRoutine(incoming(), userId);
+        allow update: if isOwner(userId) && isValidId(routineId) &&
+                         isValidAquaRoutine(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         isValidTimestampsOnUpdate(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'prompt', 'category', 'speakResult', 'runCount', 'lastRunSummary', 'updatedAt']);
+        allow delete: if isOwner(userId) && isValidId(routineId);
       }
     }
   }

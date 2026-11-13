@@ -70,10 +70,10 @@ class GeminiProvider(
         enableMapsGrounding: Boolean = false,
         userLatLng: Pair<Double, Double>? = null
     ): GenerativeModel {
-        val isCarbonThinking = modelName == UserSettings.MODEL_CARBON && settings.thinkingEnabled
+        val resolvedModel = normalizeSupportedModel(modelName)
+        val useDeepThinking = resolvedModel == UserSettings.MODEL_ARGON && settings.thinkingEnabled
         val config = generationConfig {
-            if (isCarbonThinking) {
-                // High thinking mode on gemini-4-carbon (do NOT set maxOutputTokens per skill requirement)
+            if (useDeepThinking) {
                 thinkingConfig = thinkingConfig {
                     thinkingLevel = ThinkingLevel.HIGH
                 }
@@ -103,7 +103,7 @@ class GeminiProvider(
         }
 
         return Firebase.ai(backend = GenerativeBackend.googleAI()).generativeModel(
-            modelName = modelName,
+            modelName = resolvedModel,
             generationConfig = config,
             tools = tools.ifEmpty { null },
             toolConfig = toolConfig,
@@ -190,88 +190,53 @@ class GeminiProvider(
         }
 
         return try {
-            val useGroundingInsteadOfTools = shouldUseWebOrMapsGrounding(userPrompt, settings)
-            val model = buildModel(
-                modelName = selectedModel,
-                systemInstructionText = systemInstructionText,
+            executeWithFirebaseAi(
+                modelToUse = selectedModel,
+                userPrompt = userPrompt,
+                history = history,
+                attachment = attachment,
                 settings = settings,
-                enableFunctionTools = !useGroundingInsteadOfTools && attachment == null,
-                enableSearchGrounding = useGroundingInsteadOfTools && settings.searchGroundingEnabled,
-                enableMapsGrounding = useGroundingInsteadOfTools && settings.mapsGroundingEnabled,
-                userLatLng = userLatLng
+                systemInstructionText = systemInstructionText,
+                activeWallet = activeWallet,
+                userLatLng = userLatLng,
+                traces = traces,
+                groundingSources = groundingSources,
+                onNavigateToBrowser = onNavigateToBrowser,
+                requestAuthorization = requestAuthorization,
+                onStreamChunk = onStreamChunk,
+                onTrace = onTrace
             )
-
-            val historyContents = history
-                .filter { it.role == "user" || it.role == "model" }
-                .takeLast(14)
-                .map { msg ->
-                    content(role = msg.role) { text(msg.content) }
-                }
-
-            val userContent = buildUserContent(userPrompt, attachment)
-
-            if (useGroundingInsteadOfTools || attachment != null) {
-                // Stream directly for grounding or multimodal analysis
-                val sb = StringBuilder()
-                withTimeout(60_000L) {
-                    val chat = model.startChat(history = historyContents)
-                    chat.sendMessageStream(userContent).collect { chunk ->
-                        val t = chunk.text.orEmpty()
-                        if (t.isNotEmpty()) {
-                            sb.append(t)
-                            onStreamChunk(sb.toString())
-                        }
-                        chunk.candidates.firstOrNull()?.groundingMetadata?.groundingChunks?.forEach { gChunk ->
-                            val title = gChunk.web?.title ?: gChunk.maps?.title
-                            val uri = gChunk.web?.uri ?: gChunk.maps?.uri
-                            if (!title.isNullOrBlank() || !uri.isNullOrBlank()) {
-                                val label = listOfNotNull(title, uri).joinToString(" — ")
-                                if (label !in groundingSources) groundingSources.add(label)
-                            }
-                        }
-                    }
-                }
-                val finalText = sb.toString().ifBlank { "I processed your input, but no text summary was returned." }
-                Result.success(AgentExecutionResult(finalText, selectedModel, traces, groundingSources))
-            } else {
-                // Autonomous multi-step function-calling loop
-                val chat = model.startChat(history = historyContents)
-                var response = withTimeout(60_000L) {
-                    chat.sendMessage(userContent)
-                }
-
-                var loopCount = 0
-                while (response.functionCalls.isNotEmpty() && loopCount < MAX_AGENT_STEPS) {
-                    loopCount++
-                    val responseParts = mutableListOf<FunctionResponsePart>()
-                    for (fnCall in response.functionCalls) {
-                        val traceRecorder: (AgentStepTrace) -> Unit = { trace ->
-                            traces.add(trace)
-                            onTrace(trace)
-                        }
-                        val fnResult = toolCallingEngine.executeFunctionCall(
-                            call = fnCall,
-                            settings = settings,
-                            activeWallet = activeWallet,
-                            onNavigateToBrowser = onNavigateToBrowser,
-                            requestAuthorization = requestAuthorization,
-                            onTrace = traceRecorder
-                        )
-                        responseParts.add(FunctionResponsePart(fnCall.name, fnResult))
-                    }
-
-                    val toolContent = Content(role = "user", parts = responseParts)
-                    response = withTimeout(60_000L) {
-                        chat.sendMessage(toolContent)
-                    }
-                }
-
-                val finalText = response.text?.takeIf { it.isNotBlank() }
-                    ?: "Task execution finished (${traces.size} tool step(s))."
-                onStreamChunk(finalText)
-                Result.success(AgentExecutionResult(finalText, selectedModel, traces, groundingSources))
-            }
         } catch (e: TimeoutCancellationException) {
+            Log.w(TAG, "Gemini request timed out on $selectedModel, attempting fast fallback", e)
+            if (selectedModel != UserSettings.MODEL_FLASH_LITE) {
+                try {
+                    return executeWithFirebaseAi(
+                        modelToUse = UserSettings.MODEL_FLASH_LITE,
+                        userPrompt = userPrompt,
+                        history = history,
+                        attachment = attachment,
+                        settings = settings.copy(thinkingEnabled = false),
+                        systemInstructionText = systemInstructionText,
+                        activeWallet = activeWallet,
+                        userLatLng = userLatLng,
+                        traces = traces,
+                        groundingSources = groundingSources,
+                        onNavigateToBrowser = onNavigateToBrowser,
+                        requestAuthorization = requestAuthorization,
+                        onStreamChunk = onStreamChunk,
+                        onTrace = onTrace
+                    )
+                } catch (fallbackErr: CancellationException) {
+                    if (fallbackErr is TimeoutCancellationException) {
+                        Log.e(TAG, "Gemini fallback request timed out", fallbackErr)
+                        return Result.failure(Exception("Aqua AI timed out after 60 seconds. Check network connectivity and retry."))
+                    }
+                    throw fallbackErr
+                } catch (fallbackErr: Exception) {
+                    Log.e(TAG, "Gemini fallback failed", fallbackErr)
+                    return Result.failure(fallbackErr)
+                }
+            }
             Log.e(TAG, "Gemini request timed out", e)
             Result.failure(Exception("Aqua AI timed out after 60 seconds. Check network and retry."))
         } catch (e: CancellationException) {
@@ -282,22 +247,152 @@ class GeminiProvider(
         }
     }
 
+    private suspend fun executeWithFirebaseAi(
+        modelToUse: String,
+        userPrompt: String,
+        history: List<ChatMessage>,
+        attachment: ImportedAttachment?,
+        settings: UserSettings,
+        systemInstructionText: String,
+        activeWallet: WalletConfig?,
+        userLatLng: Pair<Double, Double>?,
+        traces: MutableList<AgentStepTrace>,
+        groundingSources: MutableList<String>,
+        onNavigateToBrowser: (String) -> Unit,
+        requestAuthorization: suspend (PendingAuthorization) -> Boolean,
+        onStreamChunk: (String) -> Unit,
+        onTrace: (AgentStepTrace) -> Unit
+    ): Result<AgentExecutionResult> {
+        val useGroundingInsteadOfTools = shouldUseWebOrMapsGrounding(userPrompt, settings)
+        val model = buildModel(
+            modelName = modelToUse,
+            systemInstructionText = systemInstructionText,
+            settings = settings,
+            enableFunctionTools = !useGroundingInsteadOfTools && attachment == null,
+            enableSearchGrounding = useGroundingInsteadOfTools && settings.searchGroundingEnabled,
+            enableMapsGrounding = useGroundingInsteadOfTools && settings.mapsGroundingEnabled,
+            userLatLng = userLatLng
+        )
+
+        val historyContents = history
+            .filter { it.role == "user" || it.role == "model" }
+            .takeLast(14)
+            .map { msg ->
+                content(role = msg.role) { text(msg.content) }
+            }
+
+        val userContent = buildUserContent(userPrompt, attachment)
+
+        if (useGroundingInsteadOfTools || attachment != null) {
+            val sb = StringBuilder()
+            withTimeout(60_000L) {
+                val chat = model.startChat(history = historyContents)
+                chat.sendMessageStream(userContent).collect { chunk ->
+                    val t = chunk.text.orEmpty()
+                    if (t.isNotEmpty()) {
+                        sb.append(t)
+                        onStreamChunk(sb.toString())
+                    }
+                    chunk.candidates.firstOrNull()?.groundingMetadata?.groundingChunks?.forEach { gChunk ->
+                        val title = gChunk.web?.title ?: gChunk.maps?.title
+                        val uri = gChunk.web?.uri ?: gChunk.maps?.uri
+                        if (!title.isNullOrBlank() || !uri.isNullOrBlank()) {
+                            val label = listOfNotNull(title, uri).joinToString(" — ")
+                            if (label !in groundingSources) groundingSources.add(label)
+                        }
+                    }
+                }
+            }
+            val finalText = sb.toString().ifBlank { "I processed your input, but no text summary was returned." }
+            return Result.success(AgentExecutionResult(finalText, modelToUse, traces, groundingSources))
+        }
+
+        // Streamed autonomous multi-step function-calling loop (low TTFT, prevents unary 60s hang)
+        val chat = model.startChat(history = historyContents)
+        var nextTurnContent: Content = userContent
+        val aggregatedText = StringBuilder()
+        var loopCount = 0
+
+        while (loopCount < MAX_AGENT_STEPS) {
+            loopCount++
+            val turnText = StringBuilder()
+            val pendingCalls = mutableListOf<com.google.firebase.ai.type.FunctionCallPart>()
+
+            withTimeout(60_000L) {
+                chat.sendMessageStream(nextTurnContent).collect { chunk ->
+                    val t = chunk.text.orEmpty()
+                    if (t.isNotEmpty()) {
+                        turnText.append(t)
+                        val combined = if (aggregatedText.isEmpty()) {
+                            turnText.toString()
+                        } else {
+                            "${aggregatedText}\n${turnText}"
+                        }
+                        onStreamChunk(combined)
+                    }
+                    if (chunk.functionCalls.isNotEmpty()) {
+                        pendingCalls.addAll(chunk.functionCalls)
+                    }
+                }
+            }
+
+            if (turnText.isNotBlank()) {
+                if (aggregatedText.isNotEmpty()) aggregatedText.append("\n")
+                aggregatedText.append(turnText)
+            }
+
+            if (pendingCalls.isEmpty()) break
+
+            val responseParts = mutableListOf<FunctionResponsePart>()
+            for (fnCall in pendingCalls) {
+                val traceRecorder: (AgentStepTrace) -> Unit = { trace ->
+                    traces.add(trace)
+                    onTrace(trace)
+                }
+                val fnResult = toolCallingEngine.executeFunctionCall(
+                    call = fnCall,
+                    settings = settings,
+                    activeWallet = activeWallet,
+                    onNavigateToBrowser = onNavigateToBrowser,
+                    requestAuthorization = requestAuthorization,
+                    onTrace = traceRecorder
+                )
+                responseParts.add(FunctionResponsePart(fnCall.name, fnResult))
+            }
+            nextTurnContent = Content(role = "user", parts = responseParts)
+        }
+
+        val finalText = aggregatedText.toString().trim().ifBlank {
+            "Task execution finished (${traces.size} tool step(s))."
+        }
+        onStreamChunk(finalText)
+        return Result.success(AgentExecutionResult(finalText, modelToUse, traces, groundingSources))
+    }
+
     private fun selectOptimalModel(
         prompt: String,
         attachment: ImportedAttachment?,
         settings: UserSettings
     ): String {
+        val preferred = normalizeSupportedModel(settings.preferredModel)
         if (attachment != null && (attachment.isImage || attachment.isVideo)) {
+            return UserSettings.MODEL_FLASH_38
+        }
+        if (settings.thinkingEnabled && preferred == UserSettings.MODEL_ARGON) {
             return UserSettings.MODEL_ARGON
         }
-        val lower = prompt.lowercase()
-        if (settings.thinkingEnabled &&
-            (lower.contains("analyze") || lower.contains("plan") || lower.contains("debug") ||
-                lower.contains("compare") || lower.contains("architecture") || lower.length > 260)
-        ) {
-            return UserSettings.MODEL_CARBON
+        return preferred
+    }
+
+    private fun normalizeSupportedModel(modelName: String): String {
+        return when (modelName.trim()) {
+            "", "gemini-4-hydrogen", "gemini-4-carbon" -> UserSettings.MODEL_FLASH_38
+            "gemini-3.1-flash-lite" -> UserSettings.MODEL_FLASH_LITE
+            UserSettings.MODEL_FLASH_38,
+            UserSettings.MODEL_FLASH_LITE,
+            UserSettings.MODEL_ARGON -> modelName.trim()
+            else -> UserSettings.MODEL_FLASH_38
         }
-        return settings.preferredModel.ifBlank { UserSettings.MODEL_HYDROGEN }
     }
 
     private fun shouldUseWebOrMapsGrounding(prompt: String, settings: UserSettings): Boolean {
@@ -307,7 +402,10 @@ class GeminiProvider(
             "battery", "volume", "flashlight", "torch", "brightness", "alarm", "reminder",
             "call ", "sms", "message ", "launch ", "open app", "settings", "notification",
             "wallet", "balance", "usdt", "transfer", "send crypto", "bitcoin price", "eth price",
-            "browser", "current page", "fill form", "remember"
+            "browser", "current page", "fill form", "remember",
+            "gmail", "email", "inbox", "calendar", "schedule", "event", "contact",
+            "sheet", "spreadsheet", "google form", "form response", "google chat", "space",
+            "drive", "backup"
         ).any { lower.contains(it) }
         if (isDeviceOrWalletIntent) return false
 

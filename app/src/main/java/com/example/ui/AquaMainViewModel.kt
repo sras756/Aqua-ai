@@ -13,12 +13,14 @@ import com.example.ai.ContextManager
 import com.example.ai.GeminiProvider
 import com.example.ai.ToolCallingEngine
 import com.example.browser.AquaBrowserController
+import com.example.browser.BrowserLink
 import com.example.browser.BrowserPageState
 import com.example.data.local.AquaCacheDatabase
 import com.example.data.local.DeviceActionLogEntity
 import com.example.data.local.SecureConfigStore
 import com.example.data.model.AgentStepTrace
 import com.example.data.model.AquaCoreState
+import com.example.data.model.AquaRoutine
 import com.example.data.model.AquaSkill
 import com.example.data.model.BrowsingTab
 import com.example.data.model.ChatMessage
@@ -33,8 +35,21 @@ import com.example.data.repository.DriveAuthOutcome
 import com.example.data.repository.DriveBackupMetadata
 import com.example.data.repository.FileImportRepository
 import com.example.data.repository.GoogleDriveHistoryRepository
+import com.example.data.repository.GoogleWorkspaceRepository
+import com.example.data.repository.WorkspaceAuthOutcome
+import com.example.data.repository.WorkspaceCalendarEvent
+import com.example.data.repository.WorkspaceChatMessage
+import com.example.data.repository.WorkspaceChatSpace
+import com.example.data.repository.WorkspaceContact
+import com.example.data.repository.WorkspaceEmailMessage
+import com.example.data.repository.WorkspaceFormInfo
+import com.example.data.repository.WorkspaceFormResponseItem
+import com.example.data.repository.WorkspaceService
+import com.example.data.repository.WorkspaceSheetCreated
+import com.example.data.repository.WorkspaceSheetReadResult
 import com.example.device.AndroidDeviceController
 import com.example.device.DeviceTelemetry
+import com.example.device.StorageAndMemoryStats
 import com.example.skills.SkillParserAndValidator
 import com.example.voice.AquaWakeWordService
 import com.example.voice.VoiceAssistantManager
@@ -70,7 +85,8 @@ class AquaMainViewModel(
     val browserController: AquaBrowserController,
     val walletConnector: FlashWalletConnector,
     private val cacheDb: AquaCacheDatabase,
-    val driveHistoryRepo: GoogleDriveHistoryRepository
+    val driveHistoryRepo: GoogleDriveHistoryRepository,
+    val workspaceRepo: GoogleWorkspaceRepository
 ) : ViewModel() {
 
     private val toolCallingEngine = ToolCallingEngine(
@@ -78,7 +94,8 @@ class AquaMainViewModel(
         browserController = browserController,
         walletConnector = walletConnector,
         firestoreRepo = firestoreRepo,
-        driveHistoryRepo = driveHistoryRepo
+        driveHistoryRepo = driveHistoryRepo,
+        workspaceRepo = workspaceRepo
     )
 
     private val geminiProvider = GeminiProvider(
@@ -128,6 +145,10 @@ class AquaMainViewModel(
         .catch { handleFlowError("browser_tabs", it); emit(emptyList()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
+    val routines: StateFlow<List<AquaRoutine>> = firestoreRepo.observeRoutines()
+        .catch { handleFlowError("routines", it); emit(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
     val deviceActionLogs: StateFlow<List<DeviceActionLogEntity>> =
         cacheDb.deviceActionLogDao().observeLogsForUser(currentUserId)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
@@ -145,6 +166,12 @@ class AquaMainViewModel(
 
     private val _telemetry = MutableStateFlow(deviceController.getTelemetry())
     val telemetry: StateFlow<DeviceTelemetry> = _telemetry.asStateFlow()
+
+    private val _storageAndMemory = MutableStateFlow(deviceController.getStorageAndMemoryStats())
+    val storageAndMemory: StateFlow<StorageAndMemoryStats> = _storageAndMemory.asStateFlow()
+
+    private val _browserReaderData = MutableStateFlow<Pair<String, List<BrowserLink>>?>(null)
+    val browserReaderData: StateFlow<Pair<String, List<BrowserLink>>?> = _browserReaderData.asStateFlow()
 
     private val _streamingReply = MutableStateFlow("")
     val streamingReply: StateFlow<String> = _streamingReply.asStateFlow()
@@ -199,6 +226,45 @@ class AquaMainViewModel(
 
     private var pendingDriveAction: (suspend (String) -> Unit)? = null
 
+    // --- GOOGLE WORKSPACE STATE ---
+    private val _workspaceBusy = MutableStateFlow(false)
+    val workspaceBusy: StateFlow<Boolean> = _workspaceBusy.asStateFlow()
+
+    private val _workspaceStatus = MutableStateFlow<String?>(null)
+    val workspaceStatus: StateFlow<String?> = _workspaceStatus.asStateFlow()
+
+    private val _workspaceAuthPendingIntent = MutableStateFlow<PendingIntent?>(null)
+    val workspaceAuthPendingIntent: StateFlow<PendingIntent?> = _workspaceAuthPendingIntent.asStateFlow()
+
+    private var pendingWorkspaceAction: (suspend (String) -> Unit)? = null
+
+    private val _workspaceContacts = MutableStateFlow<List<WorkspaceContact>>(emptyList())
+    val workspaceContacts: StateFlow<List<WorkspaceContact>> = _workspaceContacts.asStateFlow()
+
+    private val _workspaceEvents = MutableStateFlow<List<WorkspaceCalendarEvent>>(emptyList())
+    val workspaceEvents: StateFlow<List<WorkspaceCalendarEvent>> = _workspaceEvents.asStateFlow()
+
+    private val _workspaceEmails = MutableStateFlow<List<WorkspaceEmailMessage>>(emptyList())
+    val workspaceEmails: StateFlow<List<WorkspaceEmailMessage>> = _workspaceEmails.asStateFlow()
+
+    private val _workspaceSheetCreated = MutableStateFlow<WorkspaceSheetCreated?>(null)
+    val workspaceSheetCreated: StateFlow<WorkspaceSheetCreated?> = _workspaceSheetCreated.asStateFlow()
+
+    private val _workspaceSheetRead = MutableStateFlow<WorkspaceSheetReadResult?>(null)
+    val workspaceSheetRead: StateFlow<WorkspaceSheetReadResult?> = _workspaceSheetRead.asStateFlow()
+
+    private val _workspaceFormInfo = MutableStateFlow<WorkspaceFormInfo?>(null)
+    val workspaceFormInfo: StateFlow<WorkspaceFormInfo?> = _workspaceFormInfo.asStateFlow()
+
+    private val _workspaceFormResponses = MutableStateFlow<List<WorkspaceFormResponseItem>>(emptyList())
+    val workspaceFormResponses: StateFlow<List<WorkspaceFormResponseItem>> = _workspaceFormResponses.asStateFlow()
+
+    private val _workspaceChatSpaces = MutableStateFlow<List<WorkspaceChatSpace>>(emptyList())
+    val workspaceChatSpaces: StateFlow<List<WorkspaceChatSpace>> = _workspaceChatSpaces.asStateFlow()
+
+    private val _workspaceChatMessages = MutableStateFlow<List<WorkspaceChatMessage>>(emptyList())
+    val workspaceChatMessages: StateFlow<List<WorkspaceChatMessage>> = _workspaceChatMessages.asStateFlow()
+
     init {
         viewModelScope.launch {
             voiceManager.isListening.collect { listening ->
@@ -233,6 +299,7 @@ class AquaMainViewModel(
 
     fun refreshTelemetry() {
         _telemetry.value = deviceController.getTelemetry()
+        _storageAndMemory.value = deviceController.getStorageAndMemoryStats()
     }
 
     fun clearBanner() {
@@ -278,7 +345,11 @@ class AquaMainViewModel(
 
     // --- CHAT & AUTONOMOUS AGENT ---
 
-    fun sendMessage(promptText: String, speakReply: Boolean = false) {
+    fun sendMessage(
+        promptText: String,
+        speakReply: Boolean = false,
+        onCompletedSummary: ((String) -> Unit)? = null
+    ) {
         val trimmed = promptText.trim()
         val attachment = _pendingAttachment.value
         if (trimmed.isEmpty() && attachment == null) return
@@ -412,6 +483,7 @@ class AquaMainViewModel(
                     incrementMessageCountBy = 1L
                 )
                 _coreState.value = AquaCoreState.IDLE
+                onCompletedSummary?.invoke(exec.text)
                 if (speakReply) {
                     voiceManager.speak(exec.text, currentSettings, viewModelScope)
                 }
@@ -596,8 +668,144 @@ class AquaMainViewModel(
         }
     }
 
+    fun askAboutActiveWebpage(question: String) {
+        val trimmed = question.trim()
+        if (trimmed.isEmpty()) {
+            summarizeActiveWebpage()
+            return
+        }
+        viewModelScope.launch {
+            browserController.extractCurrentPageText()
+                .onSuccess { pageText ->
+                    _browserReaderData.value = null
+                    _navigateToTabEvent.value = "home"
+                    sendMessage(
+                        "Regarding the active webpage below, answer this question: $trimmed\n\nWebpage content:\n${pageText.take(6500)}"
+                    )
+                }
+                .onFailure { err ->
+                    _bannerMessage.value = "Could not inspect webpage: ${err.localizedMessage}"
+                }
+        }
+    }
+
+    fun openBrowserReader() {
+        viewModelScope.launch {
+            val textRes = browserController.extractCurrentPageText()
+            if (textRes.isFailure) {
+                _bannerMessage.value = "Reader could not extract text: ${textRes.exceptionOrNull()?.localizedMessage}"
+                return@launch
+            }
+            val links = browserController.extractCurrentPageLinks().getOrDefault(emptyList())
+            _browserReaderData.value = textRes.getOrThrow() to links
+        }
+    }
+
+    fun closeBrowserReader() {
+        _browserReaderData.value = null
+    }
+
+    fun saveActivePageToMemory() {
+        viewModelScope.launch {
+            browserController.extractCurrentPageText()
+                .onSuccess { text ->
+                    val title = browserPageState.value.currentTitle.ifBlank { "Webpage Note" }.take(100)
+                    val url = browserPageState.value.currentUrl
+                    saveMemory(
+                        MemoryItem(
+                            category = "fact",
+                            title = title,
+                            content = "URL: $url\n\n${text.take(3500)}",
+                            approvedByUser = true
+                        )
+                    )
+                    _bannerMessage.value = "Saved '$title' to Aqua Memory."
+                }
+                .onFailure { _bannerMessage.value = it.localizedMessage }
+        }
+    }
+
     fun deleteBrowserTab(tabId: String) {
         viewModelScope.launch { firestoreRepo.deleteBrowserTab(tabId) }
+    }
+
+    fun openBrowserUrlExternally(url: String) {
+        deviceController.openExternalBrowser(url)
+            .onFailure { _bannerMessage.value = "Could not open external browser: ${it.localizedMessage}" }
+    }
+
+    // --- AUTONOMOUS ROUTINES & MESSAGE UTILITIES ---
+
+    fun saveRoutine(routine: AquaRoutine) {
+        viewModelScope.launch {
+            firestoreRepo.saveRoutine(routine)
+                .onSuccess { _bannerMessage.value = "Saved routine '${routine.title}'." }
+                .onFailure { _bannerMessage.value = "Failed to save routine: ${it.localizedMessage}" }
+        }
+    }
+
+    fun deleteRoutine(routineId: String) {
+        viewModelScope.launch {
+            firestoreRepo.deleteRoutine(routineId)
+                .onSuccess { _bannerMessage.value = "Routine deleted." }
+                .onFailure { _bannerMessage.value = it.localizedMessage }
+        }
+    }
+
+    fun executeRoutine(routine: AquaRoutine) {
+        _navigateToTabEvent.value = "home"
+        sendMessage(
+            promptText = routine.prompt,
+            speakReply = routine.speakResult
+        ) { reply ->
+            if (routine.id.isNotBlank()) {
+                viewModelScope.launch {
+                    firestoreRepo.recordRoutineRun(routine.id, reply.take(500))
+                }
+            }
+        }
+    }
+
+    fun copyToClipboard(label: String, text: String) {
+        deviceController.copyTextToClipboard(label, text)
+            .onSuccess { _bannerMessage.value = it }
+            .onFailure { _bannerMessage.value = it.localizedMessage }
+    }
+
+    fun shareText(title: String, text: String) {
+        deviceController.shareTextExternally(title, text)
+            .onFailure { _bannerMessage.value = it.localizedMessage }
+    }
+
+    fun askAquaWithClipboard() {
+        deviceController.readClipboardText()
+            .onSuccess { clip ->
+                if (clip.isBlank()) {
+                    _bannerMessage.value = "Android clipboard is empty."
+                } else {
+                    _navigateToTabEvent.value = "home"
+                    sendMessage("Analyze, summarize, or help me act on this clipboard text:\n\n${clip.take(4000)}")
+                }
+            }
+            .onFailure { _bannerMessage.value = it.localizedMessage }
+    }
+
+    fun saveAssistantReplyToMemory(replyText: String) {
+        val clean = replyText.trim()
+        if (clean.isEmpty()) return
+        val firstLine = clean.lineSequence().firstOrNull { it.isNotBlank() }?.take(80) ?: "Aqua Insight"
+        viewModelScope.launch {
+            firestoreRepo.saveMemory(
+                MemoryItem(
+                    category = "fact",
+                    title = firstLine,
+                    content = clean.take(3900),
+                    approvedByUser = true
+                )
+            )
+                .onSuccess { _bannerMessage.value = "Saved reply to Aqua Memory." }
+                .onFailure { _bannerMessage.value = it.localizedMessage }
+        }
     }
 
     // --- FLASH WALLET CONNECTOR ---
@@ -846,6 +1054,290 @@ class AquaMainViewModel(
                 .onFailure { err ->
                     _bannerMessage.value = "Restore merge failed: ${err.localizedMessage}"
                 }
+        }
+    }
+
+    // --- GOOGLE WORKSPACE (Contacts, Forms, Calendar, Gmail, Sheets, Chat) ---
+
+    fun consumeWorkspaceAuthPendingIntent() {
+        _workspaceAuthPendingIntent.value = null
+    }
+
+    fun handleWorkspaceConsentResult(intent: Intent?) {
+        val actionToRun = pendingWorkspaceAction
+        pendingWorkspaceAction = null
+        workspaceRepo.extractTokenFromIntent(intent)
+            .onSuccess { token ->
+                _workspaceStatus.value = "Google Workspace OAuth authorized"
+                if (actionToRun != null) {
+                    viewModelScope.launch {
+                        _workspaceBusy.value = true
+                        try {
+                            actionToRun(token)
+                        } finally {
+                            _workspaceBusy.value = false
+                        }
+                    }
+                }
+            }
+            .onFailure { err ->
+                _workspaceBusy.value = false
+                _bannerMessage.value = err.localizedMessage ?: "Google Workspace consent cancelled."
+            }
+    }
+
+    private fun runWithWorkspaceToken(
+        activity: Activity?,
+        scopes: List<String>,
+        block: suspend (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _workspaceBusy.value = true
+            when (val auth = workspaceRepo.authorizeScopes(activity, scopes)) {
+                is WorkspaceAuthOutcome.Authorized -> {
+                    try {
+                        block(auth.accessToken)
+                    } finally {
+                        _workspaceBusy.value = false
+                    }
+                }
+                is WorkspaceAuthOutcome.NeedsResolution -> {
+                    pendingWorkspaceAction = block
+                    _workspaceBusy.value = false
+                    _workspaceAuthPendingIntent.value = auth.pendingIntent
+                }
+                is WorkspaceAuthOutcome.Error -> {
+                    _workspaceBusy.value = false
+                    _bannerMessage.value = auth.message
+                }
+            }
+        }
+    }
+
+    fun connectAllWorkspace(activity: Activity?) {
+        val allScopes = WorkspaceService.entries.flatMap { it.scopes }.distinct()
+        runWithWorkspaceToken(activity, allScopes) {
+            _workspaceStatus.value = "All 6 Google Workspace integrations authorized"
+            _bannerMessage.value = "Google Contacts, Forms, Calendar, Gmail, Sheets, and Chat authorized."
+        }
+    }
+
+    fun loadContacts(activity: Activity?, query: String = "") {
+        runWithWorkspaceToken(activity, WorkspaceService.CONTACTS.scopes) { token ->
+            workspaceRepo.listContacts(token, query)
+                .onSuccess { list ->
+                    _workspaceContacts.value = list
+                    _workspaceStatus.value = "Loaded ${list.size} contact(s)"
+                }
+                .onFailure { _bannerMessage.value = it.localizedMessage }
+        }
+    }
+
+    fun createContact(activity: Activity?, fullName: String, email: String, phone: String) {
+        runWithWorkspaceToken(activity, WorkspaceService.CONTACTS.scopes) { token ->
+            workspaceRepo.createContact(token, fullName, email, phone)
+                .onSuccess { created ->
+                    _bannerMessage.value = "Saved Google Contact '${created.displayName}'."
+                    workspaceRepo.listContacts(token).onSuccess { _workspaceContacts.value = it }
+                }
+                .onFailure { _bannerMessage.value = it.localizedMessage }
+        }
+    }
+
+    fun loadCalendarEvents(activity: Activity?) {
+        runWithWorkspaceToken(activity, WorkspaceService.CALENDAR.scopes) { token ->
+            workspaceRepo.listUpcomingEvents(token)
+                .onSuccess { list ->
+                    _workspaceEvents.value = list
+                    _workspaceStatus.value = "Loaded ${list.size} upcoming calendar event(s)"
+                }
+                .onFailure { _bannerMessage.value = it.localizedMessage }
+        }
+    }
+
+    fun createCalendarEvent(
+        activity: Activity?,
+        summary: String,
+        startIso: String,
+        endIso: String,
+        description: String,
+        location: String
+    ) {
+        runWithWorkspaceToken(activity, WorkspaceService.CALENDAR.scopes) { token ->
+            workspaceRepo.createCalendarEvent(token, summary, startIso, endIso, description, location)
+                .onSuccess { ev ->
+                    _bannerMessage.value = "Created event '${ev.summary}'."
+                    workspaceRepo.listUpcomingEvents(token).onSuccess { _workspaceEvents.value = it }
+                }
+                .onFailure { _bannerMessage.value = it.localizedMessage }
+        }
+    }
+
+    fun loadGmailMessages(activity: Activity?, query: String = "") {
+        runWithWorkspaceToken(activity, WorkspaceService.GMAIL.scopes) { token ->
+            workspaceRepo.listGmailMessages(token, query)
+                .onSuccess { list ->
+                    _workspaceEmails.value = list
+                    _workspaceStatus.value = "Loaded ${list.size} Gmail message(s)"
+                }
+                .onFailure { _bannerMessage.value = it.localizedMessage }
+        }
+    }
+
+    fun sendGmailEmail(activity: Activity?, to: String, subject: String, bodyText: String) {
+        if (to.isBlank() || subject.isBlank()) {
+            _bannerMessage.value = "Recipient email and subject are required."
+            return
+        }
+        viewModelScope.launch {
+            val approved = requestUserAuthorization(
+                PendingAuthorization(
+                    id = "gmail_${System.currentTimeMillis()}",
+                    actionTitle = "Send Email via Gmail",
+                    actionType = "Outbound Email Confirmation",
+                    description = "Confirm sending this email through your authorized Gmail account.",
+                    parametersSummary = listOf(
+                        "To" to to.trim(),
+                        "Subject" to subject.trim(),
+                        "Body Preview" to bodyText.trim().take(160)
+                    ),
+                    isFinancialOrSecurity = true,
+                    onApprove = { "Approved email send" },
+                    onDeny = { "Cancelled email send" }
+                )
+            )
+            if (!approved) {
+                _bannerMessage.value = "Email sending cancelled."
+                return@launch
+            }
+            runWithWorkspaceToken(activity, WorkspaceService.GMAIL.scopes) { token ->
+                workspaceRepo.sendGmailMessage(token, to, subject, bodyText)
+                    .onSuccess { id ->
+                        _bannerMessage.value = "Gmail message sent (id: $id)."
+                        workspaceRepo.listGmailMessages(token).onSuccess { _workspaceEmails.value = it }
+                    }
+                    .onFailure { _bannerMessage.value = it.localizedMessage }
+            }
+        }
+    }
+
+    fun createGoogleSheet(activity: Activity?, title: String) {
+        runWithWorkspaceToken(activity, WorkspaceService.SHEETS.scopes) { token ->
+            workspaceRepo.createSpreadsheet(token, title)
+                .onSuccess { created ->
+                    _workspaceSheetCreated.value = created
+                    _workspaceStatus.value = "Created sheet '${created.title}'"
+                    _bannerMessage.value = "Created Google Sheet '${created.title}'."
+                }
+                .onFailure { _bannerMessage.value = it.localizedMessage }
+        }
+    }
+
+    fun readGoogleSheet(activity: Activity?, spreadsheetId: String, range: String) {
+        runWithWorkspaceToken(activity, WorkspaceService.SHEETS.scopes) { token ->
+            workspaceRepo.readSheetRange(token, spreadsheetId, range)
+                .onSuccess { res ->
+                    _workspaceSheetRead.value = res
+                    _workspaceStatus.value = "Read ${res.rows.size} row(s) from ${res.range}"
+                }
+                .onFailure { _bannerMessage.value = it.localizedMessage }
+        }
+    }
+
+    fun appendGoogleSheetRow(activity: Activity?, spreadsheetId: String, range: String, valuesCsv: String) {
+        val values = valuesCsv.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        runWithWorkspaceToken(activity, WorkspaceService.SHEETS.scopes) { token ->
+            workspaceRepo.appendSheetRow(token, spreadsheetId, range, values)
+                .onSuccess { msg ->
+                    _bannerMessage.value = msg
+                    workspaceRepo.readSheetRange(token, spreadsheetId, range)
+                        .onSuccess { _workspaceSheetRead.value = it }
+                }
+                .onFailure { _bannerMessage.value = it.localizedMessage }
+        }
+    }
+
+    fun createGoogleForm(activity: Activity?, title: String, firstQuestion: String) {
+        runWithWorkspaceToken(activity, WorkspaceService.FORMS.scopes) { token ->
+            workspaceRepo.createForm(token, title, firstQuestion)
+                .onSuccess { info ->
+                    _workspaceFormInfo.value = info
+                    _workspaceFormResponses.value = emptyList()
+                    _workspaceStatus.value = "Created Google Form '${info.title}'"
+                    _bannerMessage.value = "Created Google Form '${info.title}'."
+                }
+                .onFailure { _bannerMessage.value = it.localizedMessage }
+        }
+    }
+
+    fun loadGoogleFormAndResponses(activity: Activity?, formId: String) {
+        runWithWorkspaceToken(activity, WorkspaceService.FORMS.scopes) { token ->
+            workspaceRepo.getFormAndResponses(token, formId)
+                .onSuccess { (info, responses) ->
+                    _workspaceFormInfo.value = info
+                    _workspaceFormResponses.value = responses
+                    _workspaceStatus.value = "Loaded ${responses.size} response(s) for '${info.title}'"
+                }
+                .onFailure { _bannerMessage.value = it.localizedMessage }
+        }
+    }
+
+    fun loadChatSpaces(activity: Activity?) {
+        runWithWorkspaceToken(activity, WorkspaceService.CHAT.scopes) { token ->
+            workspaceRepo.listChatSpaces(token)
+                .onSuccess { spaces ->
+                    _workspaceChatSpaces.value = spaces
+                    _workspaceStatus.value = "Loaded ${spaces.size} Google Chat space(s)"
+                }
+                .onFailure { _bannerMessage.value = it.localizedMessage }
+        }
+    }
+
+    fun loadChatMessages(activity: Activity?, spaceName: String) {
+        runWithWorkspaceToken(activity, WorkspaceService.CHAT.scopes) { token ->
+            workspaceRepo.listChatMessages(token, spaceName)
+                .onSuccess { msgs ->
+                    _workspaceChatMessages.value = msgs
+                    _workspaceStatus.value = "Loaded ${msgs.size} message(s) in $spaceName"
+                }
+                .onFailure { _bannerMessage.value = it.localizedMessage }
+        }
+    }
+
+    fun sendChatMessage(activity: Activity?, spaceName: String, text: String) {
+        if (spaceName.isBlank() || text.isBlank()) {
+            _bannerMessage.value = "Space name and message text are required."
+            return
+        }
+        viewModelScope.launch {
+            val approved = requestUserAuthorization(
+                PendingAuthorization(
+                    id = "gchat_${System.currentTimeMillis()}",
+                    actionTitle = "Send Google Chat Message",
+                    actionType = "Outbound Google Chat Confirmation",
+                    description = "Confirm posting this message into Google Chat space $spaceName.",
+                    parametersSummary = listOf(
+                        "Space" to spaceName.trim(),
+                        "Message" to text.trim().take(160)
+                    ),
+                    isFinancialOrSecurity = true,
+                    onApprove = { "Approved Chat message" },
+                    onDeny = { "Cancelled Chat message" }
+                )
+            )
+            if (!approved) {
+                _bannerMessage.value = "Google Chat send cancelled."
+                return@launch
+            }
+            runWithWorkspaceToken(activity, WorkspaceService.CHAT.scopes) { token ->
+                workspaceRepo.sendChatMessage(token, spaceName, text)
+                    .onSuccess {
+                        _bannerMessage.value = "Message posted to $spaceName."
+                        workspaceRepo.listChatMessages(token, spaceName)
+                            .onSuccess { _workspaceChatMessages.value = it }
+                    }
+                    .onFailure { _bannerMessage.value = it.localizedMessage }
+            }
         }
     }
 

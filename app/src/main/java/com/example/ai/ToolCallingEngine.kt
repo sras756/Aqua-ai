@@ -8,6 +8,8 @@ import com.example.data.model.UserSettings
 import com.example.data.model.WalletConfig
 import com.example.data.repository.AquaFirestoreRepository
 import com.example.data.repository.GoogleDriveHistoryRepository
+import com.example.data.repository.GoogleWorkspaceRepository
+import com.example.data.repository.WorkspaceService
 import com.example.device.AndroidDeviceController
 import com.example.wallet.FlashWalletConnector
 import com.google.firebase.ai.type.FunctionCallPart
@@ -28,7 +30,8 @@ class ToolCallingEngine(
     private val browserController: AquaBrowserController,
     private val walletConnector: FlashWalletConnector,
     private val firestoreRepo: AquaFirestoreRepository,
-    private val driveHistoryRepo: GoogleDriveHistoryRepository? = null
+    private val driveHistoryRepo: GoogleDriveHistoryRepository? = null,
+    private val workspaceRepo: GoogleWorkspaceRepository? = null
 ) {
 
     fun buildToolDeclarations(): Tool {
@@ -158,6 +161,147 @@ class ToolCallingEngine(
                 FunctionDeclaration(
                     name = "backup_history_to_drive",
                     description = "Backs up the user's conversation history and memories to their authorized Google Drive account.",
+                    parameters = emptyMap()
+                ),
+                FunctionDeclaration(
+                    name = "workspace_contacts_list",
+                    description = "Lists or searches the user's Google Contacts.",
+                    parameters = mapOf(
+                        "query" to Schema.string(description = "Optional contact name, email, or phone query. Empty to list top connections.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "workspace_contacts_create",
+                    description = "Creates a new contact in Google Contacts.",
+                    parameters = mapOf(
+                        "fullName" to Schema.string(description = "Full name of the contact."),
+                        "email" to Schema.string(description = "Email address (optional if phone provided)."),
+                        "phone" to Schema.string(description = "Phone number (optional if email provided).")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "workspace_calendar_list",
+                    description = "Lists upcoming events from the user's primary Google Calendar.",
+                    parameters = mapOf(
+                        "maxResults" to Schema.integer(description = "Maximum number of events (1-50, default 15).")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "workspace_calendar_create",
+                    description = "Creates a new event on the user's primary Google Calendar.",
+                    parameters = mapOf(
+                        "summary" to Schema.string(description = "Event title."),
+                        "startIso" to Schema.string(description = "Start time in ISO-8601 format, e.g. 2026-11-15T10:00:00Z."),
+                        "endIso" to Schema.string(description = "End time in ISO-8601 format, e.g. 2026-11-15T11:00:00Z."),
+                        "description" to Schema.string(description = "Optional event description."),
+                        "location" to Schema.string(description = "Optional event location.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "workspace_gmail_list",
+                    description = "Searches or lists recent messages from the user's Gmail inbox.",
+                    parameters = mapOf(
+                        "query" to Schema.string(description = "Optional Gmail search filter such as 'is:unread' or sender name."),
+                        "maxResults" to Schema.integer(description = "Maximum emails to fetch (1-20, default 10).")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "workspace_gmail_send",
+                    description = "Sends an email via Gmail. Always requires explicit user confirmation before sending.",
+                    parameters = mapOf(
+                        "to" to Schema.string(description = "Recipient email address."),
+                        "subject" to Schema.string(description = "Email subject line."),
+                        "body" to Schema.string(description = "Plain-text email body.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "workspace_sheets_create",
+                    description = "Creates a new Google Sheets spreadsheet.",
+                    parameters = mapOf(
+                        "title" to Schema.string(description = "Spreadsheet title.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "workspace_sheets_read",
+                    description = "Reads cell values from a Google Sheets spreadsheet.",
+                    parameters = mapOf(
+                        "spreadsheetId" to Schema.string(description = "Google Spreadsheet ID."),
+                        "range" to Schema.string(description = "A1 notation range, e.g. Sheet1!A1:J25.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "workspace_sheets_append",
+                    description = "Appends a row of comma-separated values to a Google Sheets spreadsheet.",
+                    parameters = mapOf(
+                        "spreadsheetId" to Schema.string(description = "Google Spreadsheet ID."),
+                        "range" to Schema.string(description = "Target sheet/range, e.g. Sheet1!A1."),
+                        "valuesCsv" to Schema.string(description = "Comma-separated values for the row columns.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "workspace_forms_create",
+                    description = "Creates a new Google Form and optionally adds an initial question.",
+                    parameters = mapOf(
+                        "title" to Schema.string(description = "Title of the Google Form."),
+                        "firstQuestion" to Schema.string(description = "Optional first question prompt to add.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "workspace_forms_get_responses",
+                    description = "Reads a Google Form's metadata, questions, and submitted responses.",
+                    parameters = mapOf(
+                        "formId" to Schema.string(description = "Google Form ID.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "workspace_chat_list_spaces",
+                    description = "Lists Google Chat spaces and rooms accessible to the user.",
+                    parameters = emptyMap()
+                ),
+                FunctionDeclaration(
+                    name = "workspace_chat_list_messages",
+                    description = "Lists recent messages inside a Google Chat space.",
+                    parameters = mapOf(
+                        "spaceName" to Schema.string(description = "Space resource name, e.g. spaces/AAAA1234.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "workspace_chat_send_message",
+                    description = "Sends a message into a Google Chat space. Always requires explicit user confirmation.",
+                    parameters = mapOf(
+                        "spaceName" to Schema.string(description = "Space resource name, e.g. spaces/AAAA1234."),
+                        "text" to Schema.string(description = "Message text to post.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "get_device_storage_and_memory",
+                    description = "Returns real live Android internal storage free/total space and device RAM availability.",
+                    parameters = emptyMap()
+                ),
+                FunctionDeclaration(
+                    name = "read_clipboard",
+                    description = "Reads the current plain-text content from the Android system clipboard.",
+                    parameters = emptyMap()
+                ),
+                FunctionDeclaration(
+                    name = "copy_to_clipboard",
+                    description = "Copies useful generated text or notes directly onto the Android clipboard.",
+                    parameters = mapOf(
+                        "label" to Schema.string(description = "Short label for the clipboard item."),
+                        "text" to Schema.string(description = "Plain text to copy.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "share_text_externally",
+                    description = "Opens the Android Sharesheet chooser to share text or summaries to external apps.",
+                    parameters = mapOf(
+                        "title" to Schema.string(description = "Share subject or title."),
+                        "text" to Schema.string(description = "Text body to share.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "browser_extract_links",
+                    description = "Extracts clickable http/https links from the active Aqua Browser webpage.",
                     parameters = emptyMap()
                 )
             )
@@ -507,6 +651,341 @@ class ToolCallingEngine(
                     }
                 }
 
+                "workspace_contacts_list" -> {
+                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
+                    val token = repo.tryGetSilentToken(WorkspaceService.CONTACTS.scopes)
+                        ?: return workspaceNeedsAuthResult(WorkspaceService.CONTACTS, name, onTrace)
+                    val query = argStr("query")
+                    val list = repo.listContacts(token, query).getOrThrow()
+                    val summary = if (list.isEmpty()) {
+                        "No matching Google Contacts found."
+                    } else {
+                        list.take(20).joinToString("\n") { c ->
+                            "- ${c.displayName} | Email: ${c.email.ifBlank { "-" }} | Phone: ${c.phone.ifBlank { "-" }}"
+                        }
+                    }
+                    onTrace(AgentStepTrace("Contacts", name, "completed", "Fetched ${list.size} contact(s)"))
+                    jsonResult(true, summary)
+                }
+
+                "workspace_contacts_create" -> {
+                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
+                    val token = repo.tryGetSilentToken(WorkspaceService.CONTACTS.scopes)
+                        ?: return workspaceNeedsAuthResult(WorkspaceService.CONTACTS, name, onTrace)
+                    val fullName = argStr("fullName")
+                    val email = argStr("email")
+                    val phone = argStr("phone")
+                    val msg = runWithOptionalGate(
+                        settings = settings,
+                        isSensitive = false,
+                        title = "Create Google Contact",
+                        type = "Google Contacts",
+                        desc = "Add a new contact to your Google Contacts.",
+                        params = listOf("Name" to fullName, "Email" to email, "Phone" to phone),
+                        requestAuthorization = requestAuthorization
+                    ) {
+                        val created = repo.createContact(token, fullName, email, phone).getOrThrow()
+                        "Created Google Contact '${created.displayName}' (${created.resourceName})."
+                    }
+                    onTrace(AgentStepTrace("Create Contact", name, "completed", msg))
+                    jsonResult(true, msg)
+                }
+
+                "workspace_calendar_list" -> {
+                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
+                    val token = repo.tryGetSilentToken(WorkspaceService.CALENDAR.scopes)
+                        ?: return workspaceNeedsAuthResult(WorkspaceService.CALENDAR, name, onTrace)
+                    val maxResults = argInt("maxResults", 15)
+                    val events = repo.listUpcomingEvents(token, maxResults).getOrThrow()
+                    val summary = if (events.isEmpty()) {
+                        "No upcoming Google Calendar events found."
+                    } else {
+                        events.joinToString("\n") { ev ->
+                            "- ${ev.summary} (${ev.startTime} -> ${ev.endTime})${if (ev.location.isNotBlank()) " @ ${ev.location}" else ""}"
+                        }
+                    }
+                    onTrace(AgentStepTrace("Calendar List", name, "completed", "Fetched ${events.size} event(s)"))
+                    jsonResult(true, summary)
+                }
+
+                "workspace_calendar_create" -> {
+                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
+                    val token = repo.tryGetSilentToken(WorkspaceService.CALENDAR.scopes)
+                        ?: return workspaceNeedsAuthResult(WorkspaceService.CALENDAR, name, onTrace)
+                    val summary = argStr("summary")
+                    val startIso = argStr("startIso")
+                    val endIso = argStr("endIso")
+                    val desc = argStr("description")
+                    val location = argStr("location")
+                    val msg = runWithOptionalGate(
+                        settings = settings,
+                        isSensitive = false,
+                        title = "Create Calendar Event",
+                        type = "Google Calendar",
+                        desc = "Schedule an event on your primary Google Calendar.",
+                        params = listOf("Title" to summary, "Start" to startIso, "End" to endIso),
+                        requestAuthorization = requestAuthorization
+                    ) {
+                        val ev = repo.createCalendarEvent(token, summary, startIso, endIso, desc, location).getOrThrow()
+                        "Created Calendar event '${ev.summary}' (${ev.startTime} to ${ev.endTime})."
+                    }
+                    onTrace(AgentStepTrace("Create Event", name, "completed", msg))
+                    jsonResult(true, msg)
+                }
+
+                "workspace_gmail_list" -> {
+                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
+                    val token = repo.tryGetSilentToken(WorkspaceService.GMAIL.scopes)
+                        ?: return workspaceNeedsAuthResult(WorkspaceService.GMAIL, name, onTrace)
+                    val query = argStr("query")
+                    val max = argInt("maxResults", 10)
+                    val msgs = repo.listGmailMessages(token, query, max).getOrThrow()
+                    val summary = if (msgs.isEmpty()) {
+                        "No Gmail messages matched your query."
+                    } else {
+                        msgs.joinToString("\n") { m ->
+                            "- From: ${m.from} | Subject: ${m.subject} | Snippet: ${m.snippet.take(120)}"
+                        }
+                    }
+                    onTrace(AgentStepTrace("Gmail Inbox", name, "completed", "Loaded ${msgs.size} email(s)"))
+                    jsonResult(true, summary)
+                }
+
+                "workspace_gmail_send" -> {
+                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
+                    val token = repo.tryGetSilentToken(WorkspaceService.GMAIL.scopes)
+                        ?: return workspaceNeedsAuthResult(WorkspaceService.GMAIL, name, onTrace)
+                    val to = argStr("to")
+                    val subject = argStr("subject")
+                    val body = argStr("body")
+                    val msg = runWithOptionalGate(
+                        settings = settings,
+                        isSensitive = true,
+                        title = "Send Email via Gmail",
+                        type = "Outbound Communication (Explicit Approval Required)",
+                        desc = "Review recipient, subject, and body before Aqua sends this email via your Gmail account.",
+                        params = listOf("To" to to, "Subject" to subject, "Body Preview" to body.take(160)),
+                        requestAuthorization = requestAuthorization
+                    ) {
+                        val id = repo.sendGmailMessage(token, to, subject, body).getOrThrow()
+                        "Sent Gmail message to $to (message id: $id)."
+                    }
+                    onTrace(AgentStepTrace("Send Gmail", name, "completed", msg))
+                    jsonResult(!msg.contains("declined", ignoreCase = true), msg)
+                }
+
+                "workspace_sheets_create" -> {
+                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
+                    val token = repo.tryGetSilentToken(WorkspaceService.SHEETS.scopes)
+                        ?: return workspaceNeedsAuthResult(WorkspaceService.SHEETS, name, onTrace)
+                    val title = argStr("title")
+                    val msg = runWithOptionalGate(
+                        settings = settings,
+                        isSensitive = false,
+                        title = "Create Google Sheet",
+                        type = "Google Sheets",
+                        desc = "Create a new Google Sheets spreadsheet.",
+                        params = listOf("Title" to title),
+                        requestAuthorization = requestAuthorization
+                    ) {
+                        val sheet = repo.createSpreadsheet(token, title).getOrThrow()
+                        "Created Google Sheet '${sheet.title}' (ID: ${sheet.spreadsheetId})."
+                    }
+                    onTrace(AgentStepTrace("Create Sheet", name, "completed", msg))
+                    jsonResult(true, msg)
+                }
+
+                "workspace_sheets_read" -> {
+                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
+                    val token = repo.tryGetSilentToken(WorkspaceService.SHEETS.scopes)
+                        ?: return workspaceNeedsAuthResult(WorkspaceService.SHEETS, name, onTrace)
+                    val sid = argStr("spreadsheetId")
+                    val range = argStr("range").ifBlank { "Sheet1!A1:J25" }
+                    val res = repo.readSheetRange(token, sid, range).getOrThrow()
+                    val summary = if (res.rows.isEmpty()) {
+                        "Range ${res.range} in sheet ${res.spreadsheetId} is empty."
+                    } else {
+                        res.rows.joinToString("\n") { row -> row.joinToString(" | ") }
+                    }
+                    onTrace(AgentStepTrace("Read Sheet", name, "completed", "Read ${res.rows.size} row(s)"))
+                    jsonResult(true, summary)
+                }
+
+                "workspace_sheets_append" -> {
+                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
+                    val token = repo.tryGetSilentToken(WorkspaceService.SHEETS.scopes)
+                        ?: return workspaceNeedsAuthResult(WorkspaceService.SHEETS, name, onTrace)
+                    val sid = argStr("spreadsheetId")
+                    val range = argStr("range").ifBlank { "Sheet1!A1" }
+                    val values = argStr("valuesCsv").split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                    val msg = runWithOptionalGate(
+                        settings = settings,
+                        isSensitive = false,
+                        title = "Append Row to Sheet",
+                        type = "Google Sheets",
+                        desc = "Append a new row to spreadsheet $sid ($range).",
+                        params = listOf("Spreadsheet ID" to sid, "Range" to range, "Values" to values.joinToString(", ")),
+                        requestAuthorization = requestAuthorization
+                    ) {
+                        repo.appendSheetRow(token, sid, range, values).getOrThrow()
+                    }
+                    onTrace(AgentStepTrace("Append Sheet Row", name, "completed", msg))
+                    jsonResult(true, msg)
+                }
+
+                "workspace_forms_create" -> {
+                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
+                    val token = repo.tryGetSilentToken(WorkspaceService.FORMS.scopes)
+                        ?: return workspaceNeedsAuthResult(WorkspaceService.FORMS, name, onTrace)
+                    val title = argStr("title")
+                    val firstQuestion = argStr("firstQuestion")
+                    val msg = runWithOptionalGate(
+                        settings = settings,
+                        isSensitive = false,
+                        title = "Create Google Form",
+                        type = "Google Forms",
+                        desc = "Create a new Google Form.",
+                        params = listOf("Title" to title, "First Question" to firstQuestion.ifBlank { "(none)" }),
+                        requestAuthorization = requestAuthorization
+                    ) {
+                        val form = repo.createForm(token, title, firstQuestion).getOrThrow()
+                        "Created Google Form '${form.title}' (ID: ${form.formId}, Responder URI: ${form.responderUri})."
+                    }
+                    onTrace(AgentStepTrace("Create Form", name, "completed", msg))
+                    jsonResult(true, msg)
+                }
+
+                "workspace_forms_get_responses" -> {
+                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
+                    val token = repo.tryGetSilentToken(WorkspaceService.FORMS.scopes)
+                        ?: return workspaceNeedsAuthResult(WorkspaceService.FORMS, name, onTrace)
+                    val formId = argStr("formId")
+                    val (info, responses) = repo.getFormAndResponses(token, formId).getOrThrow()
+                    val summary = buildString {
+                        appendLine("Form: ${info.title} (${info.formId})")
+                        if (info.questionTitles.isNotEmpty()) {
+                            appendLine("Questions: ${info.questionTitles.joinToString(", ")}")
+                        }
+                        appendLine("Responses (${responses.size}):")
+                        if (responses.isEmpty()) {
+                            appendLine("- No responses submitted yet.")
+                        } else {
+                            responses.take(20).forEach { r ->
+                                appendLine("- [${r.lastSubmittedTime}] ${r.respondentEmail.ifBlank { "Anonymous" }}: ${r.answersSummary}")
+                            }
+                        }
+                    }
+                    onTrace(AgentStepTrace("Form Responses", name, "completed", "Loaded ${responses.size} response(s)"))
+                    jsonResult(true, summary)
+                }
+
+                "workspace_chat_list_spaces" -> {
+                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
+                    val token = repo.tryGetSilentToken(WorkspaceService.CHAT.scopes)
+                        ?: return workspaceNeedsAuthResult(WorkspaceService.CHAT, name, onTrace)
+                    val spaces = repo.listChatSpaces(token).getOrThrow()
+                    val summary = if (spaces.isEmpty()) {
+                        "No Google Chat spaces found for this account."
+                    } else {
+                        spaces.joinToString("\n") { s -> "- ${s.displayName} (${s.name}, type=${s.spaceType})" }
+                    }
+                    onTrace(AgentStepTrace("Chat Spaces", name, "completed", "Loaded ${spaces.size} space(s)"))
+                    jsonResult(true, summary)
+                }
+
+                "workspace_chat_list_messages" -> {
+                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
+                    val token = repo.tryGetSilentToken(WorkspaceService.CHAT.scopes)
+                        ?: return workspaceNeedsAuthResult(WorkspaceService.CHAT, name, onTrace)
+                    val spaceName = argStr("spaceName")
+                    val msgs = repo.listChatMessages(token, spaceName).getOrThrow()
+                    val summary = if (msgs.isEmpty()) {
+                        "No messages found in $spaceName."
+                    } else {
+                        msgs.joinToString("\n") { m -> "- ${m.senderName}: ${m.text}" }
+                    }
+                    onTrace(AgentStepTrace("Chat Messages", name, "completed", "Loaded ${msgs.size} message(s)"))
+                    jsonResult(true, summary)
+                }
+
+                "workspace_chat_send_message" -> {
+                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
+                    val token = repo.tryGetSilentToken(WorkspaceService.CHAT.scopes)
+                        ?: return workspaceNeedsAuthResult(WorkspaceService.CHAT, name, onTrace)
+                    val spaceName = argStr("spaceName")
+                    val text = argStr("text")
+                    val msg = runWithOptionalGate(
+                        settings = settings,
+                        isSensitive = true,
+                        title = "Send Google Chat Message",
+                        type = "Outbound Communication (Explicit Approval Required)",
+                        desc = "Confirm sending this message into Google Chat space $spaceName.",
+                        params = listOf("Space" to spaceName, "Message" to text.take(160)),
+                        requestAuthorization = requestAuthorization
+                    ) {
+                        val sent = repo.sendChatMessage(token, spaceName, text).getOrThrow()
+                        "Sent Google Chat message to $spaceName (${sent.name})."
+                    }
+                    onTrace(AgentStepTrace("Send Chat", name, "completed", msg))
+                    jsonResult(!msg.contains("declined", ignoreCase = true), msg)
+                }
+
+                "get_device_storage_and_memory" -> {
+                    val s = deviceController.getStorageAndMemoryStats()
+                    val msg = "Storage: ${s.storageFreeMb} MB free of ${s.storageTotalMb} MB | " +
+                        "RAM: ${s.ramAvailableMb} MB available of ${s.ramTotalMb} MB (lowMemory=${s.lowMemory})"
+                    onTrace(AgentStepTrace("System Resources", name, "completed", msg))
+                    jsonResult(true, msg)
+                }
+
+                "read_clipboard" -> {
+                    val clipText = deviceController.readClipboardText().getOrThrow()
+                    val msg = if (clipText.isBlank()) {
+                        "Android clipboard is currently empty or contains non-text content."
+                    } else {
+                        "Clipboard text (${clipText.length} chars):\n${clipText.take(2000)}"
+                    }
+                    onTrace(AgentStepTrace("Read Clipboard", name, "completed", "${clipText.length} chars"))
+                    jsonResult(true, msg)
+                }
+
+                "copy_to_clipboard" -> {
+                    val label = argStr("label").ifBlank { "Aqua AI" }
+                    val text = argStr("text")
+                    val msg = deviceController.copyTextToClipboard(label, text).getOrThrow()
+                    onTrace(AgentStepTrace("Copy Clipboard", name, "completed", msg))
+                    jsonResult(true, msg)
+                }
+
+                "share_text_externally" -> {
+                    val title = argStr("title").ifBlank { "Shared from Aqua AI" }
+                    val text = argStr("text")
+                    val msg = runWithOptionalGate(
+                        settings = settings,
+                        isSensitive = false,
+                        title = "Share via Android Sharesheet",
+                        type = "External Share",
+                        desc = "Open Android Sharesheet so you can choose an app to share this text.",
+                        params = listOf("Title" to title, "Preview" to text.take(140)),
+                        requestAuthorization = requestAuthorization
+                    ) {
+                        deviceController.shareTextExternally(title, text).getOrThrow()
+                    }
+                    onTrace(AgentStepTrace("Share Text", name, "completed", msg))
+                    jsonResult(!msg.contains("declined", ignoreCase = true), msg)
+                }
+
+                "browser_extract_links" -> {
+                    val links = browserController.extractCurrentPageLinks().getOrThrow()
+                    val summary = if (links.isEmpty()) {
+                        "No clickable http/https links found on the active page."
+                    } else {
+                        links.joinToString("\n") { l -> "- ${l.text}: ${l.href}" }
+                    }
+                    onTrace(AgentStepTrace("Extract Links", name, "completed", "Found ${links.size} links"))
+                    jsonResult(true, summary)
+                }
+
                 else -> {
                     onTrace(AgentStepTrace("Unknown Tool", name, "error", "Unsupported tool"))
                     jsonResult(false, "Tool '$name' is not implemented.")
@@ -544,6 +1023,16 @@ class ToolCallingEngine(
             )
         )
         return if (approved) action() else "Action '$title' was declined by user."
+    }
+
+    private fun workspaceNeedsAuthResult(
+        service: WorkspaceService,
+        toolName: String,
+        onTrace: (AgentStepTrace) -> Unit
+    ): JsonObject {
+        val msg = "Google ${service.label} consent is required first. Direct the user to open the Workspace Hub from Home and connect ${service.label} (or Connect All)."
+        onTrace(AgentStepTrace("Workspace Auth", toolName, "needs_auth", msg))
+        return jsonResult(false, msg)
     }
 
     private fun jsonResult(success: Boolean, message: String): JsonObject {

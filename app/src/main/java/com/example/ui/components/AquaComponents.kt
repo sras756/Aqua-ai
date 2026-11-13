@@ -31,13 +31,16 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Warning
@@ -433,7 +436,10 @@ fun ChatMessageBubble(
     message: ChatMessage,
     isSpeaking: Boolean,
     onSpeakClick: (String) -> Unit,
-    onStopSpeakClick: () -> Unit
+    onStopSpeakClick: () -> Unit,
+    onCopyClick: ((String) -> Unit)? = null,
+    onShareClick: ((String) -> Unit)? = null,
+    onSaveMemoryClick: ((String) -> Unit)? = null
 ) {
     val isUser = message.role == "user"
     val bubbleColor = if (isUser) AquaAzure.copy(alpha = 0.28f) else AquaCardSurface
@@ -464,16 +470,57 @@ fun ChatMessageBubble(
                         color = if (isUser) AquaTeal else AquaCyan
                     )
                     if (!isUser && message.content.isNotBlank()) {
-                        IconButton(
-                            onClick = { if (isSpeaking) onStopSpeakClick() else onSpeakClick(message.content) },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isSpeaking) Icons.Filled.Stop else Icons.Filled.VolumeUp,
-                                contentDescription = if (isSpeaking) "Stop speech" else "Read aloud",
-                                tint = AquaCyan,
-                                modifier = Modifier.size(18.dp)
-                            )
+                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                            onCopyClick?.let { copyCb ->
+                                IconButton(
+                                    onClick = { copyCb(message.content) },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.ContentCopy,
+                                        contentDescription = "Copy response",
+                                        tint = AquaMutedText,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                            onShareClick?.let { shareCb ->
+                                IconButton(
+                                    onClick = { shareCb(message.content) },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Share,
+                                        contentDescription = "Share response",
+                                        tint = AquaMutedText,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                            onSaveMemoryClick?.let { memCb ->
+                                IconButton(
+                                    onClick = { memCb(message.content) },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.BookmarkAdd,
+                                        contentDescription = "Save to Aqua Memory",
+                                        tint = AquaTeal,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                            IconButton(
+                                onClick = { if (isSpeaking) onStopSpeakClick() else onSpeakClick(message.content) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isSpeaking) Icons.Filled.Stop else Icons.Filled.VolumeUp,
+                                    contentDescription = if (isSpeaking) "Stop speech" else "Read aloud",
+                                    tint = AquaCyan,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                     }
                 }

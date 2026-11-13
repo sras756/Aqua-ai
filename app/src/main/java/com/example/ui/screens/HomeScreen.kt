@@ -30,10 +30,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.BatteryStd
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.ContentPasteGo
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material.icons.filled.GraphicEq
@@ -238,6 +241,21 @@ fun HomeScreen(
                 }
 
                 IconButton(
+                    onClick = { onOpenTab("workspace") },
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .clip(CircleShape)
+                        .background(AquaCardSurface)
+                        .testTag("home_workspace_shortcut")
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Apps,
+                        contentDescription = "Open Google Workspace",
+                        tint = AquaTeal
+                    )
+                }
+
+                IconButton(
                     onClick = { onOpenTab("settings") },
                     modifier = Modifier
                         .minimumInteractiveComponentSize()
@@ -371,6 +389,24 @@ fun HomeScreen(
                         ) {
                             item {
                                 QuickShortcutTile(
+                                    icon = Icons.Filled.AutoMode,
+                                    label = "Routines",
+                                    accent = AquaCyan,
+                                    tag = "shortcut_routines",
+                                    onClick = { onOpenTab("routines") }
+                                )
+                            }
+                            item {
+                                QuickShortcutTile(
+                                    icon = Icons.Filled.Apps,
+                                    label = "Workspace",
+                                    accent = AquaMintSuccess,
+                                    tag = "shortcut_workspace",
+                                    onClick = { onOpenTab("workspace") }
+                                )
+                            }
+                            item {
+                                QuickShortcutTile(
                                     icon = Icons.Filled.History,
                                     label = "History",
                                     accent = AquaCyan,
@@ -433,8 +469,14 @@ fun HomeScreen(
                                 }
                             )
                             QuickDeviceButton(
+                                icon = Icons.Filled.ContentPasteGo,
+                                label = "Clipboard AI",
+                                modifier = Modifier.weight(1f),
+                                onClick = { viewModel.askAquaWithClipboard() }
+                            )
+                            QuickDeviceButton(
                                 icon = if (telemetry.isOnline) Icons.Filled.Wifi else Icons.Filled.WifiOff,
-                                label = "Wi-Fi Settings",
+                                label = "Wi-Fi",
                                 modifier = Modifier.weight(1f),
                                 onClick = { viewModel.deviceController.openAndroidSettings("wifi") }
                             )
@@ -576,7 +618,10 @@ fun HomeScreen(
                                     message = msg,
                                     isSpeaking = isSpeaking,
                                     onSpeakClick = { viewModel.speakMessage(it) },
-                                    onStopSpeakClick = { viewModel.stopSpeaking() }
+                                    onStopSpeakClick = { viewModel.stopSpeaking() },
+                                    onCopyClick = { viewModel.copyToClipboard("Aqua AI Reply", it) },
+                                    onShareClick = { viewModel.shareText("Aqua AI Response", it) },
+                                    onSaveMemoryClick = { viewModel.saveAssistantReplyToMemory(it) }
                                 )
                             }
                             if (streamingReply.isNotBlank()) {

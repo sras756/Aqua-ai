@@ -10,8 +10,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.coroutines.resume
+
+data class BrowserLink(
+    val text: String,
+    val href: String
+)
 
 data class BrowserPageState(
     val currentUrl: String = "https://duckduckgo.com",
@@ -38,8 +44,10 @@ class AquaBrowserController(private val context: Context) {
         webViewRef = webView
     }
 
-    fun detachWebView() {
-        webViewRef = null
+    fun detachWebView(webView: WebView? = null) {
+        if (webView == null || webViewRef === webView) {
+            webViewRef = null
+        }
     }
 
     fun updatePageState(transform: (BrowserPageState) -> BrowserPageState) {
@@ -70,16 +78,44 @@ class AquaBrowserController(private val context: Context) {
         return u
     }
 
+    private fun runOnWebView(action: (WebView) -> Unit) {
+        val wv = webViewRef ?: return
+        wv.post {
+            if (webViewRef === wv && wv.isAttachedToWindow) {
+                runCatching { action(wv) }
+            }
+        }
+    }
+
     fun goBack() {
-        webViewRef?.post { if (webViewRef?.canGoBack() == true) webViewRef?.goBack() }
+        runOnWebView { wv -> if (wv.canGoBack()) wv.goBack() }
     }
 
     fun goForward() {
-        webViewRef?.post { if (webViewRef?.canGoForward() == true) webViewRef?.goForward() }
+        runOnWebView { wv -> if (wv.canGoForward()) wv.goForward() }
     }
 
     fun reload() {
-        webViewRef?.post { webViewRef?.reload() }
+        runOnWebView { wv -> wv.reload() }
+    }
+
+    fun findInPage(query: String) {
+        val trimmed = query.trim()
+        runOnWebView { wv ->
+            if (trimmed.isEmpty()) {
+                wv.clearMatches()
+            } else {
+                wv.findAllAsync(trimmed)
+            }
+        }
+    }
+
+    fun findNext(forward: Boolean) {
+        runOnWebView { wv -> wv.findNext(forward) }
+    }
+
+    fun clearFindMatches() {
+        runOnWebView { wv -> wv.clearMatches() }
     }
 
     suspend fun extractCurrentPageText(): Result<String> = suspendCancellableCoroutine { cont ->
@@ -119,6 +155,52 @@ class AquaBrowserController(private val context: Context) {
                         lastExtractedText = text
                     )
                     if (cont.isActive) cont.resume(Result.success(formatted))
+                } catch (e: Exception) {
+                    if (cont.isActive) cont.resume(Result.failure(e))
+                }
+            }
+        }
+    }
+
+    suspend fun extractCurrentPageLinks(): Result<List<BrowserLink>> = suspendCancellableCoroutine { cont ->
+        val wv = webViewRef
+        if (wv == null) {
+            cont.resume(
+                Result.failure(
+                    IllegalStateException("Aqua Browser tab is not currently open. Navigate to a webpage first.")
+                )
+            )
+            return@suspendCancellableCoroutine
+        }
+        wv.post {
+            val js = """
+                (function() {
+                    var seen = {};
+                    var out = [];
+                    var anchors = document.querySelectorAll('a[href]');
+                    for (var i = 0; i < anchors.length && out.length < 25; i++) {
+                        var href = anchors[i].href || '';
+                        if ((href.indexOf('http://') === 0 || href.indexOf('https://') === 0) && !seen[href]) {
+                            seen[href] = true;
+                            var txt = (anchors[i].innerText || anchors[i].textContent || '').trim().replace(/\s+/g, ' ');
+                            out.push({ text: txt.substring(0, 90), href: href });
+                        }
+                    }
+                    return JSON.stringify(out);
+                })();
+            """.trimIndent()
+            wv.evaluateJavascript(js) { rawResult ->
+                try {
+                    val unquoted = unquoteJsString(rawResult)
+                    val arr = JSONArray(unquoted)
+                    val links = (0 until arr.length()).map { idx ->
+                        val obj = arr.getJSONObject(idx)
+                        BrowserLink(
+                            text = obj.optString("text", "").ifBlank { obj.optString("href", "") },
+                            href = obj.optString("href", "")
+                        )
+                    }.filter { it.href.isNotBlank() }
+                    if (cont.isActive) cont.resume(Result.success(links))
                 } catch (e: Exception) {
                     if (cont.isActive) cont.resume(Result.failure(e))
                 }

@@ -50,6 +50,7 @@ test("Unauthenticated user: denied on all user collections", async () => {
   await assertFails(unauthDb.collection(`users/${ALICE_UID}/wallets`).get());
   await assertFails(unauthDb.collection(`users/${ALICE_UID}/settings`).get());
   await assertFails(unauthDb.collection(`users/${ALICE_UID}/browser_tabs`).get());
+  await assertFails(unauthDb.collection(`users/${ALICE_UID}/routines`).get());
 });
 
 test("Cross-user isolation: Bob cannot read or write Alice's data", async () => {
@@ -223,6 +224,32 @@ test("Owner can create, list, update, and delete settings, conversations, messag
       updatedAt: nowTs(),
     })
   );
+
+  // 6. Autonomous Routine CRUD & isolation
+  await assertSucceeds(
+    aliceDb.doc(`users/${ALICE_UID}/routines/routine_1`).set({
+      userId: ALICE_UID,
+      title: "Morning Pulse",
+      prompt: "Check battery and upcoming calendar events.",
+      category: "productivity",
+      speakResult: true,
+      runCount: 0,
+      lastRunSummary: "",
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+  await assertSucceeds(aliceDb.collection(`users/${ALICE_UID}/routines`).get());
+  await assertSucceeds(
+    aliceDb.doc(`users/${ALICE_UID}/routines/routine_1`).update({
+      runCount: 1,
+      lastRunSummary: "Battery 88%, 2 events today.",
+      updatedAt: nowTs(),
+    })
+  );
+  const bobDb = testEnv.authenticatedContext(BOB_UID).firestore();
+  await assertFails(bobDb.doc(`users/${ALICE_UID}/routines/routine_1`).get());
+  await assertSucceeds(aliceDb.doc(`users/${ALICE_UID}/routines/routine_1`).delete());
 
   // Delete succeeds
   await assertSucceeds(aliceDb.doc(`users/${ALICE_UID}/browser_tabs/tab_1`).delete());

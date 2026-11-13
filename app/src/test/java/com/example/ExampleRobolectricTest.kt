@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.example.ai.ContextManager
 import com.example.browser.AquaBrowserController
+import com.example.browser.BrowserLink
+import com.example.data.model.AquaRoutine
 import com.example.data.model.AquaSkill
 import com.example.data.model.ChatMessage
 import com.example.data.model.Conversation
@@ -11,6 +13,9 @@ import com.example.data.model.MemoryItem
 import com.example.data.model.UserSettings
 import com.example.data.model.WalletConfig
 import com.example.data.repository.GoogleDriveHistoryRepository
+import com.example.data.repository.GoogleWorkspaceRepository
+import com.example.data.repository.WorkspaceService
+import com.example.device.AndroidDeviceController
 import com.example.device.DeviceTelemetry
 import com.example.skills.SkillParserAndValidator
 import com.example.wallet.FlashWalletConnector
@@ -149,5 +154,56 @@ class ExampleRobolectricTest {
         assertEquals("Backed up!", parsed.conversations.first().messages[1].content)
         assertEquals(1, parsed.memories.size)
         assertEquals("Voice", parsed.memories.first().title)
+    }
+
+    @Test
+    fun `google workspace repository defines all six services and nine oauth scopes`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val repo = GoogleWorkspaceRepository(context)
+        val scopes = repo.allWorkspaceScopes().map { it.scopeUri }.toSet()
+
+        assertEquals(6, WorkspaceService.entries.size)
+        assertEquals(9, scopes.size)
+        assertTrue(scopes.contains("https://www.googleapis.com/auth/contacts"))
+        assertTrue(scopes.contains("https://www.googleapis.com/auth/forms.body"))
+        assertTrue(scopes.contains("https://www.googleapis.com/auth/forms.responses.readonly"))
+        assertTrue(scopes.contains("https://www.googleapis.com/auth/calendar"))
+        assertTrue(scopes.contains("https://www.googleapis.com/auth/gmail.readonly"))
+        assertTrue(scopes.contains("https://www.googleapis.com/auth/gmail.send"))
+        assertTrue(scopes.contains("https://www.googleapis.com/auth/spreadsheets"))
+        assertTrue(scopes.contains("https://www.googleapis.com/auth/chat.spaces.readonly"))
+        assertTrue(scopes.contains("https://www.googleapis.com/auth/chat.messages"))
+    }
+
+    @Test
+    fun `device controller returns storage stats and round-trips clipboard text`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val controller = AndroidDeviceController(context)
+        val stats = controller.getStorageAndMemoryStats()
+        assertTrue(stats.storageTotalMb >= 0L)
+        assertTrue(stats.ramTotalMb >= 0L)
+
+        val copyResult = controller.copyTextToClipboard("Aqua Test", "Hello from Aqua Clipboard")
+        assertTrue(copyResult.isSuccess)
+        val readResult = controller.readClipboardText()
+        assertTrue(readResult.isSuccess)
+        assertEquals("Hello from Aqua Clipboard", readResult.getOrThrow())
+    }
+
+    @Test
+    fun `aqua routine and browser link models validate defaults cleanly`() {
+        val routine = AquaRoutine(
+            title = "Morning Check",
+            prompt = "Check battery and unread Gmail",
+            category = "productivity",
+            speakResult = true
+        )
+        assertEquals("Morning Check", routine.title)
+        assertTrue(routine.speakResult)
+        assertEquals(0L, routine.runCount)
+
+        val link = BrowserLink(text = "Android Docs", href = "https://developer.android.com")
+        assertEquals("Android Docs", link.text)
+        assertTrue(link.href.startsWith("https://"))
     }
 }

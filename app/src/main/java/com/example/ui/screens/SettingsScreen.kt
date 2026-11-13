@@ -102,11 +102,9 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
 
     var modelExpanded by remember { mutableStateOf(false) }
     val models = listOf(
-        UserSettings.MODEL_HYDROGEN to "Gemini 4 Hydrogen (Default + Grounding)",
-        UserSettings.MODEL_ARGON to "Gemini 4 Argon (Multimodal Media)",
-        UserSettings.MODEL_CARBON to "Gemini 4 Carbon (Deep Reasoning)",
-        UserSettings.MODEL_FLASH_LITE to "Gemini 3.1 Flash-Lite (Low Latency)",
-        UserSettings.MODEL_FLASH_38 to "Gemini 3.8 Flash (Balanced)"
+        UserSettings.MODEL_FLASH_38 to "Gemini 3.8 Flash (Default + Tools)",
+        UserSettings.MODEL_FLASH_LITE to "Gemini 3.5 Flash-Lite (Ultra Fast)",
+        UserSettings.MODEL_ARGON to "Gemini 4 Argon (Complex Reasoning)"
     )
 
     var langExpanded by remember { mutableStateOf(false) }

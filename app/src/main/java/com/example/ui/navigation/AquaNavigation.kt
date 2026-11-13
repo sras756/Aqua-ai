@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Language
@@ -50,6 +52,7 @@ import com.example.data.local.SecureConfigStore
 import com.example.data.repository.AquaFirestoreRepository
 import com.example.data.repository.FileImportRepository
 import com.example.data.repository.GoogleDriveHistoryRepository
+import com.example.data.repository.GoogleWorkspaceRepository
 import com.example.device.AndroidDeviceController
 import com.example.ui.AquaMainViewModel
 import com.example.ui.components.AuthorizationModal
@@ -57,9 +60,11 @@ import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.BrowserScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.MemoryAndHistoryScreen
+import com.example.ui.screens.RoutinesScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.SkillsScreen
 import com.example.ui.screens.WalletScreen
+import com.example.ui.screens.WorkspaceScreen
 import com.example.ui.theme.AquaAbyss
 import com.example.ui.theme.AquaAiTheme
 import com.example.ui.theme.AquaCardSurface
@@ -82,6 +87,17 @@ private data class AquaTab(
 
 private val AQUA_TABS = listOf(
     AquaTab("home", "Core", Icons.Filled.GraphicEq),
+    AquaTab("skills", "Skills", Icons.Filled.Extension),
+    AquaTab("browser", "Browser", Icons.Filled.Language),
+    AquaTab("wallet", "Wallet", Icons.Filled.AccountBalanceWallet),
+    AquaTab("memory", "Memory", Icons.Filled.Memory),
+    AquaTab("settings", "Settings", Icons.Filled.Settings)
+)
+
+private val AQUA_RAIL_TABS = listOf(
+    AquaTab("home", "Core", Icons.Filled.GraphicEq),
+    AquaTab("routines", "Routines", Icons.Filled.AutoMode),
+    AquaTab("workspace", "Workspace", Icons.Filled.Apps),
     AquaTab("skills", "Skills", Icons.Filled.Extension),
     AquaTab("browser", "Browser", Icons.Filled.Language),
     AquaTab("wallet", "Wallet", Icons.Filled.AccountBalanceWallet),
@@ -148,7 +164,8 @@ private fun AuthenticatedAquaShell(
                     browserController = AquaBrowserController(context),
                     walletConnector = FlashWalletConnector(context),
                     cacheDb = AquaCacheDatabase.getInstance(context),
-                    driveHistoryRepo = GoogleDriveHistoryRepository(context)
+                    driveHistoryRepo = GoogleDriveHistoryRepository(context),
+                    workspaceRepo = GoogleWorkspaceRepository(context)
                 )
             }
         }
@@ -248,7 +265,7 @@ private fun AuthenticatedAquaShell(
                 ) {
                     if (useRail) {
                         NavigationRail(containerColor = AquaDeepSurface) {
-                            AQUA_TABS.forEach { tab ->
+                            AQUA_RAIL_TABS.forEach { tab ->
                                 NavigationRailItem(
                                     selected = currentTab == tab.route,
                                     onClick = { currentTab = tab.route },
@@ -270,6 +287,8 @@ private fun AuthenticatedAquaShell(
                     Box(modifier = Modifier.weight(1f).fillMaxSize()) {
                         when (currentTab) {
                             "home" -> HomeScreen(viewModel = viewModel, onOpenTab = { currentTab = it })
+                            "routines" -> RoutinesScreen(viewModel = viewModel)
+                            "workspace" -> WorkspaceScreen(viewModel = viewModel)
                             "skills" -> SkillsScreen(viewModel = viewModel)
                             "browser" -> BrowserScreen(viewModel = viewModel)
                             "wallet" -> WalletScreen(viewModel = viewModel)
