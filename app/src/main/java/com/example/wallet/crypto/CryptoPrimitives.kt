@@ -162,7 +162,7 @@ object CryptoPrimitives {
         return EcdsaSignature(r, s, recId)
     }
 
-    private fun recoverSecp256k1PublicKey(
+    fun recoverSecp256k1PublicKey(
         recId: Int,
         r: BigInteger,
         s: BigInteger,

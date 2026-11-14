@@ -56,6 +56,7 @@ import com.example.ui.screens.wallet.WalletOnboardingView
 import com.example.ui.screens.wallet.WalletReceiveSection
 import com.example.ui.screens.wallet.WalletSecurityRecoveryAndExtensionsSection
 import com.example.ui.screens.wallet.WalletSendSection
+import com.example.ui.screens.wallet.WalletToolsAndAddressBookSection
 import com.example.ui.screens.wallet.WalletTransactionsSection
 import com.example.ui.theme.AquaAbyss
 import com.example.ui.theme.AquaCoralError
@@ -71,6 +72,7 @@ private val WALLET_SECTIONS = listOf(
     "Receive",
     "Activity",
     "Networks",
+    "Tools",
     "Aqua AI",
     "Security"
 )
@@ -92,6 +94,17 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
     val busy by coordinator.busy.collectAsStateWithLifecycle()
     val revealedMnemonic by coordinator.revealedMnemonic.collectAsStateWithLifecycle()
     val exportedBackupJson by coordinator.exportedBackupJson.collectAsStateWithLifecycle()
+    val addressBook by coordinator.tools.addressBook.collectAsStateWithLifecycle()
+    val displayCurrency by coordinator.tools.displayCurrency.collectAsStateWithLifecycle()
+    val fiatRateFromUsd by coordinator.tools.fiatRateFromUsd.collectAsStateWithLifecycle()
+    val marketChart by coordinator.tools.marketChart.collectAsStateWithLifecycle()
+    val marketBusy by coordinator.tools.marketBusy.collectAsStateWithLifecycle()
+    val marketError by coordinator.tools.marketError.collectAsStateWithLifecycle()
+    val evmTelemetry by coordinator.tools.evmTelemetry.collectAsStateWithLifecycle()
+    val erc20Allowance by coordinator.tools.erc20Allowance.collectAsStateWithLifecycle()
+    val signedProof by coordinator.tools.signedMessageProof.collectAsStateWithLifecycle()
+    val verificationResult by coordinator.tools.verificationResult.collectAsStateWithLifecycle()
+    val toolsBusy by coordinator.tools.toolsBusy.collectAsStateWithLifecycle()
 
     val activeWallet = wallets.firstOrNull { it.walletId == securitySettings.activeWalletId } ?: wallets.firstOrNull()
     val activeAccount = accounts.firstOrNull { it.accountIndex == securitySettings.activeAccountIndex } ?: accounts.firstOrNull()
@@ -293,6 +306,13 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
                                 account = activeAccount,
                                 portfolio = portfolio,
                                 busy = busy,
+                                displayCurrency = displayCurrency,
+                                fiatRateFromUsd = fiatRateFromUsd,
+                                marketChart = marketChart,
+                                marketBusy = marketBusy,
+                                marketError = marketError,
+                                onSelectCurrency = { coordinator.tools.setDisplayCurrency(it) },
+                                onLoadMarketChart = { id, sym, days -> coordinator.tools.loadMarketChart(id, sym, days) },
                                 onRefresh = { coordinator.refreshPortfolio() },
                                 onNavigateToSend = { netId, tokId ->
                                     if (!netId.isNullOrBlank()) sendNetworkId = netId
@@ -301,7 +321,7 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
                                 },
                                 onNavigateToReceive = { activeSection = 2 },
                                 onOpenScanner = { showQrScanner = true },
-                                onOpenBackupSecurity = { activeSection = 6 }
+                                onOpenBackupSecurity = { activeSection = 7 }
                             )
 
                             1 -> WalletSendSection(
@@ -317,12 +337,13 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
                                 onToAddressChange = { sendToAddress = it },
                                 onAmountChange = { sendAmount = it },
                                 onOpenScanner = { showQrScanner = true },
+                                addressBook = addressBook,
                                 feeEstimate = feeEstimate,
                                 riskReport = riskReport,
                                 preparedTx = preparedTx,
                                 securitySettings = securitySettings,
                                 isLocked = isLocked,
-                                busy = busy,
+                                busy = busy || toolsBusy,
                                 coordinator = coordinator,
                                 onBroadcastSuccess = {
                                     sendToAddress = ""
@@ -362,7 +383,34 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
                                 coordinator = coordinator
                             )
 
-                            5 -> WalletAiAssistantSection(
+                            5 -> WalletToolsAndAddressBookSection(
+                                walletMeta = activeWallet,
+                                networks = networks,
+                                activeNetworkId = securitySettings.activeNetworkId,
+                                tokens = tokens,
+                                addressBook = addressBook,
+                                evmTelemetry = evmTelemetry,
+                                erc20Allowance = erc20Allowance,
+                                signedProof = signedProof,
+                                verificationResult = verificationResult,
+                                securitySettings = securitySettings,
+                                isLocked = isLocked,
+                                busy = busy || toolsBusy,
+                                coordinator = coordinator,
+                                onUseContactInSend = { contact ->
+                                    networks.firstOrNull { it.chainFamily == contact.chainFamily }?.let {
+                                        sendNetworkId = it.id
+                                    }
+                                    sendToAddress = contact.address
+                                    activeSection = 1
+                                },
+                                onNavigateToSendPreview = {
+                                    activeSection = 1
+                                },
+                                onCopyText = { l, t -> viewModel.copyToClipboard(l, t) }
+                            )
+
+                            6 -> WalletAiAssistantSection(
                                 onSendAiWalletPrompt = { prompt ->
                                     viewModel.startNewConversation()
                                     viewModel.sendMessage(prompt)
@@ -370,7 +418,7 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
                                 }
                             )
 
-                            6 -> WalletSecurityRecoveryAndExtensionsSection(
+                            7 -> WalletSecurityRecoveryAndExtensionsSection(
                                 walletMeta = activeWallet,
                                 accounts = accounts,
                                 activeAccountIndex = securitySettings.activeAccountIndex,

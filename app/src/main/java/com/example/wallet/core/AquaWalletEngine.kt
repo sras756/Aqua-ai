@@ -8,6 +8,7 @@ import com.example.data.local.WalletCustomTokenEntity
 import com.example.wallet.chains.BitcoinChainAdapter
 import com.example.wallet.chains.ChainAdapter
 import com.example.wallet.chains.EvmChainAdapter
+import com.example.wallet.chains.EvmToolsClient
 import com.example.wallet.chains.SolanaChainAdapter
 import com.example.wallet.crypto.CryptoPrimitives
 import com.example.wallet.security.WalletSecurityVault
@@ -42,6 +43,18 @@ class AquaWalletEngine(
     private val solanaAdapter = SolanaChainAdapter(httpClient)
     private val bitcoinAdapter = BitcoinChainAdapter(httpClient)
     val marketPriceService = MarketPriceService(httpClient)
+    val utilities = WalletUtilityService(
+        vault = vault,
+        dao = walletCacheDao,
+        evmAdapter = evmAdapter,
+        evmToolsClient = EvmToolsClient(httpClient),
+        marketPriceService = marketPriceService,
+        addressValidator = { address, family ->
+            val probeNet = DefaultWalletRegistry.networks.firstOrNull { it.chainFamily == family }
+                ?: DefaultWalletRegistry.networks.first()
+            adapterFor(family).validateAddress(address, probeNet)
+        }
+    )
 
     private val inFlightIdempotencyKeys: MutableSet<String> =
         Collections.synchronizedSet(mutableSetOf())
@@ -357,10 +370,18 @@ class AquaWalletEngine(
             vault.checkSpendingLimit(estimatedUsd).getOrThrow()
         }
 
-        // 3. Risk inspection
-        val riskReport = adapter.analyzeAddressRisk(fromAddress, cleanDest, network)
-        if (riskReport.riskLevel == RiskLevel.CRITICAL) {
-            throw SecurityException(riskReport.findings.joinToString(" "))
+        // 3. Risk inspection + Trusted Address Book match
+        val rawRiskReport = adapter.analyzeAddressRisk(fromAddress, cleanDest, network)
+        if (rawRiskReport.riskLevel == RiskLevel.CRITICAL) {
+            throw SecurityException(rawRiskReport.findings.joinToString(" "))
+        }
+        val contactMatch = utilities.findContactByAddress(cleanDest)
+        val riskReport = if (contactMatch != null) {
+            rawRiskReport.copy(
+                findings = listOf("Trusted Address Book contact: '${contactMatch.label}'") + rawRiskReport.findings
+            )
+        } else {
+            rawRiskReport
         }
 
         val totalCostDisplay = if (token.isNative) {

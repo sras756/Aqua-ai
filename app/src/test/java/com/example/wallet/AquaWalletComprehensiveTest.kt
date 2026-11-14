@@ -16,10 +16,13 @@ import com.example.wallet.ai.AquaAiWalletBridge
 import com.example.wallet.chains.BitcoinChainAdapter
 import com.example.wallet.chains.BitcoinUtxo
 import com.example.wallet.chains.EvmChainAdapter
+import com.example.wallet.chains.EvmToolsClient
 import com.example.wallet.chains.SolanaChainAdapter
 import com.example.wallet.core.AddressRiskReport
 import com.example.wallet.core.AquaWalletEngine
+import com.example.wallet.core.ChainFamily
 import com.example.wallet.core.DefaultWalletRegistry
+import com.example.wallet.core.DisplayFiatCurrency
 import com.example.wallet.core.FeeEstimate
 import com.example.wallet.core.PreparedChainTransaction
 import com.example.wallet.core.RiskLevel
@@ -27,6 +30,7 @@ import com.example.wallet.core.TxStatus
 import com.example.wallet.crypto.Base58
 import com.example.wallet.crypto.CryptoPrimitives
 import com.example.wallet.crypto.HdKeyDerivation
+import com.example.wallet.crypto.WalletMessageCrypto
 import com.example.wallet.security.WalletSecurityVault
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
@@ -443,5 +447,84 @@ class AquaWalletComprehensiveTest {
         val solParsed = engine.parseScannedPaymentUri("solana:11111111111111111111111111111111?amount=1.25")
         assertEquals("solana_mainnet", solParsed.suggestedNetworkId)
         assertEquals("1.25", solParsed.suggestedAmount)
+    }
+
+    @Test
+    fun `off-chain EIP191 personal_sign and Solana Ed25519 signing and verification enforce lock guards`() {
+        val (meta, acc) = vault.createWallet("Signer Wallet", wordCount = 12).getOrThrow()
+        val message = "Aqua Crypto Wallet ownership proof #2026"
+
+        val evmProof = engine.utilities.signMessageLocally(meta, acc.accountIndex, ChainFamily.EVM, message).getOrThrow()
+        assertEquals(acc.evmAddress, evmProof.signerAddress)
+        assertTrue(evmProof.signature.startsWith("0x"))
+        assertTrue(engine.utilities.verifySignedMessage(ChainFamily.EVM, acc.evmAddress, message, evmProof.signature).getOrThrow())
+        assertFalse(engine.utilities.verifySignedMessage(ChainFamily.EVM, acc.evmAddress, "$message!", evmProof.signature).getOrThrow())
+
+        val solProof = engine.utilities.signMessageLocally(meta, acc.accountIndex, ChainFamily.SOLANA, message).getOrThrow()
+        assertEquals(acc.solanaAddress, solProof.signerAddress)
+        assertTrue(engine.utilities.verifySignedMessage(ChainFamily.SOLANA, acc.solanaAddress, message, solProof.signature).getOrThrow())
+        assertFalse(engine.utilities.verifySignedMessage(ChainFamily.SOLANA, acc.solanaAddress, "tampered", solProof.signature).getOrThrow())
+
+        // Locked vault blocks message signing
+        vault.setPin("135790").getOrThrow()
+        vault.lockSessionNow()
+        assertTrue(engine.utilities.signMessageLocally(meta, acc.accountIndex, ChainFamily.EVM, message).isFailure)
+    }
+
+    @Test
+    fun `ens namehash matches EIP137 vectors and erc20 approve zero calldata encodes cleanly`() {
+        assertEquals(
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            CryptoPrimitives.toHex(WalletMessageCrypto.ensNamehash(""), prefix = true)
+        )
+        assertEquals(
+            "0x93cdeb708b7545dc668eb9280176169d1c33cfd8ed6f04690a0bcc88a93fc4ae",
+            CryptoPrimitives.toHex(WalletMessageCrypto.ensNamehash("eth"), prefix = true)
+        )
+        assertEquals(
+            "0xee6c4522aab0003e8d14cd40a6af439055fd2577951148c14b6cea9a53475835",
+            CryptoPrimitives.toHex(WalletMessageCrypto.ensNamehash("vitalik.eth"), prefix = true)
+        )
+
+        val toolsClient = EvmToolsClient(httpClient)
+        val approveZero = toolsClient.encodeErc20Approve("0x9858EfFD232B4033E47d90003D41EC34EcaEda94", BigInteger.ZERO)
+        assertEquals(
+            "0x095ea7b30000000000000000000000009858effd232b4033e47d90003d41ec34ecaeda940000000000000000000000000000000000000000000000000000000000000000",
+            approveZero
+        )
+    }
+
+    @Test
+    fun `multi-chain address book validates saves queries via AI bridge and currency preference persists`() = runBlocking {
+        // Invalid address rejected
+        assertTrue(engine.utilities.saveContact("Bad EVM", ChainFamily.EVM, "0x123").isFailure)
+
+        // Valid contacts save and normalize
+        val alice = engine.utilities.saveContact(
+            label = "Alice Cold",
+            chainFamily = ChainFamily.EVM,
+            address = "0x9858effd232b4033e47d90003d41ec34ecaeda94",
+            note = "Hardware vault"
+        ).getOrThrow()
+        assertEquals("0x9858EfFD232B4033E47d90003D41EC34EcaEda94", alice.address)
+
+        val bob = engine.utilities.saveContact(
+            label = "Bob Solana",
+            chainFamily = ChainFamily.SOLANA,
+            address = "11111111111111111111111111111111"
+        ).getOrThrow()
+
+        val bridge = AquaAiWalletBridge(engine)
+        val lookupText = bridge.lookupAddressBookText("Alice").getOrThrow()
+        assertTrue(lookupText.contains("Alice Cold"))
+        assertTrue(lookupText.contains("0x9858EfFD232B4033E47d90003D41EC34EcaEda94"))
+
+        engine.utilities.deleteContact(bob.id)
+        assertEquals(1, engine.utilities.getAddressBook().size)
+
+        // Display fiat currency persists cleanly
+        val s = vault.getSecuritySettings().copy(displayCurrencyCode = DisplayFiatCurrency.EUR.code)
+        vault.updateSecuritySettings(s)
+        assertEquals("EUR", vault.getSecuritySettings().displayCurrencyCode)
     }
 }

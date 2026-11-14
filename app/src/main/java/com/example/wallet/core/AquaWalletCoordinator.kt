@@ -22,6 +22,16 @@ class AquaWalletCoordinator(
     private val onBanner: (String) -> Unit
 ) {
     val aiBridge = AquaAiWalletBridge(engine)
+    val tools = WalletToolsCoordinator(
+        engine = engine,
+        scope = scope,
+        activeWalletMeta = ::activeWalletMeta,
+        activeAccountInfo = ::activeAccountInfo,
+        activeNetworkConfig = ::activeNetworkConfig,
+        unlockVaultIfNeeded = ::unlockVaultIfNeeded,
+        setPreparedTxForSigning = { _preparedTx.value = it },
+        onBanner = onBanner
+    )
 
     private val _wallets = MutableStateFlow<List<WalletMetadata>>(emptyList())
     val wallets: StateFlow<List<WalletMetadata>> = _wallets.asStateFlow()

@@ -250,12 +250,18 @@ class EvmChainAdapter(
                     .toBigInteger()
                 val txObj = JSONObject().apply {
                     put("from", prepared.fromAddress)
-                    put("to", callTo)
-                    if (prepared.token.isNative) {
-                        put("value", "0x" + scaledAmount.toString(16))
-                    } else {
+                    if (prepared.customCallDataHex.isNotBlank()) {
+                        put("to", prepared.token.contractOrMintAddress)
                         put("value", "0x0")
-                        put("data", encodeErc20Transfer(prepared.toAddress, scaledAmount))
+                        put("data", prepared.customCallDataHex)
+                    } else {
+                        put("to", callTo)
+                        if (prepared.token.isNative) {
+                            put("value", "0x" + scaledAmount.toString(16))
+                        } else {
+                            put("value", "0x0")
+                            put("data", encodeErc20Transfer(prepared.toAddress, scaledAmount))
+                        }
                     }
                 }
                 val gasHex = jsonRpc(
@@ -264,7 +270,8 @@ class EvmChainAdapter(
                     JSONArray().put(txObj)
                 )
                 val estGas = parseHexBigInt(gasHex)
-                "EVM pre-flight simulation succeeded (estimated gas: $estGas units on chainId ${prepared.network.chainId})."
+                val actionDesc = prepared.customActionLabel.ifBlank { "EVM pre-flight simulation" }
+                "$actionDesc succeeded (estimated gas: $estGas units on chainId ${prepared.network.chainId})."
             }
         }
 
@@ -286,16 +293,16 @@ class EvmChainAdapter(
                 val scaledAmount = prepared.amountDecimal
                     .multiply(BigDecimal.TEN.pow(prepared.token.decimals))
                     .toBigInteger()
-                val toHex = if (prepared.token.isNative) {
-                    prepared.toAddress
-                } else {
+                val toHex = if (prepared.customCallDataHex.isNotBlank() || !prepared.token.isNative) {
                     prepared.token.contractOrMintAddress
-                }
-                val valueWei = if (prepared.token.isNative) scaledAmount else BigInteger.ZERO
-                val dataBytes = if (prepared.token.isNative) {
-                    ByteArray(0)
                 } else {
-                    CryptoPrimitives.fromHex(encodeErc20Transfer(prepared.toAddress, scaledAmount))
+                    prepared.toAddress
+                }
+                val valueWei = if (prepared.customCallDataHex.isBlank() && prepared.token.isNative) scaledAmount else BigInteger.ZERO
+                val dataBytes = when {
+                    prepared.customCallDataHex.isNotBlank() -> CryptoPrimitives.fromHex(prepared.customCallDataHex)
+                    prepared.token.isNative -> ByteArray(0)
+                    else -> CryptoPrimitives.fromHex(encodeErc20Transfer(prepared.toAddress, scaledAmount))
                 }
 
                 val rawHex = buildAndSignEip1559RawHex(
@@ -325,7 +332,11 @@ class EvmChainAdapter(
                     fromAddress = prepared.fromAddress,
                     toAddress = prepared.toAddress,
                     assetSymbol = prepared.token.symbol,
-                    amountDisplay = "${prepared.amountDecimal.stripTrailingZeros().toPlainString()} ${prepared.token.symbol}",
+                    amountDisplay = if (prepared.customActionLabel.isNotBlank()) {
+                        "${prepared.customActionLabel} (${prepared.token.symbol})"
+                    } else {
+                        "${prepared.amountDecimal.stripTrailingZeros().toPlainString()} ${prepared.token.symbol}"
+                    },
                     feeDisplay = prepared.feeEstimate.estimatedFeeDisplay,
                     status = TxStatus.PENDING,
                     confirmations = 0,

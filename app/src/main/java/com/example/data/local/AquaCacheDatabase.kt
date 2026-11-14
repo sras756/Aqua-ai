@@ -65,6 +65,16 @@ data class WalletCustomNetworkEntity(
     val isTestnet: Boolean = false
 )
 
+@Entity(tableName = "wallet_address_book")
+data class WalletAddressBookEntity(
+    @PrimaryKey val id: String,
+    val label: String,
+    val chainFamily: String,
+    val address: String,
+    val note: String = "",
+    val createdAtMs: Long = System.currentTimeMillis()
+)
+
 @Dao
 interface DeviceActionLogDao {
     @Query("SELECT * FROM device_action_logs WHERE userId = :userId ORDER BY timestampMs DESC LIMIT 50")
@@ -117,6 +127,18 @@ interface WalletCacheDao {
 
     @Query("DELETE FROM wallet_custom_networks WHERE id = :networkId")
     suspend fun deleteCustomNetwork(networkId: String)
+
+    @Query("SELECT * FROM wallet_address_book ORDER BY label COLLATE NOCASE ASC")
+    fun observeAddressBook(): Flow<List<WalletAddressBookEntity>>
+
+    @Query("SELECT * FROM wallet_address_book ORDER BY label COLLATE NOCASE ASC")
+    suspend fun getAddressBook(): List<WalletAddressBookEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAddressBookEntry(entry: WalletAddressBookEntity)
+
+    @Query("DELETE FROM wallet_address_book WHERE id = :entryId")
+    suspend fun deleteAddressBookEntry(entryId: String)
 }
 
 @Database(
@@ -124,9 +146,10 @@ interface WalletCacheDao {
         DeviceActionLogEntity::class,
         CachedWalletTxEntity::class,
         WalletCustomTokenEntity::class,
-        WalletCustomNetworkEntity::class
+        WalletCustomNetworkEntity::class,
+        WalletAddressBookEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AquaCacheDatabase : RoomDatabase() {

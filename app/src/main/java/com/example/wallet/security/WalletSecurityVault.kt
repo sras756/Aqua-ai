@@ -382,7 +382,8 @@ class WalletSecurityVault(context: Context) {
             testnetModeEnabled = prefs.getBoolean(KEY_TESTNET_MODE, false),
             activeWalletId = prefs.getString(KEY_ACTIVE_WALLET_ID, "").orEmpty(),
             activeAccountIndex = prefs.getInt(KEY_ACTIVE_ACCOUNT_INDEX, 0),
-            activeNetworkId = prefs.getString(KEY_ACTIVE_NETWORK_ID, "eth_mainnet").orEmpty()
+            activeNetworkId = prefs.getString(KEY_ACTIVE_NETWORK_ID, "eth_mainnet").orEmpty(),
+            displayCurrencyCode = prefs.getString(KEY_DISPLAY_CURRENCY, "USD").orEmpty().ifBlank { "USD" }
         )
     }
 
@@ -398,6 +399,7 @@ class WalletSecurityVault(context: Context) {
             .putString(KEY_ACTIVE_WALLET_ID, settings.activeWalletId)
             .putInt(KEY_ACTIVE_ACCOUNT_INDEX, settings.activeAccountIndex)
             .putString(KEY_ACTIVE_NETWORK_ID, settings.activeNetworkId)
+            .putString(KEY_DISPLAY_CURRENCY, settings.displayCurrencyCode.ifBlank { "USD" })
             .apply()
     }
 
@@ -629,6 +631,7 @@ class WalletSecurityVault(context: Context) {
         const val KEY_ACTIVE_WALLET_ID = "wallet_active_id"
         const val KEY_ACTIVE_ACCOUNT_INDEX = "wallet_active_account_index"
         const val KEY_ACTIVE_NETWORK_ID = "wallet_active_network_id"
+        const val KEY_DISPLAY_CURRENCY = "wallet_display_currency"
         const val KEY_JVM_TEST_AES_KEY = "jvm_fallback_key"
     }
 }

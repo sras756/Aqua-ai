@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -32,6 +34,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -59,6 +63,8 @@ import com.example.ui.theme.AquaMintSuccess
 import com.example.ui.theme.AquaMutedText
 import com.example.ui.theme.AquaTeal
 import com.example.wallet.core.AssetBalance
+import com.example.wallet.core.DisplayFiatCurrency
+import com.example.wallet.core.MarketSparklineData
 import com.example.wallet.core.PortfolioSummary
 import com.example.wallet.core.WalletAccountInfo
 import com.example.wallet.core.WalletMetadata
@@ -80,6 +86,13 @@ fun WalletDashboardAndAnalyticsSection(
     account: WalletAccountInfo,
     portfolio: PortfolioSummary?,
     busy: Boolean,
+    displayCurrency: DisplayFiatCurrency,
+    fiatRateFromUsd: Double,
+    marketChart: MarketSparklineData?,
+    marketBusy: Boolean,
+    marketError: String?,
+    onSelectCurrency: (DisplayFiatCurrency) -> Unit,
+    onLoadMarketChart: (String, String, Int) -> Unit,
     onRefresh: () -> Unit,
     onNavigateToSend: (networkId: String?, tokenId: String?) -> Unit,
     onNavigateToReceive: () -> Unit,
@@ -159,10 +172,11 @@ fun WalletDashboardAndAnalyticsSection(
                         }
                     }
 
+                    val totalConverted = portfolio?.totalValueUsd?.let { it * fiatRateFromUsd }
                     val totalUsdText = when {
                         portfolio == null -> "Tap Refresh to query live RPCs"
-                        portfolio.totalValueUsd != null -> "$${"%,.2f".format(Locale.US, portfolio.totalValueUsd)} USD"
-                        else -> "Live balances loaded (USD quotes offline/testnet)"
+                        totalConverted != null -> "${displayCurrency.symbol}${"%,.2f".format(Locale.US, totalConverted)} ${displayCurrency.code}"
+                        else -> "Live balances loaded (market quotes offline/testnet)"
                     }
                     Text(
                         text = totalUsdText,
@@ -171,6 +185,25 @@ fun WalletDashboardAndAnalyticsSection(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.testTag("wallet_total_portfolio_value")
                     )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        DisplayFiatCurrency.entries.forEach { curr ->
+                            FilterChip(
+                                selected = displayCurrency == curr,
+                                onClick = { onSelectCurrency(curr) },
+                                label = { Text(curr.code) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = AquaCyan.copy(alpha = 0.22f),
+                                    selectedLabelColor = AquaCyan,
+                                    labelColor = AquaMutedText
+                                ),
+                                modifier = Modifier.testTag("currency_chip_${curr.code}")
+                            )
+                        }
+                    }
 
                     portfolio?.weighted24hChangePct?.let { delta ->
                         val positive = delta >= 0.0
@@ -303,7 +336,7 @@ fun WalletDashboardAndAnalyticsSection(
                                         )
                                         Spacer(Modifier.width(8.dp))
                                         Text(
-                                            text = "$chain: ${"%.1f".format(Locale.US, pct)}% ($${"%,.2f".format(Locale.US, usd)})",
+                                            text = "$chain: ${"%.1f".format(Locale.US, pct)}% (${displayCurrency.symbol}${"%,.2f".format(Locale.US, usd * fiatRateFromUsd)})",
                                             style = MaterialTheme.typography.labelMedium,
                                             color = AquaIceText
                                         )
@@ -314,6 +347,18 @@ fun WalletDashboardAndAnalyticsSection(
                     }
                 }
             }
+        }
+
+        // Live CoinGecko Market Watchlist & Sparkline Card
+        item {
+            WalletMarketSparklineCard(
+                chartData = marketChart,
+                busy = marketBusy,
+                errorText = marketError,
+                displayCurrency = displayCurrency,
+                fiatRateFromUsd = fiatRateFromUsd,
+                onLoadChart = onLoadMarketChart
+            )
         }
 
         // Warnings for unreachable RPC nodes
@@ -371,6 +416,8 @@ fun WalletDashboardAndAnalyticsSection(
             items(assets, key = { it.token.id }) { asset ->
                 AssetRowCard(
                     asset = asset,
+                    displayCurrency = displayCurrency,
+                    fiatRateFromUsd = fiatRateFromUsd,
                     onClick = { onNavigateToSend(asset.token.networkId, asset.token.id) }
                 )
             }
@@ -381,6 +428,8 @@ fun WalletDashboardAndAnalyticsSection(
 @Composable
 private fun AssetRowCard(
     asset: AssetBalance,
+    displayCurrency: DisplayFiatCurrency,
+    fiatRateFromUsd: Double,
     onClick: () -> Unit
 ) {
     Card(
@@ -431,7 +480,7 @@ private fun AssetRowCard(
                         " ($sign${"%.2f".format(Locale.US, it)}%)"
                     } ?: ""
                     Text(
-                        text = "$${"%,.4f".format(Locale.US, p)}$chg",
+                        text = "${displayCurrency.symbol}${"%,.4f".format(Locale.US, p * fiatRateFromUsd)}$chg",
                         style = MaterialTheme.typography.labelSmall,
                         color = if ((asset.change24hPct ?: 0.0) >= 0.0) AquaMintSuccess else AquaCoralError
                     )
@@ -445,7 +494,7 @@ private fun AssetRowCard(
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    text = asset.valueUsd?.let { "$${"%,.2f".format(Locale.US, it)}" } ?: "Tap to Send",
+                    text = asset.valueUsd?.let { "${displayCurrency.symbol}${"%,.2f".format(Locale.US, it * fiatRateFromUsd)}" } ?: "Tap to Send",
                     style = MaterialTheme.typography.labelMedium,
                     color = AquaCyan
                 )

@@ -234,6 +234,40 @@ class AquaAiWalletBridge(
         }
     }
 
+    suspend fun lookupAddressBookText(query: String = ""): Result<String> = runCatching {
+        val contacts = engine.utilities.getAddressBook()
+        val q = query.trim()
+        val matched = if (q.isBlank()) contacts else contacts.filter {
+            it.label.contains(q, ignoreCase = true) ||
+                it.address.contains(q, ignoreCase = true) ||
+                it.note.contains(q, ignoreCase = true)
+        }
+        if (matched.isEmpty()) {
+            "No saved Aqua Wallet Address Book contacts matching '${q.ifBlank { "all" }}'."
+        } else {
+            buildString {
+                appendLine("Saved Trusted Address Book Contacts (${matched.size}):")
+                matched.forEach { c ->
+                    val notePart = if (c.note.isNotBlank()) " — ${c.note}" else ""
+                    appendLine("- ${c.label} [${c.chainFamily.name}]: ${c.address}$notePart")
+                }
+            }
+        }
+    }
+
+    private suspend fun resolveDestinationAddress(rawDest: String, net: NetworkConfig): String {
+        val clean = rawDest.trim()
+        if (clean.isBlank()) return clean
+        if (net.chainFamily == com.example.wallet.core.ChainFamily.EVM && clean.endsWith(".eth", ignoreCase = true)) {
+            return engine.utilities.resolveEnsName(clean).getOrThrow()
+        }
+        if (!engine.adapterFor(net.chainFamily).validateAddress(clean, net)) {
+            val contact = engine.utilities.findContactByLabel(clean, net.chainFamily)
+            if (contact != null) return contact.address
+        }
+        return clean
+    }
+
     suspend fun estimateFeesText(
         networkQuery: String,
         toAddress: String,
@@ -244,7 +278,7 @@ class AquaAiWalletBridge(
         val pair = activeWalletAndAccount()
             ?: throw IllegalStateException("No wallet account available to derive sender address.")
         val fromAddr = pair.second.addressFor(net)
-        val dest = toAddress.trim().ifBlank { fromAddr }
+        val dest = resolveDestinationAddress(toAddress, net).ifBlank { fromAddr }
         val tokens = engine.getTokensForNetwork(net.id)
         val token = resolveToken(tokens, assetSymbol, net)
         val amt = amountText.trim().toBigDecimalOrNull() ?: BigDecimal("0.001")
@@ -260,7 +294,14 @@ class AquaAiWalletBridge(
     suspend fun analyzeAddressRisk(address: String, networkQuery: String): Result<AddressRiskReport> = runCatching {
         val net = if (networkQuery.isNotBlank()) resolveNetwork(networkQuery) else activeNetwork()
         val fromAddr = activeWalletAndAccount()?.second?.addressFor(net).orEmpty()
-        engine.adapterFor(net.chainFamily).analyzeAddressRisk(fromAddr, address.trim(), net)
+        val resolved = resolveDestinationAddress(address, net)
+        val report = engine.adapterFor(net.chainFamily).analyzeAddressRisk(fromAddr, resolved, net)
+        val contact = engine.utilities.findContactByAddress(resolved)
+        if (contact != null) {
+            report.copy(findings = listOf("Trusted Address Book contact: '${contact.label}'") + report.findings)
+        } else {
+            report
+        }
     }
 
     suspend fun prepareUnsignedTransaction(
@@ -272,6 +313,7 @@ class AquaAiWalletBridge(
         val (meta, account) = activeWalletAndAccount()
             ?: throw IllegalStateException("No wallet initialized in Aqua Vault.")
         val net = if (networkQuery.isNotBlank()) resolveNetwork(networkQuery) else activeNetwork()
+        val resolvedDest = resolveDestinationAddress(toAddress, net)
         val tokens = engine.getTokensForNetwork(net.id)
         val token = resolveToken(tokens, assetSymbol, net)
         engine.prepareTransaction(
@@ -279,7 +321,7 @@ class AquaAiWalletBridge(
             account = account,
             network = net,
             token = token,
-            toAddress = toAddress,
+            toAddress = resolvedDest,
             amountText = amountText
         ).getOrThrow()
     }

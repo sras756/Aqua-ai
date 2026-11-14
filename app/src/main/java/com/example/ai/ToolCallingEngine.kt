@@ -190,12 +190,19 @@ class ToolCallingEngine(
                 ),
                 FunctionDeclaration(
                     name = "wallet_prepare_transaction",
-                    description = "Prepares and simulates an unsigned transfer in Aqua Wallet within spending limits, then requires explicit user authorization & unlocked vault before signing and broadcasting.",
+                    description = "Prepares and simulates an unsigned transfer in Aqua Wallet within spending limits, then requires explicit user authorization & unlocked vault before signing and broadcasting. Supports raw addresses, .eth ENS names, or saved Address Book labels.",
                     parameters = mapOf(
                         "network" to Schema.string(description = "Network name or ID."),
-                        "destinationAddress" to Schema.string(description = "Recipient blockchain address."),
+                        "destinationAddress" to Schema.string(description = "Recipient blockchain address, .eth ENS name, or saved contact label."),
                         "assetSymbol" to Schema.string(description = "Asset ticker symbol such as ETH, BNB, POL, SOL, BTC, USDC, USDT."),
                         "amount" to Schema.string(description = "Transfer amount as decimal string.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "wallet_lookup_contact",
+                    description = "Reads saved trusted recipient contacts from the Aqua Wallet multi-chain Address Book (read-only public addresses only).",
+                    parameters = mapOf(
+                        "query" to Schema.string(description = "Optional contact name or address filter; leave blank to list all saved contacts.")
                     )
                 ),
                 FunctionDeclaration(
@@ -693,6 +700,15 @@ class ToolCallingEngine(
                     val msg = "Address ${report.address} on ${report.networkId}: Risk=${report.riskLevel}, ValidFormat=${report.isValidFormat}, ChecksumValid=${report.checksumValid}, IsContract=${report.isContractAddress}, SelfTransfer=${report.isSelfTransfer}. Findings: ${report.findings.joinToString("; ")}"
                     onTrace(AgentStepTrace("Risk Audit", name, "completed", "Risk=${report.riskLevel}"))
                     jsonResult(true, msg)
+                }
+
+                "wallet_lookup_contact" -> {
+                    val bridge = aiWalletBridge
+                        ?: return jsonResult(false, "Aqua Wallet engine is unavailable.")
+                    val q = argStr("query")
+                    val resText = bridge.lookupAddressBookText(q).getOrThrow()
+                    onTrace(AgentStepTrace("Address Book", name, "completed", "Queried saved contacts"))
+                    jsonResult(true, resText)
                 }
 
                 "wallet_prepare_transaction", "wallet_prepare_transfer" -> {

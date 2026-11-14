@@ -133,7 +133,9 @@ data class PreparedChainTransaction(
     val utxosPayloadJson: String,
     val simulationSummary: String,
     val riskReport: AddressRiskReport,
-    val createdAtMs: Long = System.currentTimeMillis()
+    val createdAtMs: Long = System.currentTimeMillis(),
+    val customCallDataHex: String = "",
+    val customActionLabel: String = ""
 )
 
 enum class TxStatus {
@@ -178,7 +180,75 @@ data class WalletSecuritySettings(
     val testnetModeEnabled: Boolean = false,
     val activeWalletId: String = "",
     val activeAccountIndex: Int = 0,
-    val activeNetworkId: String = "eth_mainnet"
+    val activeNetworkId: String = "eth_mainnet",
+    val displayCurrencyCode: String = "USD"
+)
+
+enum class DisplayFiatCurrency(val code: String, val symbol: String, val coingeckoKey: String) {
+    USD("USD", "$", "usd"),
+    EUR("EUR", "€", "eur"),
+    GBP("GBP", "£", "gbp"),
+    JPY("JPY", "¥", "jpy"),
+    AED("AED", "AED ", "aed"),
+    PKR("PKR", "₨", "pkr");
+
+    companion object {
+        fun fromCode(code: String): DisplayFiatCurrency =
+            entries.firstOrNull { it.code.equals(code, ignoreCase = true) } ?: USD
+    }
+}
+
+data class AddressBookEntry(
+    val id: String,
+    val label: String,
+    val chainFamily: ChainFamily,
+    val address: String,
+    val note: String = "",
+    val createdAtMs: Long = System.currentTimeMillis()
+)
+
+data class MarketChartPoint(
+    val timestampMs: Long,
+    val priceUsd: Double
+)
+
+data class MarketSparklineData(
+    val coingeckoId: String,
+    val symbol: String,
+    val days: Int,
+    val currentPriceUsd: Double,
+    val periodChangePct: Double,
+    val highUsd: Double,
+    val lowUsd: Double,
+    val points: List<MarketChartPoint>
+)
+
+data class EvmChainTelemetry(
+    val networkId: String,
+    val blockNumber: Long,
+    val gasPriceGwei: BigDecimal,
+    val confirmedNonce: BigInteger,
+    val pendingNonce: BigInteger
+)
+
+data class Erc20AllowanceResult(
+    val networkId: String,
+    val tokenSymbol: String,
+    val tokenContract: String,
+    val ownerAddress: String,
+    val spenderAddress: String,
+    val rawAllowance: BigInteger,
+    val formattedAllowance: String,
+    val isUnlimited: Boolean
+)
+
+data class SignedMessageProof(
+    val chainFamily: ChainFamily,
+    val standardName: String,
+    val signerAddress: String,
+    val message: String,
+    val signature: String,
+    val timestampMs: Long = System.currentTimeMillis()
 )
 
 data class WalletExtensionPoint(
@@ -385,9 +455,9 @@ object DefaultWalletRegistry {
             id = "ext_approvals",
             title = "ERC-20 / SPL Approval Manager",
             category = "Security",
-            statusLabel = "Extension Point Ready",
-            securityRequirement = "Allows revoking unlimited token allowances after explicit signing confirmation.",
-            description = "Inspects and revokes active spender allowances on EVM & Solana."
+            statusLabel = "Live on EVM (Tools Tab)",
+            securityRequirement = "Allows revoking active ERC-20 allowances via EIP-1559 approve(0) after explicit signing confirmation.",
+            description = "Inspects and revokes active spender allowances on EVM networks from Wallet Tools."
         ),
         WalletExtensionPoint(
             id = "ext_hardware_wallet",

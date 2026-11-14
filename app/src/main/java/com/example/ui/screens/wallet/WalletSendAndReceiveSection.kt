@@ -3,6 +3,7 @@ package com.example.ui.screens.wallet
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -38,6 +40,7 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -73,8 +76,10 @@ import com.example.ui.theme.AquaMintSuccess
 import com.example.ui.theme.AquaMutedText
 import com.example.ui.theme.AquaTeal
 import com.example.wallet.QrCodeGenerator
+import com.example.wallet.core.AddressBookEntry
 import com.example.wallet.core.AddressRiskReport
 import com.example.wallet.core.AquaWalletCoordinator
+import com.example.wallet.core.ChainFamily
 import com.example.wallet.core.FeeEstimate
 import com.example.wallet.core.NetworkConfig
 import com.example.wallet.core.PreparedChainTransaction
@@ -101,6 +106,7 @@ fun WalletSendSection(
     onToAddressChange: (String) -> Unit,
     onAmountChange: (String) -> Unit,
     onOpenScanner: () -> Unit,
+    addressBook: List<AddressBookEntry>,
     feeEstimate: FeeEstimate?,
     riskReport: AddressRiskReport?,
     preparedTx: PreparedChainTransaction?,
@@ -115,9 +121,14 @@ fun WalletSendSection(
     var netExpanded by remember { mutableStateOf(false) }
     var tokenExpanded by remember { mutableStateOf(false) }
     var confirmPin by remember { mutableStateOf("") }
+    var saveContactLabel by remember { mutableStateOf("") }
+    var showSaveContactInline by remember { mutableStateOf(false) }
 
     val selectedNet = networks.firstOrNull { it.id == selectedNetworkId } ?: networks.firstOrNull()
     val selectedTok = tokens.firstOrNull { it.id == selectedTokenId } ?: tokens.firstOrNull()
+    val matchingContacts = remember(addressBook, selectedNet?.chainFamily) {
+        addressBook.filter { selectedNet == null || it.chainFamily == selectedNet.chainFamily }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -194,7 +205,7 @@ fun WalletSendSection(
                                 focusedTextColor = AquaIceText,
                                 unfocusedTextColor = AquaIceText
                             ),
-                            modifier = Modifier.fillMaxWidth().menuAnchor()
+                            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
                         )
                         ExposedDropdownMenu(
                             expanded = netExpanded,
@@ -228,7 +239,7 @@ fun WalletSendSection(
                                 focusedTextColor = AquaIceText,
                                 unfocusedTextColor = AquaIceText
                             ),
-                            modifier = Modifier.fillMaxWidth().menuAnchor()
+                            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
                         )
                         ExposedDropdownMenu(
                             expanded = tokenExpanded,
@@ -253,8 +264,8 @@ fun WalletSendSection(
                         OutlinedTextField(
                             value = toAddress,
                             onValueChange = onToAddressChange,
-                            label = { Text("Recipient Address") },
-                            placeholder = { Text("0x... / bc1q... / Solana address") },
+                            label = { Text("Recipient Address or .eth ENS") },
+                            placeholder = { Text("0x... / name.eth / bc1q... / SOL") },
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = AquaCyan,
@@ -269,6 +280,59 @@ fun WalletSendSection(
                             modifier = Modifier.height(54.dp).testTag("send_scan_qr_button")
                         ) {
                             Icon(Icons.Filled.QrCodeScanner, contentDescription = "Scan recipient QR", tint = AquaCyan)
+                        }
+                    }
+
+                    if (selectedNet?.chainFamily == ChainFamily.EVM && toAddress.trim().endsWith(".eth", ignoreCase = true)) {
+                        OutlinedButton(
+                            onClick = { coordinator.tools.resolveEnsName(toAddress.trim()) { onToAddressChange(it) } },
+                            enabled = !busy,
+                            modifier = Modifier.fillMaxWidth().height(48.dp).testTag("send_resolve_ens_button")
+                        ) {
+                            Text("Resolve ENS Domain (${toAddress.trim()})", color = AquaCyan)
+                        }
+                    }
+
+                    if (matchingContacts.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            matchingContacts.forEach { contact ->
+                                FilterChip(
+                                    selected = toAddress.equals(contact.address, ignoreCase = true),
+                                    onClick = { onToAddressChange(contact.address) },
+                                    label = { Text(contact.label) },
+                                    modifier = Modifier.testTag("send_contact_chip_${contact.id}")
+                                )
+                            }
+                        }
+                    }
+
+                    if (selectedNet != null && toAddress.isNotBlank() && matchingContacts.none { it.address.equals(toAddress.trim(), ignoreCase = true) }) {
+                        if (!showSaveContactInline) {
+                            OutlinedButton(
+                                onClick = { showSaveContactInline = true },
+                                modifier = Modifier.fillMaxWidth().height(48.dp).testTag("send_save_contact_toggle")
+                            ) {
+                                Text("Save Recipient to Address Book", color = AquaTeal)
+                            }
+                        } else {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                WalletField(saveContactLabel, { saveContactLabel = it }, "Contact Label", "Alice", modifier = Modifier.weight(1f))
+                                Button(
+                                    onClick = {
+                                        coordinator.tools.saveAddressBookContact(saveContactLabel, selectedNet.chainFamily, toAddress, "")
+                                        saveContactLabel = ""
+                                        showSaveContactInline = false
+                                    },
+                                    enabled = saveContactLabel.isNotBlank(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = AquaTeal, contentColor = AquaAbyss),
+                                    modifier = Modifier.height(48.dp)
+                                ) {
+                                    Text("Save", fontWeight = FontWeight.Bold)
+                                }
+                            }
                         }
                     }
 
