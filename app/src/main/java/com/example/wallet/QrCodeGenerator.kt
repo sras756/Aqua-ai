@@ -49,7 +49,7 @@ object QrCodeGenerator {
     }
 
     private fun selectVersion(byteLen: Int): Int? {
-        for (v in 1..6) {
+        for (v in 1..5) {
             val capacityBytes = TOTAL_CODEWORDS[v] - EC_CODEWORDS_L[v] - 2
             if (byteLen <= capacityBytes) return v
         }

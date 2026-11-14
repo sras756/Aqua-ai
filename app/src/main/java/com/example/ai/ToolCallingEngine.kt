@@ -12,6 +12,8 @@ import com.example.data.repository.GoogleWorkspaceRepository
 import com.example.data.repository.WorkspaceService
 import com.example.device.AndroidDeviceController
 import com.example.wallet.FlashWalletConnector
+import com.example.wallet.ai.AquaAiWalletBridge
+import com.example.wallet.core.TxStatus
 import com.google.firebase.ai.type.FunctionCallPart
 import com.google.firebase.ai.type.FunctionDeclaration
 import com.google.firebase.ai.type.Schema
@@ -31,7 +33,8 @@ class ToolCallingEngine(
     private val walletConnector: FlashWalletConnector,
     private val firestoreRepo: AquaFirestoreRepository,
     private val driveHistoryRepo: GoogleDriveHistoryRepository? = null,
-    private val workspaceRepo: GoogleWorkspaceRepository? = null
+    private val workspaceRepo: GoogleWorkspaceRepository? = null,
+    private val aiWalletBridge: AquaAiWalletBridge? = null
 ) {
 
     fun buildToolDeclarations(): Tool {
@@ -130,8 +133,70 @@ class ToolCallingEngine(
                 ),
                 FunctionDeclaration(
                     name = "wallet_check_balance",
-                    description = "Queries live on-chain native balance, USDT balance (if Ethereum), and recent transactions for the configured read-only public wallet address.",
+                    description = "Queries live on-chain native and token balances across networks for the active Aqua Wallet (read-only public addresses only).",
                     parameters = emptyMap()
+                ),
+                FunctionDeclaration(
+                    name = "wallet_get_portfolio",
+                    description = "Fetches live multi-chain balances, USD valuation, 24h change, and chain allocation from the native Aqua Crypto Wallet.",
+                    parameters = mapOf(
+                        "includeTestnets" to Schema.boolean(description = "Optional true to include Sepolia/Devnet/Testnet4.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "wallet_get_transactions",
+                    description = "Inspects Aqua Wallet transaction history across EVM, Solana, and Bitcoin with live status filtering.",
+                    parameters = mapOf(
+                        "statusFilter" to Schema.string(description = "One of: ALL, PENDING, CONFIRMED, FAILED.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "wallet_analyze_portfolio",
+                    description = "Analyzes portfolio concentration, stablecoin buffer, 24h performance, pending/failed tx health, and security posture (read-only).",
+                    parameters = emptyMap()
+                ),
+                FunctionDeclaration(
+                    name = "wallet_research_network",
+                    description = "Retrieves blockchain network metadata, chainId, RPC host, explorer URL, supported tokens, and live gas/fee tier.",
+                    parameters = mapOf(
+                        "network" to Schema.string(description = "Network name or ID such as Ethereum, BSC, Polygon, Base, Arbitrum, Solana, Bitcoin.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "wallet_get_token_info",
+                    description = "Fetches token contract/mint metadata and live USD spot price from CoinGecko.",
+                    parameters = mapOf(
+                        "token" to Schema.string(description = "Token ticker symbol or contract/mint address."),
+                        "network" to Schema.string(description = "Optional network scope.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "wallet_estimate_fees",
+                    description = "Estimates real-time on-chain network fees (slow/standard/fast) for a transfer on EVM, Solana, or Bitcoin.",
+                    parameters = mapOf(
+                        "network" to Schema.string(description = "Network name or ID."),
+                        "destinationAddress" to Schema.string(description = "Optional recipient address."),
+                        "assetSymbol" to Schema.string(description = "Asset symbol such as ETH, SOL, BTC, USDT, USDC."),
+                        "amount" to Schema.string(description = "Transfer amount as decimal string.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "wallet_analyze_address_risk",
+                    description = "Audits a blockchain address for format validity, EIP-55 checksum, smart-contract/program code presence, burn addresses, and self-transfer risk.",
+                    parameters = mapOf(
+                        "address" to Schema.string(description = "Blockchain recipient address to inspect."),
+                        "network" to Schema.string(description = "Network name or ID.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "wallet_prepare_transaction",
+                    description = "Prepares and simulates an unsigned transfer in Aqua Wallet within spending limits, then requires explicit user authorization & unlocked vault before signing and broadcasting.",
+                    parameters = mapOf(
+                        "network" to Schema.string(description = "Network name or ID."),
+                        "destinationAddress" to Schema.string(description = "Recipient blockchain address."),
+                        "assetSymbol" to Schema.string(description = "Asset ticker symbol such as ETH, BNB, POL, SOL, BTC, USDC, USDT."),
+                        "amount" to Schema.string(description = "Transfer amount as decimal string.")
+                    )
                 ),
                 FunctionDeclaration(
                     name = "fetch_crypto_price",
@@ -142,11 +207,12 @@ class ToolCallingEngine(
                 ),
                 FunctionDeclaration(
                     name = "wallet_prepare_transfer",
-                    description = "Prepares a cryptocurrency transfer request for explicit user authorization and external wallet signing. Never claims transaction success before wallet/chain confirmation.",
+                    description = "Prepares an unsigned cryptocurrency transfer request for explicit user authorization. Never claims transaction success before blockchain confirmation.",
                     parameters = mapOf(
                         "destinationAddress" to Schema.string(description = "Recipient blockchain address."),
-                        "assetSymbol" to Schema.string(description = "Asset ticker such as ETH, BTC, or USDT."),
-                        "amount" to Schema.string(description = "Transfer amount as decimal string.")
+                        "assetSymbol" to Schema.string(description = "Asset ticker such as ETH, BTC, SOL, or USDT."),
+                        "amount" to Schema.string(description = "Transfer amount as decimal string."),
+                        "network" to Schema.string(description = "Optional target network name.")
                     )
                 ),
                 FunctionDeclaration(
@@ -538,11 +604,16 @@ class ToolCallingEngine(
                 }
 
                 "wallet_check_balance" -> {
-                    if (activeWallet == null || activeWallet.publicAddress.isBlank()) {
-                        onTrace(AgentStepTrace("Wallet Balance", name, "unconfigured", "No connected wallet address"))
+                    val nativePair = aiWalletBridge?.activeWalletAndAccount()
+                    if (nativePair != null) {
+                        val summary = aiWalletBridge.getPortfolioSummaryText().getOrThrow()
+                        onTrace(AgentStepTrace("Wallet Portfolio", name, "completed", "Fetched live multi-chain balances"))
+                        jsonResult(true, summary)
+                    } else if (activeWallet == null || activeWallet.publicAddress.isBlank()) {
+                        onTrace(AgentStepTrace("Wallet Balance", name, "unconfigured", "No connected wallet"))
                         jsonResult(
                             false,
-                            "No Flash Wallet profile or public address is configured yet. Direct the user to the Aqua Wallet Connector tab to set up and verify their Flash Wallet."
+                            "No Aqua Wallet is created or imported yet. Direct the user to the Wallet tab to create a new wallet, import a recovery phrase, or add a watch-only address."
                         )
                     } else {
                         val snap = walletConnector.fetchLiveReadOnlySnapshot(activeWallet).getOrThrow()
@@ -556,57 +627,171 @@ class ToolCallingEngine(
                     }
                 }
 
+                "wallet_get_portfolio" -> {
+                    val bridge = aiWalletBridge
+                        ?: return jsonResult(false, "Aqua Wallet engine is unavailable.")
+                    val includeTest = args["includeTestnets"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull()
+                    val summary = bridge.getPortfolioSummaryText(includeTest).getOrThrow()
+                    onTrace(AgentStepTrace("Portfolio", name, "completed", "Queried multi-chain portfolio"))
+                    jsonResult(true, summary)
+                }
+
+                "wallet_get_transactions" -> {
+                    val bridge = aiWalletBridge
+                        ?: return jsonResult(false, "Aqua Wallet engine is unavailable.")
+                    val filter = argStr("statusFilter").ifBlank { "ALL" }
+                    val summary = bridge.getTransactionsText(filter).getOrThrow()
+                    onTrace(AgentStepTrace("Tx History", name, "completed", "Synced transactions (filter=$filter)"))
+                    jsonResult(true, summary)
+                }
+
+                "wallet_analyze_portfolio" -> {
+                    val bridge = aiWalletBridge
+                        ?: return jsonResult(false, "Aqua Wallet engine is unavailable.")
+                    val analysis = bridge.analyzePortfolioText().getOrThrow()
+                    onTrace(AgentStepTrace("Portfolio Audit", name, "completed", "Analyzed allocation & security"))
+                    jsonResult(true, analysis)
+                }
+
+                "wallet_research_network" -> {
+                    val bridge = aiWalletBridge
+                        ?: return jsonResult(false, "Aqua Wallet engine is unavailable.")
+                    val network = argStr("network")
+                    val report = bridge.researchNetworkText(network).getOrThrow()
+                    onTrace(AgentStepTrace("Network Research", name, "completed", "Researched ${network.ifBlank { "active network" }}"))
+                    jsonResult(true, report)
+                }
+
+                "wallet_get_token_info" -> {
+                    val bridge = aiWalletBridge
+                        ?: return jsonResult(false, "Aqua Wallet engine is unavailable.")
+                    val token = argStr("token")
+                    val network = argStr("network")
+                    val info = bridge.getTokenInfoText(token, network).getOrThrow()
+                    onTrace(AgentStepTrace("Token Info", name, "completed", "Inspected $token"))
+                    jsonResult(true, info)
+                }
+
+                "wallet_estimate_fees" -> {
+                    val bridge = aiWalletBridge
+                        ?: return jsonResult(false, "Aqua Wallet engine is unavailable.")
+                    val network = argStr("network")
+                    val dest = argStr("destinationAddress")
+                    val asset = argStr("assetSymbol")
+                    val amount = argStr("amount").ifBlank { "0.001" }
+                    val est = bridge.estimateFeesText(network, dest, asset, amount).getOrThrow()
+                    onTrace(AgentStepTrace("Fee Estimate", name, "completed", est))
+                    jsonResult(true, est)
+                }
+
+                "wallet_analyze_address_risk" -> {
+                    val bridge = aiWalletBridge
+                        ?: return jsonResult(false, "Aqua Wallet engine is unavailable.")
+                    val address = argStr("address")
+                    val network = argStr("network")
+                    val report = bridge.analyzeAddressRisk(address, network).getOrThrow()
+                    val msg = "Address ${report.address} on ${report.networkId}: Risk=${report.riskLevel}, ValidFormat=${report.isValidFormat}, ChecksumValid=${report.checksumValid}, IsContract=${report.isContractAddress}, SelfTransfer=${report.isSelfTransfer}. Findings: ${report.findings.joinToString("; ")}"
+                    onTrace(AgentStepTrace("Risk Audit", name, "completed", "Risk=${report.riskLevel}"))
+                    jsonResult(true, msg)
+                }
+
+                "wallet_prepare_transaction", "wallet_prepare_transfer" -> {
+                    val dest = argStr("destinationAddress")
+                    val asset = argStr("assetSymbol").ifBlank { "ETH" }
+                    val amount = argStr("amount")
+                    val networkQuery = argStr("network")
+
+                    val nativePair = aiWalletBridge?.activeWalletAndAccount()
+                    if (aiWalletBridge != null && nativePair != null) {
+                        val prepared = aiWalletBridge.prepareUnsignedTransaction(
+                            networkQuery = networkQuery,
+                            toAddress = dest,
+                            assetSymbol = asset,
+                            amountText = amount
+                        ).getOrThrow()
+
+                        val approved = requestAuthorization(
+                            PendingAuthorization(
+                                id = UUID.randomUUID().toString(),
+                                actionTitle = "Authorize Aqua Wallet Transaction",
+                                actionType = "Native Self-Custody Signing (Explicit Approval)",
+                                description = "Review recipient, fees, simulation, and risk audit before local signing. Wallet must also be unlocked if PIN/Biometrics are set.",
+                                parametersSummary = listOf(
+                                    "Network" to prepared.network.name,
+                                    "From" to prepared.fromAddress,
+                                    "To" to prepared.toAddress,
+                                    "Amount" to "${prepared.amountDecimal.stripTrailingZeros().toPlainString()} ${prepared.token.symbol}",
+                                    "Network Fee" to prepared.feeEstimate.estimatedFeeDisplay,
+                                    "Total Cost" to prepared.totalCostDisplay,
+                                    "Simulation" to prepared.simulationSummary,
+                                    "Risk Audit" to "${prepared.riskReport.riskLevel}: ${prepared.riskReport.findings.firstOrNull().orEmpty()}"
+                                ),
+                                isFinancialOrSecurity = true,
+                                onApprove = { "User approved local signing" },
+                                onDeny = { "Transfer cancelled by user." }
+                            )
+                        )
+                        if (!approved) {
+                            onTrace(AgentStepTrace("Tx Prep", name, "denied", "User rejected transaction authorization"))
+                            return jsonResult(false, "Transaction rejected by user authorization gate.")
+                        }
+                        val txRecord = aiWalletBridge.signAndBroadcastAuthorized(prepared).getOrThrow()
+                        val statusNote = if (txRecord.status == TxStatus.PENDING) {
+                            "Broadcast submitted (status: PENDING confirmation, 0 confirmations). Hash: ${txRecord.txHash}. Explorer: ${txRecord.explorerUrl}"
+                        } else {
+                            "Broadcast status: ${txRecord.status}. Hash: ${txRecord.txHash}"
+                        }
+                        onTrace(AgentStepTrace("Tx Broadcast", name, "submitted_pending", txRecord.txHash))
+                        jsonResult(true, statusNote)
+                    } else {
+                        val wallet = activeWallet ?: WalletConfig(
+                            walletProductName = "External Wallet",
+                            networkName = networkQuery.ifBlank { "Ethereum Mainnet" }
+                        )
+                        val prepared = walletConnector.prepareTransferRequest(
+                            config = wallet,
+                            destinationAddress = dest,
+                            assetSymbol = asset,
+                            amount = amount
+                        ).getOrThrow()
+
+                        val approved = requestAuthorization(
+                            PendingAuthorization(
+                                id = UUID.randomUUID().toString(),
+                                actionTitle = "Authorize Cryptocurrency Transfer Request",
+                                actionType = "Financial Transaction (Explicit Approval Required)",
+                                description = "Review all transfer parameters before handing off to your wallet's official signing mechanism. Aqua cannot confirm on-chain finality until the wallet & blockchain confirm.",
+                                parametersSummary = listOf(
+                                    "Destination" to prepared.destinationAddress,
+                                    "Network" to prepared.networkName,
+                                    "Asset & Amount" to "${prepared.amount} ${prepared.assetSymbol}",
+                                    "Network Fee" to prepared.estimatedFeeDisplay,
+                                    "Signing URI" to prepared.eip681Uri
+                                ),
+                                isFinancialOrSecurity = true,
+                                onApprove = {
+                                    walletConnector.launchSigningIntent(prepared.eip681Uri, wallet.packageName).getOrThrow()
+                                },
+                                onDeny = { "Transfer request cancelled by user." }
+                            )
+                        )
+                        val msg = if (approved) {
+                            walletConnector.launchSigningIntent(prepared.eip681Uri, wallet.packageName)
+                                .getOrElse { err -> "Signing intent could not launch: ${err.message}" }
+                        } else {
+                            "Cryptocurrency transfer rejected by user authorization gate."
+                        }
+                        onTrace(AgentStepTrace("Transfer Prep", name, if (approved) "handed_to_wallet" else "denied", msg))
+                        jsonResult(approved, msg)
+                    }
+                }
+
                 "fetch_crypto_price" -> {
                     val coin = argStr("coin").ifBlank { "bitcoin" }
                     val (resolvedCoin, price) = walletConnector.fetchMarketPriceUsd(coin).getOrThrow()
                     val msg = "Live CoinGecko spot price for $resolvedCoin: $${String.format("%,.2f", price)} USD."
                     onTrace(AgentStepTrace("Market Price", name, "completed", msg))
                     jsonResult(true, msg)
-                }
-
-                "wallet_prepare_transfer" -> {
-                    val dest = argStr("destinationAddress")
-                    val asset = argStr("assetSymbol").ifBlank { "ETH" }
-                    val amount = argStr("amount")
-                    val wallet = activeWallet ?: WalletConfig(
-                        walletProductName = "External Wallet",
-                        networkName = "Ethereum Mainnet"
-                    )
-                    val prepared = walletConnector.prepareTransferRequest(
-                        config = wallet,
-                        destinationAddress = dest,
-                        assetSymbol = asset,
-                        amount = amount
-                    ).getOrThrow()
-
-                    val approved = requestAuthorization(
-                        PendingAuthorization(
-                            id = UUID.randomUUID().toString(),
-                            actionTitle = "Authorize Cryptocurrency Transfer Request",
-                            actionType = "Financial Transaction (Explicit Approval Required)",
-                            description = "Review all transfer parameters before handing off to your wallet's official signing mechanism. Aqua cannot confirm on-chain finality until the wallet & blockchain confirm.",
-                            parametersSummary = listOf(
-                                "Destination" to prepared.destinationAddress,
-                                "Network" to prepared.networkName,
-                                "Asset & Amount" to "${prepared.amount} ${prepared.assetSymbol}",
-                                "Network Fee" to prepared.estimatedFeeDisplay,
-                                "Signing URI" to prepared.eip681Uri
-                            ),
-                            isFinancialOrSecurity = true,
-                            onApprove = {
-                                walletConnector.launchSigningIntent(prepared.eip681Uri, wallet.packageName).getOrThrow()
-                            },
-                            onDeny = { "Transfer request cancelled by user." }
-                        )
-                    )
-                    val msg = if (approved) {
-                        walletConnector.launchSigningIntent(prepared.eip681Uri, wallet.packageName)
-                            .getOrElse { err -> "Signing intent could not launch: ${err.message}" }
-                    } else {
-                        "Cryptocurrency transfer rejected by user authorization gate."
-                    }
-                    onTrace(AgentStepTrace("Transfer Prep", name, if (approved) "handed_to_wallet" else "denied", msg))
-                    jsonResult(approved, msg)
                 }
 
                 "save_memory_note" -> {

@@ -57,6 +57,9 @@ import com.example.wallet.FlashWalletConnector
 import com.example.wallet.PreparedTransferRequest
 import com.example.wallet.WalletBalanceSnapshot
 import com.example.wallet.WalletIntegrationDiscovery
+import com.example.wallet.core.AquaWalletCoordinator
+import com.example.wallet.core.AquaWalletEngine
+import com.example.wallet.security.WalletSecurityVault
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -86,8 +89,19 @@ class AquaMainViewModel(
     val walletConnector: FlashWalletConnector,
     private val cacheDb: AquaCacheDatabase,
     val driveHistoryRepo: GoogleDriveHistoryRepository,
-    val workspaceRepo: GoogleWorkspaceRepository
+    val workspaceRepo: GoogleWorkspaceRepository,
+    val walletEngine: AquaWalletEngine = AquaWalletEngine(
+        vault = WalletSecurityVault(appContext),
+        walletCacheDao = cacheDb.walletCacheDao()
+    )
 ) : ViewModel() {
+
+    val walletCoordinator = AquaWalletCoordinator(
+        engine = walletEngine,
+        firestoreRepo = firestoreRepo,
+        scope = viewModelScope,
+        onBanner = { msg -> _bannerMessage.value = msg }
+    )
 
     private val toolCallingEngine = ToolCallingEngine(
         deviceController = deviceController,
@@ -95,7 +109,8 @@ class AquaMainViewModel(
         walletConnector = walletConnector,
         firestoreRepo = firestoreRepo,
         driveHistoryRepo = driveHistoryRepo,
-        workspaceRepo = workspaceRepo
+        workspaceRepo = workspaceRepo,
+        aiWalletBridge = walletCoordinator.aiBridge
     )
 
     private val geminiProvider = GeminiProvider(
@@ -306,6 +321,10 @@ class AquaMainViewModel(
         _bannerMessage.value = null
     }
 
+    fun openTab(tab: String) {
+        _navigateToTabEvent.value = tab
+    }
+
     fun consumeNavigationEvent() {
         _navigateToTabEvent.value = null
     }
@@ -416,6 +435,7 @@ class AquaMainViewModel(
             _streamingReply.value = ""
             _agentTraces.value = emptyList()
 
+            val nativeWalletOverview = runCatching { walletCoordinator.aiBridge.getPublicOverviewText() }.getOrNull()
             val sysInstruction = ContextManager.buildSystemInstruction(
                 settings = currentSettings,
                 memories = memories.value,
@@ -423,7 +443,8 @@ class AquaMainViewModel(
                 activeWallet = wallets.value.firstOrNull(),
                 telemetry = _telemetry.value,
                 browserUrl = browserPageState.value.currentUrl,
-                browserTitle = browserPageState.value.currentTitle
+                browserTitle = browserPageState.value.currentTitle,
+                nativeWalletOverview = nativeWalletOverview
             )
 
             val result = geminiProvider.executeAgentTurn(
@@ -527,29 +548,33 @@ class AquaMainViewModel(
         }
         refreshTelemetry()
         val currentSettings = settings.value
-        val sysInstruction = ContextManager.buildSystemInstruction(
-            settings = currentSettings,
-            memories = memories.value,
-            enabledSkills = skills.value,
-            activeWallet = wallets.value.firstOrNull(),
-            telemetry = _telemetry.value,
-            browserUrl = browserPageState.value.currentUrl,
-            browserTitle = browserPageState.value.currentTitle
-        )
-        voiceManager.startLiveConversation(
-            scope = viewModelScope,
-            systemInstruction = sysInstruction,
-            settings = currentSettings,
-            activeWallet = wallets.value.firstOrNull(),
-            onNavigateToBrowser = { _navigateToTabEvent.value = "browser" },
-            requestAuthorization = { req -> requestUserAuthorization(req) },
-            onTrace = { trace ->
-                _agentTraces.value = _agentTraces.value + trace
-            },
-            onStatusChanged = { status ->
-                _liveStatus.value = status
-            }
-        )
+        viewModelScope.launch {
+            val nativeWalletOverview = runCatching { walletCoordinator.aiBridge.getPublicOverviewText() }.getOrNull()
+            val sysInstruction = ContextManager.buildSystemInstruction(
+                settings = currentSettings,
+                memories = memories.value,
+                enabledSkills = skills.value,
+                activeWallet = wallets.value.firstOrNull(),
+                telemetry = _telemetry.value,
+                browserUrl = browserPageState.value.currentUrl,
+                browserTitle = browserPageState.value.currentTitle,
+                nativeWalletOverview = nativeWalletOverview
+            )
+            voiceManager.startLiveConversation(
+                scope = viewModelScope,
+                systemInstruction = sysInstruction,
+                settings = currentSettings,
+                activeWallet = wallets.value.firstOrNull(),
+                onNavigateToBrowser = { _navigateToTabEvent.value = "browser" },
+                requestAuthorization = { req -> requestUserAuthorization(req) },
+                onTrace = { trace ->
+                    _agentTraces.value = _agentTraces.value + trace
+                },
+                onStatusChanged = { status ->
+                    _liveStatus.value = status
+                }
+            )
+        }
     }
 
     fun setWakeWordServiceEnabled(enabled: Boolean) {

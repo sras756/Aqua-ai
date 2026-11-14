@@ -2,15 +2,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Least-privilege network, voice, foreground microphone, location & alarm permissions -->
+    <!-- Least-privilege network, voice, foreground microphone, camera (QR), biometric, location & alarm permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
     <!-- Play-compliant <queries> declarations for launcher apps & wallet deep-links -->
     <queries>
@@ -29,6 +33,10 @@
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="bitcoin" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="solana" />
         </intent>
         <intent>
             <action android:name="android.intent.action.VIEW" />

@@ -1,759 +1,423 @@
 package com.example.ui.screens
 
-import androidx.compose.foundation.Canvas
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.LinkOff
-import androidx.compose.material.icons.filled.QrCode2
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.data.model.WalletConfig
 import com.example.ui.AquaMainViewModel
+import com.example.ui.screens.wallet.QrScannerSheet
+import com.example.ui.screens.wallet.WalletAiAssistantSection
+import com.example.ui.screens.wallet.WalletDashboardAndAnalyticsSection
+import com.example.ui.screens.wallet.WalletLockGateScreen
+import com.example.ui.screens.wallet.WalletNetworksAndTokensSection
+import com.example.ui.screens.wallet.WalletOnboardingView
+import com.example.ui.screens.wallet.WalletReceiveSection
+import com.example.ui.screens.wallet.WalletSecurityRecoveryAndExtensionsSection
+import com.example.ui.screens.wallet.WalletSendSection
+import com.example.ui.screens.wallet.WalletTransactionsSection
 import com.example.ui.theme.AquaAbyss
-import com.example.ui.theme.AquaAmber
-import com.example.ui.theme.AquaAzure
-import com.example.ui.theme.AquaBorderGlow
-import com.example.ui.theme.AquaCardSurface
 import com.example.ui.theme.AquaCoralError
 import com.example.ui.theme.AquaCyan
 import com.example.ui.theme.AquaDeepSurface
 import com.example.ui.theme.AquaIceText
-import com.example.ui.theme.AquaMintSuccess
 import com.example.ui.theme.AquaMutedText
 import com.example.ui.theme.AquaTeal
-import com.example.wallet.QrCodeGenerator
-import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+private val WALLET_SECTIONS = listOf(
+    "Overview",
+    "Send",
+    "Receive",
+    "Activity",
+    "Networks",
+    "Aqua AI",
+    "Security"
+)
+
 @Composable
 fun WalletScreen(viewModel: AquaMainViewModel) {
-    val wallets by viewModel.wallets.collectAsStateWithLifecycle()
-    val discovery by viewModel.walletDiscovery.collectAsStateWithLifecycle()
-    val balanceSnapshot by viewModel.walletBalance.collectAsStateWithLifecycle()
-    val walletBusy by viewModel.walletBusy.collectAsStateWithLifecycle()
-    val preparedTransfer by viewModel.preparedTransfer.collectAsStateWithLifecycle()
+    val coordinator = viewModel.walletCoordinator
+    val wallets by coordinator.wallets.collectAsStateWithLifecycle()
+    val accounts by coordinator.accounts.collectAsStateWithLifecycle()
+    val securitySettings by coordinator.securitySettings.collectAsStateWithLifecycle()
+    val isLocked by coordinator.isLocked.collectAsStateWithLifecycle()
+    val networks by coordinator.availableNetworks.collectAsStateWithLifecycle()
+    val tokens by coordinator.tokensForActiveNetwork.collectAsStateWithLifecycle()
+    val portfolio by coordinator.portfolioSummary.collectAsStateWithLifecycle()
+    val transactions by coordinator.transactions.collectAsStateWithLifecycle()
+    val preparedTx by coordinator.preparedTx.collectAsStateWithLifecycle()
+    val feeEstimate by coordinator.feeEstimate.collectAsStateWithLifecycle()
+    val riskReport by coordinator.riskReport.collectAsStateWithLifecycle()
+    val busy by coordinator.busy.collectAsStateWithLifecycle()
+    val revealedMnemonic by coordinator.revealedMnemonic.collectAsStateWithLifecycle()
+    val exportedBackupJson by coordinator.exportedBackupJson.collectAsStateWithLifecycle()
 
-    val savedWallet = wallets.firstOrNull()
-    val scope = rememberCoroutineScope()
+    val activeWallet = wallets.firstOrNull { it.walletId == securitySettings.activeWalletId } ?: wallets.firstOrNull()
+    val activeAccount = accounts.firstOrNull { it.accountIndex == securitySettings.activeAccountIndex } ?: accounts.firstOrNull()
 
-    var productName by remember(savedWallet?.id) { mutableStateOf(savedWallet?.walletProductName ?: "") }
-    var developerName by remember(savedWallet?.id) { mutableStateOf(savedWallet?.developerName ?: "") }
-    var packageName by remember(savedWallet?.id) { mutableStateOf(savedWallet?.packageName ?: "") }
-    var docsUrl by remember(savedWallet?.id) { mutableStateOf(savedWallet?.docsUrl ?: "") }
-    var networkName by remember(savedWallet?.id) {
-        mutableStateOf(savedWallet?.networkName?.ifBlank { "Ethereum Mainnet" } ?: "Ethereum Mainnet")
-    }
-    var rpcEndpoint by remember(savedWallet?.id) { mutableStateOf(savedWallet?.rpcEndpoint ?: "") }
-    var publicAddress by remember(savedWallet?.id) { mutableStateOf(savedWallet?.publicAddress ?: "") }
+    var activeSection by rememberSaveable { mutableIntStateOf(0) } // 0..6
+    var showAddWalletModal by remember { mutableStateOf(false) }
+    var showQrScanner by remember { mutableStateOf(false) }
+    var walletMenuExpanded by remember { mutableStateOf(false) }
+    var accountMenuExpanded by remember { mutableStateOf(false) }
 
-    var networkExpanded by remember { mutableStateOf(false) }
-    val networkOptions = listOf(
-        "Ethereum Mainnet",
-        "Polygon",
-        "BNB Smart Chain",
-        "Arbitrum One",
-        "Base",
-        "Bitcoin Mainnet",
-        "Ethereum Sepolia"
-    )
+    // Lifted Send draft state so QR scan & asset row click populate seamlessly
+    var sendNetworkId by rememberSaveable { mutableStateOf(securitySettings.activeNetworkId) }
+    var sendTokenId by rememberSaveable { mutableStateOf("") }
+    var sendToAddress by rememberSaveable { mutableStateOf("") }
+    var sendAmount by rememberSaveable { mutableStateOf("") }
+    var sendTokensList by remember { mutableStateOf(tokens) }
 
-    var showQrCode by remember { mutableStateOf(false) }
-
-    // CoinGecko live price state
-    var priceQuery by remember { mutableStateOf("ethereum") }
-    var priceResult by remember { mutableStateOf<String?>(null) }
-    var priceBusy by remember { mutableStateOf(false) }
-
-    // Transfer preparation inputs
-    var transferDest by remember { mutableStateOf("") }
-    var transferAsset by remember { mutableStateOf("ETH") }
-    var transferAmount by remember { mutableStateOf("") }
-
-    LaunchedEffect(networkName) {
-        transferAsset = when {
-            networkName.contains("Bitcoin", ignoreCase = true) -> "BTC"
-            networkName.contains("BNB", ignoreCase = true) -> "BNB"
-            networkName.contains("Polygon", ignoreCase = true) -> "POL"
-            else -> "ETH"
+    LaunchedEffect(securitySettings.activeNetworkId, networks) {
+        if (networks.none { it.id == sendNetworkId }) {
+            sendNetworkId = networks.firstOrNull { it.id == securitySettings.activeNetworkId }?.id
+                ?: networks.firstOrNull()?.id.orEmpty()
         }
     }
 
-    fun buildCurrentConfig(): WalletConfig {
-        return (savedWallet ?: WalletConfig()).copy(
-            walletProductName = productName.trim(),
-            developerName = developerName.trim(),
-            packageName = packageName.trim(),
-            docsUrl = docsUrl.trim(),
-            networkName = networkName,
-            rpcEndpoint = rpcEndpoint.trim(),
-            publicAddress = publicAddress.trim(),
-            integrationMethod = when {
-                publicAddress.isNotBlank() -> "read_only_rpc"
-                packageName.isNotBlank() -> "package_intent"
-                else -> "unverified"
+    LaunchedEffect(sendNetworkId) {
+        if (sendNetworkId.isNotBlank()) {
+            val loaded = coordinator.engine.getTokensForNetwork(sendNetworkId)
+            sendTokensList = loaded
+            if (loaded.none { it.id == sendTokenId }) {
+                sendTokenId = loaded.firstOrNull()?.id.orEmpty()
             }
-        )
+        }
     }
 
-    Column(
+    if (showAddWalletModal) {
+        BackHandler { showAddWalletModal = false }
+    } else if (activeSection != 0) {
+        BackHandler { activeSection = 0 }
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(AquaAbyss)
             .statusBarsPadding()
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "AQUA WALLET CONNECTOR",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = AquaIceText
-                )
-                Text(
-                    text = "Flash Crypto Wallet • Non-Custodial & Read-Only",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = AquaMutedText
-                )
-            }
-            if (savedWallet != null) {
-                OutlinedButton(
-                    onClick = {
-                        viewModel.disconnectWallet(savedWallet)
-                        productName = ""
-                        developerName = ""
-                        packageName = ""
-                        docsUrl = ""
-                        rpcEndpoint = ""
-                        publicAddress = ""
-                    },
-                    modifier = Modifier.testTag("wallet_disconnect_button")
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Top Native Wallet Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Icon(Icons.Filled.LinkOff, contentDescription = null, tint = AquaCoralError, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Disconnect", color = AquaCoralError)
+                    Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null, tint = AquaCyan)
+                    Spacer(Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = "AQUA CRYPTO WALLET",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = AquaIceText,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (activeWallet != null && activeAccount != null) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.clickable { walletMenuExpanded = true }
+                                    ) {
+                                        Text(
+                                            text = activeWallet.label,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = AquaCyan
+                                        )
+                                        Icon(Icons.Filled.ArrowDropDown, contentDescription = "Switch wallet", tint = AquaCyan, modifier = Modifier.size(18.dp))
+                                    }
+                                    DropdownMenu(
+                                        expanded = walletMenuExpanded,
+                                        onDismissRequest = { walletMenuExpanded = false }
+                                    ) {
+                                        wallets.forEach { w ->
+                                            DropdownMenuItem(
+                                                text = { Text("${w.label}${if (w.isWatchOnly) " (Watch)" else ""}") },
+                                                onClick = {
+                                                    coordinator.selectWallet(w.walletId)
+                                                    walletMenuExpanded = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                                Text(" • ", color = AquaMutedText, style = MaterialTheme.typography.labelMedium)
+                                Box {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.clickable { accountMenuExpanded = true }
+                                    ) {
+                                        Text(
+                                            text = activeAccount.label,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = AquaTeal
+                                        )
+                                        Icon(Icons.Filled.ArrowDropDown, contentDescription = "Switch account", tint = AquaTeal, modifier = Modifier.size(18.dp))
+                                    }
+                                    DropdownMenu(
+                                        expanded = accountMenuExpanded,
+                                        onDismissRequest = { accountMenuExpanded = false }
+                                    ) {
+                                        accounts.forEach { acc ->
+                                            DropdownMenuItem(
+                                                text = { Text("${acc.label} (#${acc.accountIndex})") },
+                                                onClick = {
+                                                    coordinator.selectAccount(acc.accountIndex)
+                                                    accountMenuExpanded = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            Text("Native Self-Custodial Multi-Chain Engine", style = MaterialTheme.typography.labelSmall, color = AquaMutedText)
+                        }
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (securitySettings.emergencyLocked) {
+                        Icon(
+                            Icons.Filled.Warning,
+                            contentDescription = "Emergency Lock Active",
+                            tint = AquaCoralError,
+                            modifier = Modifier.padding(end = 6.dp)
+                        )
+                    }
+                    if (activeWallet != null) {
+                        IconButton(
+                            onClick = { showAddWalletModal = true },
+                            modifier = Modifier.size(48.dp).testTag("wallet_add_new_button")
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = "Add or import wallet", tint = AquaCyan)
+                        }
+                        if (securitySettings.hasPin || securitySettings.biometricEnabled) {
+                            IconButton(
+                                onClick = { coordinator.lockNow() },
+                                modifier = Modifier.size(48.dp).testTag("wallet_lock_button")
+                            ) {
+                                Icon(Icons.Filled.Lock, contentDescription = "Lock wallet session", tint = AquaIceText)
+                            }
+                        }
+                    }
+                }
+            }
+
+            when {
+                activeWallet == null || activeAccount == null -> {
+                    WalletOnboardingView(coordinator = coordinator, busy = busy)
+                }
+
+                isLocked -> {
+                    WalletLockGateScreen(settings = securitySettings, coordinator = coordinator)
+                }
+
+                else -> {
+                    // Horizontal Sub-Tab Bar across all Wallet modules
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(AquaDeepSurface)
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        WALLET_SECTIONS.forEachIndexed { idx, label ->
+                            FilterChip(
+                                selected = activeSection == idx,
+                                onClick = { activeSection = idx },
+                                label = { Text(label) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = AquaCyan.copy(alpha = 0.22f),
+                                    selectedLabelColor = AquaCyan,
+                                    labelColor = AquaMutedText
+                                ),
+                                modifier = Modifier.testTag("wallet_subtab_$idx")
+                            )
+                        }
+                    }
+
+                    Box(modifier = Modifier.weight(1f).fillMaxSize()) {
+                        when (activeSection) {
+                            0 -> WalletDashboardAndAnalyticsSection(
+                                walletMeta = activeWallet,
+                                account = activeAccount,
+                                portfolio = portfolio,
+                                busy = busy,
+                                onRefresh = { coordinator.refreshPortfolio() },
+                                onNavigateToSend = { netId, tokId ->
+                                    if (!netId.isNullOrBlank()) sendNetworkId = netId
+                                    if (!tokId.isNullOrBlank()) sendTokenId = tokId
+                                    activeSection = 1
+                                },
+                                onNavigateToReceive = { activeSection = 2 },
+                                onOpenScanner = { showQrScanner = true },
+                                onOpenBackupSecurity = { activeSection = 6 }
+                            )
+
+                            1 -> WalletSendSection(
+                                walletMeta = activeWallet,
+                                networks = networks,
+                                selectedNetworkId = sendNetworkId,
+                                tokens = sendTokensList,
+                                selectedTokenId = sendTokenId,
+                                toAddress = sendToAddress,
+                                amountText = sendAmount,
+                                onSelectNetwork = { sendNetworkId = it },
+                                onSelectToken = { sendTokenId = it },
+                                onToAddressChange = { sendToAddress = it },
+                                onAmountChange = { sendAmount = it },
+                                onOpenScanner = { showQrScanner = true },
+                                feeEstimate = feeEstimate,
+                                riskReport = riskReport,
+                                preparedTx = preparedTx,
+                                securitySettings = securitySettings,
+                                isLocked = isLocked,
+                                busy = busy,
+                                coordinator = coordinator,
+                                onBroadcastSuccess = {
+                                    sendToAddress = ""
+                                    sendAmount = ""
+                                    activeSection = 3
+                                }
+                            )
+
+                            2 -> WalletReceiveSection(
+                                account = activeAccount,
+                                includeTestnets = securitySettings.testnetModeEnabled,
+                                onCopyAddress = { label, addr -> viewModel.copyToClipboard(label, addr) },
+                                onShareAddress = { label, addr -> viewModel.shareText(label, addr) }
+                            )
+
+                            3 -> WalletTransactionsSection(
+                                transactions = transactions,
+                                busy = busy,
+                                coordinator = coordinator,
+                                onRetryTx = { tx ->
+                                    sendNetworkId = tx.networkId
+                                    sendToAddress = tx.toAddress
+                                    sendAmount = tx.amountDisplay.substringBefore(" ").trim()
+                                    activeSection = 1
+                                },
+                                onOpenExplorer = { url ->
+                                    viewModel.navigateBrowser(url)
+                                    viewModel.openTab("browser")
+                                }
+                            )
+
+                            4 -> WalletNetworksAndTokensSection(
+                                networks = networks,
+                                activeNetworkId = securitySettings.activeNetworkId,
+                                testnetModeEnabled = securitySettings.testnetModeEnabled,
+                                tokens = tokens,
+                                coordinator = coordinator
+                            )
+
+                            5 -> WalletAiAssistantSection(
+                                onSendAiWalletPrompt = { prompt ->
+                                    viewModel.startNewConversation()
+                                    viewModel.sendMessage(prompt)
+                                    viewModel.openTab("home")
+                                }
+                            )
+
+                            6 -> WalletSecurityRecoveryAndExtensionsSection(
+                                walletMeta = activeWallet,
+                                accounts = accounts,
+                                activeAccountIndex = securitySettings.activeAccountIndex,
+                                securitySettings = securitySettings,
+                                revealedMnemonic = revealedMnemonic,
+                                exportedBackupJson = exportedBackupJson,
+                                coordinator = coordinator,
+                                onCopyText = { l, t -> viewModel.copyToClipboard(l, t) },
+                                onShareText = { l, t -> viewModel.shareText(l, t) }
+                            )
+                        }
+                    }
                 }
             }
         }
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            // Security Guarantee Notice
-            item {
-                Surface(
-                    color = AquaCardSurface,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, AquaCyan.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Security,
-                            contentDescription = "Non-custodial guarantee",
-                            tint = AquaCyan,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            text = "Aqua never guesses undocumented Flash Wallet SDKs, never generates fake balances, and never stores private keys or seed phrases. Signing is delegated strictly to your official external wallet after explicit approval.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = AquaMutedText
-                        )
-                    }
-                }
+        if (showAddWalletModal) {
+            Surface(
+                color = AquaAbyss,
+                shape = RoundedCornerShape(0.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                WalletOnboardingView(
+                    coordinator = coordinator,
+                    busy = busy,
+                    showCancel = true,
+                    onDismiss = { showAddWalletModal = false }
+                )
             }
+        }
 
-            // Flash Wallet Identity & Network Configuration Card
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = AquaCardSurface),
-                    shape = RoundedCornerShape(20.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, AquaBorderGlow, RoundedCornerShape(20.dp))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null, tint = AquaAmber)
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = "1. Flash Wallet Identity & Endpoint",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = AquaIceText
-                            )
-                        }
-
-                        WalletTextField(
-                            value = productName,
-                            onValueChange = { productName = it },
-                            label = "Official Flash Wallet Product Name",
-                            placeholder = "Exact app/product name"
-                        )
-                        WalletTextField(
-                            value = developerName,
-                            onValueChange = { developerName = it },
-                            label = "Official Developer / Publisher",
-                            placeholder = "Publisher name"
-                        )
-                        WalletTextField(
-                            value = packageName,
-                            onValueChange = { packageName = it },
-                            label = "Android Package Name (e.g. com.example.flashwallet)",
-                            placeholder = "Required to inspect installed app & wc: intent"
-                        )
-                        WalletTextField(
-                            value = docsUrl,
-                            onValueChange = { docsUrl = it },
-                            label = "Official Integration / SDK Docs URL",
-                            placeholder = "https://..."
-                        )
-
-                        ExposedDropdownMenuBox(
-                            expanded = networkExpanded,
-                            onExpandedChange = { networkExpanded = !networkExpanded }
-                        ) {
-                            OutlinedTextField(
-                                value = networkName,
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text("Blockchain Network") },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = networkExpanded) },
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = AquaCyan,
-                                    unfocusedBorderColor = AquaBorderGlow,
-                                    focusedTextColor = AquaIceText,
-                                    unfocusedTextColor = AquaIceText
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .menuAnchor()
-                            )
-                            ExposedDropdownMenu(
-                                expanded = networkExpanded,
-                                onDismissRequest = { networkExpanded = false }
-                            ) {
-                                networkOptions.forEach { opt ->
-                                    DropdownMenuItem(
-                                        text = { Text(opt) },
-                                        onClick = {
-                                            networkName = opt
-                                            networkExpanded = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        WalletTextField(
-                            value = rpcEndpoint,
-                            onValueChange = { rpcEndpoint = it },
-                            label = "HTTPS JSON-RPC URL (Optional for default public EVM RPCs)",
-                            placeholder = "https://ethereum-rpc.publicnode.com"
-                        )
-                        WalletTextField(
-                            value = publicAddress,
-                            onValueChange = { publicAddress = it },
-                            label = "Public Wallet Address (Read-Only)",
-                            placeholder = "0x... or bc1...",
-                            modifier = Modifier.testTag("wallet_public_address_input")
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Button(
-                                onClick = { viewModel.saveAndDiscoverWallet(buildCurrentConfig()) },
-                                colors = ButtonDefaults.buttonColors(containerColor = AquaCyan, contentColor = AquaAbyss),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("wallet_discover_button")
-                            ) {
-                                Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Save & Discover", fontWeight = FontWeight.Bold)
-                            }
-                            OutlinedButton(
-                                onClick = { viewModel.refreshWalletBalances(buildCurrentConfig()) },
-                                enabled = !walletBusy && publicAddress.isNotBlank(),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("wallet_refresh_balance_button")
-                            ) {
-                                if (walletBusy) {
-                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = AquaCyan)
-                                } else {
-                                    Icon(Icons.Filled.Refresh, contentDescription = null, tint = AquaTeal, modifier = Modifier.size(18.dp))
-                                }
-                                Spacer(Modifier.width(6.dp))
-                                Text("Live Balance", color = AquaTeal)
-                            }
-                        }
+        if (showQrScanner) {
+            QrScannerSheet(
+                onQrScanned = { raw ->
+                    val parsed = coordinator.engine.parseScannedPaymentUri(raw)
+                    sendToAddress = parsed.address
+                    if (!parsed.suggestedNetworkId.isNullOrBlank()) {
+                        sendNetworkId = parsed.suggestedNetworkId
                     }
-                }
-            }
-
-            // Integration Discovery Diagnostic Result
-            discovery?.let { disc ->
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = AquaDeepSurface),
-                        shape = RoundedCornerShape(18.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(
-                                1.dp,
-                                if (disc.packageInstalled) AquaMintSuccess else AquaAmber,
-                                RoundedCornerShape(18.dp)
-                            )
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = if (disc.packageInstalled) Icons.Filled.CheckCircle else Icons.Filled.Warning,
-                                    contentDescription = null,
-                                    tint = if (disc.packageInstalled) AquaMintSuccess else AquaAmber
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    text = "Integration Discovery Report",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = AquaIceText
-                                )
-                            }
-                            Text(
-                                text = "App Installed: ${if (disc.packageInstalled) "Yes (${disc.resolvedAppLabel})" else "No / Not Verified"}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = AquaIceText
-                            )
-                            Text(
-                                text = "WalletConnect (wc:) Handler: ${if (disc.supportsWalletConnectScheme) "Detected" else "Not Detected"}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = AquaMutedText
-                            )
-                            if (disc.limitationNotice.isNotBlank()) {
-                                Text(
-                                    text = disc.limitationNotice,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = AquaAmber
-                                )
-                            }
-                            disc.recommendedAlternatives.forEach { alt ->
-                                Text(
-                                    text = "• $alt",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = AquaMutedText
-                                )
-                            }
-                        }
+                    if (!parsed.suggestedAmount.isNullOrBlank()) {
+                        sendAmount = parsed.suggestedAmount
                     }
-                }
-            }
-
-            // Live On-Chain Balance & Transactions
-            balanceSnapshot?.let { snap ->
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = AquaCardSurface),
-                        shape = RoundedCornerShape(20.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, AquaMintSuccess.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = "LIVE ON-CHAIN PORTFOLIO (${snap.networkName})",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = AquaTeal
-                            )
-                            Text(
-                                text = snap.nativeBalance,
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = AquaIceText,
-                                fontWeight = FontWeight.Bold
-                            )
-                            snap.usdtBalance?.let { usdt ->
-                                Text(
-                                    text = "ERC-20 Tether: $usdt",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = AquaCyan
-                                )
-                            }
-                            Text(
-                                text = snap.sourceInfo,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = AquaMutedText
-                            )
-                            if (snap.recentTransactions.isNotEmpty()) {
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    text = "RECENT TRANSACTIONS",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = AquaCyan
-                                )
-                                snap.recentTransactions.forEach { tx ->
-                                    Surface(
-                                        color = AquaDeepSurface,
-                                        shape = RoundedCornerShape(10.dp),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Column(modifier = Modifier.padding(10.dp)) {
-                                            Text(
-                                                text = tx.hash,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = AquaIceText,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            Text(
-                                                text = "${tx.status} • ${tx.summary} • ${tx.timestampLabel}",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = AquaMutedText
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Receive QR Code Renderer (Real QR Matrix via QrCodeGenerator)
-            if (publicAddress.isNotBlank()) {
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = AquaCardSurface),
-                        shape = RoundedCornerShape(18.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, AquaBorderGlow, RoundedCornerShape(18.dp))
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.QrCode2, contentDescription = null, tint = AquaCyan)
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Receive Address QR", style = MaterialTheme.typography.titleMedium, color = AquaIceText)
-                                }
-                                OutlinedButton(
-                                    onClick = { showQrCode = !showQrCode },
-                                    modifier = Modifier.testTag("wallet_toggle_qr_button")
-                                ) {
-                                    Text(if (showQrCode) "Hide QR" else "Show QR", color = AquaCyan)
-                                }
-                            }
-
-                            if (showQrCode) {
-                                val matrix = remember(publicAddress) { QrCodeGenerator.encode(publicAddress.trim()) }
-                                if (matrix != null) {
-                                    Surface(
-                                        color = Color.White,
-                                        shape = RoundedCornerShape(14.dp),
-                                        modifier = Modifier.padding(8.dp)
-                                    ) {
-                                        Canvas(
-                                            modifier = Modifier
-                                                .size(200.dp)
-                                                .padding(12.dp)
-                                        ) {
-                                            val n = matrix.size
-                                            val cell = size.minDimension / n
-                                            for (r in 0 until n) {
-                                                for (c in 0 until n) {
-                                                    if (matrix[r][c]) {
-                                                        drawRect(
-                                                            color = Color.Black,
-                                                            topLeft = Offset(c * cell, r * cell),
-                                                            size = Size(cell + 0.5f, cell + 0.5f)
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    Text(
-                                        text = publicAddress.trim(),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = AquaMutedText
-                                    )
-                                } else {
-                                    Text(
-                                        text = "Address length exceeds QR Version 6 capacity for local rendering.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = AquaAmber
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Live Crypto Market Spot Price (CoinGecko Public API)
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = AquaCardSurface),
-                    shape = RoundedCornerShape(18.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, AquaBorderGlow, RoundedCornerShape(18.dp))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.TrendingUp, contentDescription = null, tint = AquaTeal)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Live Market Price Lookup", style = MaterialTheme.typography.titleMedium, color = AquaIceText)
-                        }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = priceQuery,
-                                onValueChange = { priceQuery = it },
-                                label = { Text("Asset (e.g. btc, eth, usdt, bnb)") },
-                                singleLine = true,
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = AquaCyan,
-                                    unfocusedBorderColor = AquaBorderGlow,
-                                    focusedTextColor = AquaIceText,
-                                    unfocusedTextColor = AquaIceText
-                                ),
-                                modifier = Modifier.weight(1f)
-                            )
-                            Button(
-                                onClick = {
-                                    scope.launch {
-                                        priceBusy = true
-                                        viewModel.walletConnector.fetchMarketPriceUsd(priceQuery)
-                                            .onSuccess { (id, usd) -> priceResult = "$id: $${String.format("%.4f", usd)} USD" }
-                                            .onFailure { priceResult = "Error: ${it.localizedMessage}" }
-                                        priceBusy = false
-                                    }
-                                },
-                                enabled = !priceBusy && priceQuery.isNotBlank(),
-                                colors = ButtonDefaults.buttonColors(containerColor = AquaAzure, contentColor = Color.White),
-                                modifier = Modifier.testTag("wallet_price_lookup_button")
-                            ) {
-                                Text(if (priceBusy) "..." else "Fetch")
-                            }
-                        }
-                        priceResult?.let { res ->
-                            Text(text = res, style = MaterialTheme.typography.titleMedium, color = AquaCyan)
-                        }
-                    }
-                }
-            }
-
-            // Transfer Preparation & External Signing Handoff
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = AquaCardSurface),
-                    shape = RoundedCornerShape(20.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, AquaAmber.copy(alpha = 0.45f), RoundedCornerShape(20.dp))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text(
-                            text = "2. Prepare Transfer (Requires Explicit Authorization)",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = AquaIceText
-                        )
-                        WalletTextField(
-                            value = transferDest,
-                            onValueChange = { transferDest = it },
-                            label = "Destination Address",
-                            placeholder = "0x... or bc1..."
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            WalletTextField(
-                                value = transferAsset,
-                                onValueChange = { transferAsset = it },
-                                label = "Asset",
-                                placeholder = "ETH",
-                                modifier = Modifier.weight(1f)
-                            )
-                            WalletTextField(
-                                value = transferAmount,
-                                onValueChange = { transferAmount = it },
-                                label = "Amount",
-                                placeholder = "0.01",
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-
-                        Button(
-                            onClick = {
-                                viewModel.prepareWalletTransfer(
-                                    config = buildCurrentConfig(),
-                                    destination = transferDest,
-                                    asset = transferAsset,
-                                    amount = transferAmount
-                                )
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = AquaAmber, contentColor = AquaAbyss),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("wallet_prepare_tx_button")
-                        ) {
-                            Text("Prepare Signing Request", fontWeight = FontWeight.Bold)
-                        }
-
-                        preparedTransfer?.let { prep ->
-                            Surface(
-                                color = AquaDeepSurface,
-                                shape = RoundedCornerShape(14.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .border(1.dp, AquaAmber, RoundedCornerShape(14.dp))
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(14.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Text("REVIEW BEFORE SIGNING", style = MaterialTheme.typography.labelMedium, color = AquaAmber)
-                                    Text("To: ${prep.destinationAddress}", style = MaterialTheme.typography.bodyMedium, color = AquaIceText)
-                                    Text("Amount: ${prep.amount} ${prep.assetSymbol} on ${prep.networkName}", style = MaterialTheme.typography.bodyMedium, color = AquaIceText)
-                                    Text("URI: ${prep.eip681Uri}", style = MaterialTheme.typography.labelSmall, color = AquaMutedText)
-                                    Text(
-                                        text = if (prep.canLaunchWalletApp) "External signing handler detected on device."
-                                        else "No matching wallet handler detected for ${prep.eip681Uri}.",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = if (prep.canLaunchWalletApp) AquaMintSuccess else AquaAmber
-                                    )
-                                    Button(
-                                        onClick = { viewModel.authorizeAndLaunchPreparedTransfer(buildCurrentConfig()) },
-                                        colors = ButtonDefaults.buttonColors(containerColor = AquaCyan, contentColor = AquaAbyss),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .testTag("wallet_authorize_sign_button")
-                                    ) {
-                                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(Modifier.width(6.dp))
-                                        Text("Authorize & Open External Wallet", fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+                    showQrScanner = false
+                    activeSection = 1
+                },
+                onDismiss = { showQrScanner = false }
+            )
         }
     }
-}
-
-@Composable
-private fun WalletTextField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    label: String,
-    placeholder: String,
-    modifier: Modifier = Modifier
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(label) },
-        placeholder = { Text(placeholder) },
-        singleLine = true,
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = AquaCyan,
-            unfocusedBorderColor = AquaBorderGlow,
-            focusedTextColor = AquaIceText,
-            unfocusedTextColor = AquaIceText
-        ),
-        modifier = modifier.fillMaxWidth()
-    )
 }
