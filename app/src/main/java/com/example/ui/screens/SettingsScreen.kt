@@ -2,10 +2,16 @@ package com.example.ui.screens
 
 import android.Manifest
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -30,6 +36,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.BrightnessMedium
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Mic
@@ -40,7 +48,6 @@ import androidx.compose.material.icons.filled.Policy
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SettingsApplications
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -51,6 +58,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
@@ -58,6 +66,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -76,6 +85,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -283,8 +295,8 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                             onCheckedChange = { viewModel.updateSettings(settings.copy(autonomousReversibleActions = it)) }
                         )
                         SettingSwitchRow(
-                            title = "Crypto Wallet Access for Aqua AI",
-                            subtitle = "Allow Aqua AI to read multi-chain balances, receive addresses, telemetry, ENS, allowances, and tx history (zero-key access).",
+                            title = "Crypto Wallet Read Permission (Aqua AI)",
+                            subtitle = "Allow Aqua AI to read multi-chain balances, receive addresses, telemetry, ENS, allowances, payment URIs, and tx history (zero-key).",
                             checked = settings.aiWalletAccessEnabled,
                             onCheckedChange = { enabled ->
                                 viewModel.updateSettings(
@@ -296,12 +308,14 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                             }
                         )
                         SettingSwitchRow(
-                            title = "Allow AI to Prepare Transfers & Revokes",
-                            subtitle = "Allow Aqua AI to draft unsigned transfers and ERC-20 revokes. Always requires your explicit confirmation & PIN/Biometrics.",
+                            title = "Crypto Wallet Write Permission (Aqua AI)",
+                            subtitle = "Allow Aqua AI to create wallets/accounts, add tokens/networks, switch chains, edit contacts, sign messages, and prepare transfers/revokes (always gated by your approval).",
                             checked = settings.aiWalletAccessEnabled && settings.aiWalletTransferPrepareEnabled,
                             onCheckedChange = { enabled ->
                                 if (settings.aiWalletAccessEnabled) {
                                     viewModel.updateSettings(settings.copy(aiWalletTransferPrepareEnabled = enabled))
+                                } else if (enabled) {
+                                    viewModel.updateSettings(settings.copy(aiWalletAccessEnabled = true, aiWalletTransferPrepareEnabled = true))
                                 }
                             }
                         )
@@ -650,66 +664,158 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
         }
 
         if (activeLegalDialog != null) {
-            val isPrivacy = activeLegalDialog == "privacy"
-            val externalUrl = if (isPrivacy) {
-                "https://sras756.github.io/aqua-ai/privacy.html"
-            } else {
-                "https://sras756.github.io/aqua-ai/terms.html"
+            val activeDoc = activeLegalDialog ?: "privacy"
+            val assetUrl = when (activeDoc) {
+                "index" -> "file:///android_asset/legal/index.html"
+                "terms" -> "file:///android_asset/legal/terms.html"
+                else -> "file:///android_asset/legal/privacy.html"
             }
-            AlertDialog(
+            val externalUrl = when (activeDoc) {
+                "index" -> "https://sras756.github.io/aqua-ai/"
+                "terms" -> "https://sras756.github.io/aqua-ai/terms.html"
+                else -> "https://sras756.github.io/aqua-ai/privacy.html"
+            }
+            var copiedFeedback by remember(activeDoc) { mutableStateOf(false) }
+
+            Dialog(
                 onDismissRequest = { activeLegalDialog = null },
-                containerColor = AquaCardSurface,
-                title = {
-                    Text(
-                        text = if (isPrivacy) "Privacy Policy — Aqua AI" else "Terms & Conditions — Aqua AI",
-                        color = AquaIceText
-                    )
-                },
-                text = {
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Surface(
+                    color = AquaAbyss,
+                    modifier = Modifier.fillMaxSize()
+                ) {
                     Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 400.dp)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                            .fillMaxSize()
+                            .statusBarsPadding()
                     ) {
-                        if (isPrivacy) {
-                            Text("Effective Date: November 14, 2026\nApp Package: com.aistudio.aquaai.vqrzmn\nContact: srasmarkhor7289@gmail.com", style = MaterialTheme.typography.labelMedium, color = AquaCyan)
-                            Text("1. Account & AI Processing: Sign-in uses Firebase Authentication to sync settings, memories, and conversations. Prompts and attachments are processed via Gemini / Firebase AI Logic when you interact with the assistant.", style = MaterialTheme.typography.bodySmall, color = AquaMutedText)
-                            Text("2. Google Workspace & Drive Limited Use: Google Drive (drive.appdata, drive.file) and Google Workspace APIs (Gmail, Calendar, Contacts, Sheets, Forms, Chat) are accessed only when explicitly connected by you and strictly adhere to the Google API Services User Data Policy (Limited Use). Data is never sold or used for ads.", style = MaterialTheme.typography.bodySmall, color = AquaMutedText)
-                            Text("3. Self-Custodial Wallet Keys: Mnemonics and private keys are created on-device and encrypted locally via Android Keystore. Seeds, keys, and PINs are never sent to AI models, Firebase, or third parties.", style = MaterialTheme.typography.bodySmall, color = AquaMutedText)
-                            Text("4. Controls & Deletion: You can pause AI internet or wallet access anytime, clear conversations, revoke OAuth grants in your Google Account, or email srasmarkhor7289@gmail.com for data deletion.", style = MaterialTheme.typography.bodySmall, color = AquaMutedText)
-                        } else {
-                            Text("Effective Date: November 14, 2026\nApp Package: com.aistudio.aquaai.vqrzmn\nContact: srasmarkhor7289@gmail.com", style = MaterialTheme.typography.labelMedium, color = AquaCyan)
-                            Text("1. Acceptance of Terms: By using Aqua AI, you agree to these Terms & Conditions and our Privacy Policy.", style = MaterialTheme.typography.bodySmall, color = AquaMutedText)
-                            Text("2. AI & External Actions: Verify AI outputs before acting on critical decisions. High-impact actions (sending messages, mutations, or signing transactions) require explicit confirmation.", style = MaterialTheme.typography.bodySmall, color = AquaMutedText)
-                            Text("3. Non-Custodial Wallet Responsibility: Aqua Wallet is self-custodial software. You alone are responsible for backing up your recovery phrase and securing your PIN. Blockchain transfers and approvals/revocations are irreversible once broadcast, and market data is not financial advice.", style = MaterialTheme.typography.bodySmall, color = AquaMutedText)
-                            Text("4. Third-Party Services & Liability: Public RPC nodes, CoinGecko, and Google Workspace services remain subject to their respective availability and terms. Aqua AI is provided as-is without implied warranties.", style = MaterialTheme.typography.bodySmall, color = AquaMutedText)
-                        }
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = { activeLegalDialog = null },
-                        colors = ButtonDefaults.buttonColors(containerColor = AquaCyan, contentColor = AquaAbyss)
-                    ) {
-                        Text("Close")
-                    }
-                },
-                dismissButton = {
-                    TextButton(
-                        onClick = {
-                            runCatching {
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(externalUrl)))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = when (activeDoc) {
+                                    "index" -> "Aqua AI Legal Overview"
+                                    "terms" -> "Terms & Conditions — Aqua AI"
+                                    else -> "Privacy Policy — Aqua AI"
+                                },
+                                style = MaterialTheme.typography.titleMedium,
+                                color = AquaIceText,
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(
+                                onClick = { activeLegalDialog = null },
+                                modifier = Modifier.testTag("legal_reader_close_button")
+                            ) {
+                                Icon(Icons.Filled.Close, contentDescription = "Close", tint = AquaCyan)
                             }
                         }
-                    ) {
-                        Icon(Icons.Filled.OpenInBrowser, contentDescription = null, tint = AquaCyan, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Open Web Page", color = AquaCyan)
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = activeDoc == "privacy",
+                                onClick = { activeLegalDialog = "privacy" },
+                                label = { Text("Privacy Policy") }
+                            )
+                            FilterChip(
+                                selected = activeDoc == "terms",
+                                onClick = { activeLegalDialog = "terms" },
+                                label = { Text("Terms & Conditions") }
+                            )
+                            FilterChip(
+                                selected = activeDoc == "index",
+                                onClick = { activeLegalDialog = "index" },
+                                label = { Text("Overview") }
+                            )
+                        }
+
+                        Spacer(Modifier.height(6.dp))
+
+                        AndroidView(
+                            factory = { ctx ->
+                                WebView(ctx).apply {
+                                    setBackgroundColor(android.graphics.Color.parseColor("#04111F"))
+                                    this.settings.javaScriptEnabled = false
+                                    this.settings.allowFileAccess = false
+                                    this.settings.allowContentAccess = false
+                                    webViewClient = object : WebViewClient() {
+                                        override fun shouldOverrideUrlLoading(
+                                            view: WebView?,
+                                            request: WebResourceRequest?
+                                        ): Boolean {
+                                            val reqUrl = request?.url?.toString().orEmpty()
+                                            when {
+                                                reqUrl.endsWith("/privacy.html") -> {
+                                                    activeLegalDialog = "privacy"
+                                                    return true
+                                                }
+                                                reqUrl.endsWith("/terms.html") -> {
+                                                    activeLegalDialog = "terms"
+                                                    return true
+                                                }
+                                                reqUrl.endsWith("/index.html") -> {
+                                                    activeLegalDialog = "index"
+                                                    return true
+                                                }
+                                                reqUrl.startsWith("mailto:") || reqUrl.startsWith("https://") -> {
+                                                    runCatching {
+                                                        ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(reqUrl)))
+                                                    }
+                                                    return true
+                                                }
+                                            }
+                                            return false
+                                        }
+                                    }
+                                    loadUrl(assetUrl)
+                                }
+                            },
+                            update = { webView ->
+                                if (webView.url != assetUrl) {
+                                    webView.loadUrl(assetUrl)
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                        )
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(AquaCardSurface)
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                                Text("Public Hosting URL (GitHub Pages)", style = MaterialTheme.typography.labelSmall, color = AquaCyan)
+                                Text(externalUrl, style = MaterialTheme.typography.bodySmall, color = AquaMutedText)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                    cm?.setPrimaryClip(ClipData.newPlainText("Aqua AI Legal URL", externalUrl))
+                                    copiedFeedback = true
+                                }
+                            ) {
+                                Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = AquaCyan, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(if (copiedFeedback) "Copied" else "Copy URL", color = AquaCyan)
+                            }
+                        }
                     }
                 }
-            )
+            }
         }
     }
 }

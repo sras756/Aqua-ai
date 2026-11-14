@@ -85,8 +85,8 @@ fun WalletAiAssistantSection(
         "Show my EVM, Solana, and Bitcoin receiving addresses and active network.",
         "Analyze my wallet portfolio allocation, concentration, and security posture.",
         "Check live EVM gas price, block height, and my account nonce on Ethereum.",
-        "Check live gas and network transfer fees across Ethereum, Solana, and Bitcoin.",
-        "Inspect my pending and confirmed wallet transaction history.",
+        "Derive a new HD account labeled 'DeFi Vault' inside my active wallet.",
+        "Sign an EIP-191 ownership message proving control of my EVM address.",
         "Show the 7-day CoinGecko market chart for ETH and SOL in USD."
     )
 
@@ -112,7 +112,7 @@ fun WalletAiAssistantSection(
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = AquaCyan)
                             Spacer(Modifier.width(8.dp))
-                            Text("Aqua AI Wallet Copilot (Zero-Key Access)", style = MaterialTheme.typography.titleMedium, color = AquaIceText)
+                            Text("Aqua AI Wallet Permissions (Zero-Key)", style = MaterialTheme.typography.titleMedium, color = AquaIceText)
                         }
                         Surface(
                             color = if (settings.aiWalletAccessEnabled) AquaMintSuccess.copy(alpha = 0.18f) else AquaCoralError.copy(alpha = 0.18f),
@@ -121,8 +121,8 @@ fun WalletAiAssistantSection(
                             Text(
                                 text = when {
                                     !settings.aiWalletAccessEnabled -> "PAUSED"
-                                    settings.aiWalletTransferPrepareEnabled -> "ACTIVE"
-                                    else -> "READ-ONLY"
+                                    settings.aiWalletTransferPrepareEnabled -> "READ + WRITE"
+                                    else -> "READ ONLY"
                                 },
                                 color = if (settings.aiWalletAccessEnabled) AquaMintSuccess else AquaCoralError,
                                 style = MaterialTheme.typography.labelSmall,
@@ -138,8 +138,8 @@ fun WalletAiAssistantSection(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Grant Wallet Read & Analysis Access", style = MaterialTheme.typography.bodyMedium, color = AquaIceText, fontWeight = FontWeight.SemiBold)
-                            Text("Balances, addresses, history, EVM telemetry, ENS, allowances & charts.", style = MaterialTheme.typography.labelSmall, color = AquaMutedText)
+                            Text("Wallet Read Permission", style = MaterialTheme.typography.bodyMedium, color = AquaIceText, fontWeight = FontWeight.SemiBold)
+                            Text("Read balances, addresses, tx status, EVM telemetry, ENS, allowances, payment URIs & charts.", style = MaterialTheme.typography.labelSmall, color = AquaMutedText)
                         }
                         Switch(
                             checked = settings.aiWalletAccessEnabled,
@@ -161,14 +161,18 @@ fun WalletAiAssistantSection(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Allow AI Transfer & Revoke Proposals", style = MaterialTheme.typography.bodyMedium, color = AquaIceText, fontWeight = FontWeight.SemiBold)
-                            Text("Always gated by your explicit approval dialog + PIN/Biometrics.", style = MaterialTheme.typography.labelSmall, color = AquaMutedText)
+                            Text("Wallet Write Permission", style = MaterialTheme.typography.bodyMedium, color = AquaIceText, fontWeight = FontWeight.SemiBold)
+                            Text("Create wallets/accounts, add tokens/networks, switch chains, edit contacts, sign messages & prepare transfers/revokes (approval-gated).", style = MaterialTheme.typography.labelSmall, color = AquaMutedText)
                         }
                         Switch(
                             checked = settings.aiWalletAccessEnabled && settings.aiWalletTransferPrepareEnabled,
-                            enabled = settings.aiWalletAccessEnabled,
                             onCheckedChange = { enabled ->
-                                onUpdateSettings(settings.copy(aiWalletTransferPrepareEnabled = enabled))
+                                onUpdateSettings(
+                                    settings.copy(
+                                        aiWalletAccessEnabled = if (enabled) true else settings.aiWalletAccessEnabled,
+                                        aiWalletTransferPrepareEnabled = enabled
+                                    )
+                                )
                             },
                             modifier = Modifier.testTag("wallet_ai_transfer_access_switch")
                         )

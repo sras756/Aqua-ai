@@ -8,6 +8,7 @@ import com.example.wallet.core.FeeEstimate
 import com.example.wallet.core.NetworkConfig
 import com.example.wallet.core.PortfolioSummary
 import com.example.wallet.core.PreparedChainTransaction
+import com.example.wallet.core.SignedMessageProof
 import com.example.wallet.core.TokenDefinition
 import com.example.wallet.core.TxStatus
 import com.example.wallet.core.WalletAccountInfo
@@ -20,12 +21,15 @@ import java.util.Locale
  * Security-isolated AI access bridge for Aqua Wallet.
  *
  * Strictly enforced capabilities:
- * - READ ONLY: balances, portfolio analytics, receive addresses, transaction history & status,
+ * - READ PERMISSION: balances, portfolio analytics, receive addresses, transaction history & status,
  *   network/token metadata, EVM chain telemetry, ENS resolution, ERC-20 allowance audits,
- *   CoinGecko market charts, fee estimation, and recipient risk checks.
- * - GATED PREPARE: unsigned transaction preparation & ERC-20 approve(0) revoke preparation only;
- *   cannot bypass explicit user authorization or PIN/Biometrics, cannot access mnemonics/seeds/private
- *   keys, cannot alter spending limits, and cannot unlock emergency lock.
+ *   CoinGecko market charts, payment URI parsing, signature verification, fee estimation, and recipient risk checks.
+ * - WRITE PERMISSION (User-Controlled & Gated): creating non-custodial/watch-only wallets, deriving accounts,
+ *   switching active wallet/account/network, adding custom tokens/networks, saving/deleting contacts,
+ *   updating display currency/testnet preferences, offline EIP-191/Solana message signing,
+ *   unsigned transaction preparation & ERC-20 approve(0) revoke preparation.
+ * - ZERO-KEY INVARIANT: Cannot bypass explicit user authorization or PIN/Biometrics, cannot access mnemonics/seeds/private
+ *   keys/PINs, cannot alter spending limits, and cannot unlock emergency lock.
  */
 class AquaAiWalletBridge(
     private val engine: AquaWalletEngine
@@ -444,6 +448,177 @@ class AquaAiWalletBridge(
         }
         val entry = engine.utilities.saveContact(label, family, address, note).getOrThrow()
         "Saved '${entry.label}' (${entry.chainFamily.name}: ${entry.address}) to Aqua Wallet Address Book."
+    }
+
+    suspend fun deleteAddressBookContactText(queryOrId: String): Result<String> = runCatching {
+        val q = queryOrId.trim()
+        require(q.isNotBlank()) { "Specify a contact label, address, or ID to delete." }
+        val contacts = engine.utilities.getAddressBook()
+        val match = contacts.firstOrNull { it.id == q }
+            ?: contacts.firstOrNull { it.label.equals(q, ignoreCase = true) }
+            ?: contacts.firstOrNull { it.address.equals(q, ignoreCase = true) }
+            ?: throw IllegalArgumentException("No saved contact matching '$q'.")
+        engine.utilities.deleteContact(match.id)
+        "Deleted '${match.label}' (${match.chainFamily.name}: ${match.address}) from Aqua Wallet Address Book."
+    }
+
+    fun parsePaymentUriText(uri: String): Result<String> = runCatching {
+        val clean = uri.trim()
+        require(clean.isNotBlank()) { "Payment URI or address string is required." }
+        val parsed = engine.parseScannedPaymentUri(clean)
+        buildString {
+            append("Parsed Payment Request -> Address: ${parsed.address}")
+            if (!parsed.suggestedNetworkId.isNullOrBlank()) append(" | Network: ${parsed.suggestedNetworkId}")
+            if (!parsed.suggestedAsset.isNullOrBlank()) append(" | Asset: ${parsed.suggestedAsset}")
+            if (!parsed.suggestedAmount.isNullOrBlank()) append(" | Amount: ${parsed.suggestedAmount}")
+        }
+    }
+
+    suspend fun createWalletText(label: String, wordCount: Int = 12): Result<String> = runCatching {
+        val normalizedWords = if (wordCount == 24) 24 else 12
+        val (meta, acc) = engine.vault.createWallet(
+            label = label.ifBlank { "Aqua Wallet" },
+            wordCount = normalizedWords
+        ).getOrThrow()
+        val s = engine.vault.getSecuritySettings()
+        engine.vault.updateSecuritySettings(s.copy(activeWalletId = meta.walletId, activeAccountIndex = acc.accountIndex))
+        buildString {
+            appendLine("Created native self-custodial ${meta.wordCount}-word wallet '${meta.label}' and set it as active.")
+            appendLine("Public Receiving Addresses:")
+            appendLine("- EVM: ${acc.evmAddress}")
+            appendLine("- Solana: ${acc.solanaAddress}")
+            appendLine("- Bitcoin: ${acc.bitcoinMainnetAddress}")
+            appendLine("Security Notice: Back up and verify the recovery phrase in Wallet -> Security Center. Aqua AI never sees your seed phrase.")
+        }.trimEnd()
+    }
+
+    suspend fun addAccountText(label: String = ""): Result<String> = runCatching {
+        val (meta, _) = activeWalletAndAccount()
+            ?: throw IllegalStateException("No Aqua Wallet initialized.")
+        val acc = engine.vault.addDerivedAccount(meta.walletId, label).getOrThrow()
+        val s = engine.vault.getSecuritySettings()
+        engine.vault.updateSecuritySettings(s.copy(activeAccountIndex = acc.accountIndex))
+        buildString {
+            appendLine("Derived new account '${acc.label}' (index #${acc.accountIndex}) in '${meta.label}' and switched to it.")
+            appendLine("- EVM: ${acc.evmAddress}")
+            appendLine("- Solana: ${acc.solanaAddress}")
+            appendLine("- Bitcoin: ${acc.bitcoinMainnetAddress}")
+        }.trimEnd()
+    }
+
+    suspend fun addWatchOnlyWalletText(
+        label: String,
+        evmAddress: String = "",
+        solanaAddress: String = "",
+        bitcoinAddress: String = ""
+    ): Result<String> = runCatching {
+        val (meta, acc) = engine.vault.importWatchOnlyWallet(
+            label = label.ifBlank { "Watch Portfolio" },
+            evmAddress = evmAddress,
+            solanaAddress = solanaAddress,
+            bitcoinAddress = bitcoinAddress
+        ).getOrThrow()
+        val s = engine.vault.getSecuritySettings()
+        engine.vault.updateSecuritySettings(s.copy(activeWalletId = meta.walletId, activeAccountIndex = 0))
+        "Added Watch-Only wallet '${meta.label}' (EVM=${acc.evmAddress.ifBlank { "none" }}, SOL=${acc.solanaAddress.ifBlank { "none" }}, BTC=${acc.bitcoinMainnetAddress.ifBlank { acc.bitcoinTestnetAddress.ifBlank { "none" } }})."
+    }
+
+    suspend fun switchActiveWalletText(walletQuery: String): Result<String> = runCatching {
+        val wallets = engine.vault.getAllWallets()
+        require(wallets.isNotEmpty()) { "No wallets exist in Aqua Vault." }
+        val q = walletQuery.trim()
+        val target = wallets.firstOrNull {
+            it.walletId.equals(q, ignoreCase = true) ||
+                it.label.equals(q, ignoreCase = true) ||
+                it.label.contains(q, ignoreCase = true)
+        } ?: throw IllegalArgumentException("Wallet '$walletQuery' not found. Available: ${wallets.joinToString { it.label }}")
+        val s = engine.vault.getSecuritySettings()
+        engine.vault.updateSecuritySettings(s.copy(activeWalletId = target.walletId, activeAccountIndex = 0))
+        "Switched active Aqua Wallet to '${target.label}' (${if (target.isWatchOnly) "Watch-Only" else "Self-Custody"})."
+    }
+
+    suspend fun addCustomTokenText(
+        networkQuery: String,
+        symbol: String,
+        name: String,
+        contractOrMint: String,
+        decimals: Int = 18,
+        coingeckoId: String = ""
+    ): Result<String> = runCatching {
+        val net = if (networkQuery.isNotBlank()) resolveNetwork(networkQuery) else activeNetwork()
+        val tok = engine.addCustomToken(
+            networkId = net.id,
+            symbol = symbol,
+            name = name,
+            contractOrMint = contractOrMint,
+            decimals = decimals,
+            coingeckoId = coingeckoId
+        ).getOrThrow()
+        "Added custom token ${tok.symbol} (${tok.name}, decimals=${tok.decimals}) on ${net.name}: ${tok.contractOrMintAddress}"
+    }
+
+    suspend fun addCustomNetworkText(
+        name: String,
+        nativeSymbol: String,
+        chainId: Long,
+        rpcUrl: String,
+        explorerUrl: String = "",
+        isTestnet: Boolean = false
+    ): Result<String> = runCatching {
+        val net = engine.addCustomEvmNetwork(
+            name = name,
+            nativeSymbol = nativeSymbol,
+            chainId = chainId,
+            rpcUrl = rpcUrl,
+            explorerBaseUrl = explorerUrl,
+            isTestnet = isTestnet
+        ).getOrThrow()
+        val s = engine.vault.getSecuritySettings()
+        engine.vault.updateSecuritySettings(
+            s.copy(activeNetworkId = net.id, testnetModeEnabled = s.testnetModeEnabled || isTestnet)
+        )
+        "Added and selected custom EVM network '${net.name}' (chainId=${net.chainId}, symbol=${net.nativeSymbol}, RPC=${net.defaultRpcUrl})."
+    }
+
+    fun signMessageText(chainFamilyName: String, message: String): Result<SignedMessageProof> = runCatching {
+        val (meta, acc) = activeWalletAndAccount()
+            ?: throw IllegalStateException("No wallet initialized in Aqua Vault.")
+        val family = when (chainFamilyName.trim().uppercase()) {
+            "EVM", "ETH", "ETHEREUM", "" -> ChainFamily.EVM
+            "SOL", "SOLANA" -> ChainFamily.SOLANA
+            else -> throw IllegalArgumentException("Message signing supports EVM (EIP-191) or SOLANA (Ed25519).")
+        }
+        engine.utilities.signMessageLocally(meta, acc.accountIndex, family, message).getOrThrow()
+    }
+
+    fun verifyMessageText(
+        chainFamilyName: String,
+        signerAddress: String,
+        message: String,
+        signature: String
+    ): Result<String> = runCatching {
+        val family = when (chainFamilyName.trim().uppercase()) {
+            "EVM", "ETH", "ETHEREUM", "" -> ChainFamily.EVM
+            "SOL", "SOLANA" -> ChainFamily.SOLANA
+            else -> throw IllegalArgumentException("Signature verification supports EVM or SOLANA.")
+        }
+        val valid = engine.utilities.verifySignedMessage(family, signerAddress, message, signature).getOrThrow()
+        "Signature verification on ${family.name} for $signerAddress: ${if (valid) "VALID" else "INVALID"}"
+    }
+
+    fun updateWalletPreferencesText(
+        displayCurrencyCode: String? = null,
+        testnetModeEnabled: Boolean? = null
+    ): Result<String> = runCatching {
+        val s = engine.vault.getSecuritySettings()
+        val newCurrency = displayCurrencyCode?.trim()?.takeIf { it.isNotBlank() }?.let {
+            DisplayFiatCurrency.fromCode(it).code
+        } ?: s.displayCurrencyCode
+        val newTestnet = testnetModeEnabled ?: s.testnetModeEnabled
+        engine.vault.updateSecuritySettings(
+            s.copy(displayCurrencyCode = newCurrency, testnetModeEnabled = newTestnet)
+        )
+        "Updated Aqua Wallet preferences: Display Currency=$newCurrency, Testnet Mode=$newTestnet."
     }
 
     private suspend fun resolveDestinationAddress(rawDest: String, net: NetworkConfig): String {

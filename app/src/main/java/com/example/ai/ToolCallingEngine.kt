@@ -36,7 +36,8 @@ class ToolCallingEngine(
     private val driveHistoryRepo: GoogleDriveHistoryRepository? = null,
     private val workspaceRepo: GoogleWorkspaceRepository? = null,
     private val aiWalletBridge: AquaAiWalletBridge? = null,
-    private val webClient: AquaWebClient = AquaWebClient()
+    private val webClient: AquaWebClient = AquaWebClient(),
+    private val onWalletMutated: () -> Unit = {}
 ) {
 
     fun buildToolDeclarations(): Tool {
@@ -288,16 +289,23 @@ class ToolCallingEngine(
                 ),
                 FunctionDeclaration(
                     name = "wallet_switch_network",
-                    description = "Switches the active display/default blockchain network in Aqua Wallet (non-financial preference switch).",
+                    description = "Switches the active display/default blockchain network in Aqua Wallet (requires Write permission).",
                     parameters = mapOf(
                         "network" to Schema.string(description = "Target network name or ID (e.g. Ethereum, Base, Arbitrum, Polygon, BSC, Solana, Bitcoin, Sepolia).")
                     )
                 ),
                 FunctionDeclaration(
                     name = "wallet_switch_account",
-                    description = "Switches the active derived account in the active Aqua Wallet by label or index.",
+                    description = "Switches the active derived account in the active Aqua Wallet by label or index (requires Write permission).",
                     parameters = mapOf(
                         "account" to Schema.string(description = "Account label or index (e.g. 'Account 1', 'Trading', or '0').")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "wallet_switch_wallet",
+                    description = "Switches the active wallet in Aqua Vault by wallet label or ID (requires Write permission).",
+                    parameters = mapOf(
+                        "wallet" to Schema.string(description = "Wallet label or ID.")
                     )
                 ),
                 FunctionDeclaration(
@@ -308,6 +316,95 @@ class ToolCallingEngine(
                         "chainFamily" to Schema.string(description = "One of: EVM, SOLANA, BITCOIN."),
                         "address" to Schema.string(description = "Valid blockchain address."),
                         "note" to Schema.string(description = "Optional memo or label note.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "wallet_delete_contact",
+                    description = "Deletes a saved contact from the Aqua Wallet Address Book after explicit user authorization.",
+                    parameters = mapOf(
+                        "queryOrId" to Schema.string(description = "Contact label, address, or ID to delete.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "wallet_create_wallet",
+                    description = "Creates a new self-custodial 12 or 24 word multi-chain wallet in Aqua Vault after explicit user confirmation. Mnemonic stays encrypted on-device and is never shared with AI.",
+                    parameters = mapOf(
+                        "label" to Schema.string(description = "Wallet label, e.g. 'Savings Vault'."),
+                        "wordCount" to Schema.integer(description = "Mnemonic length: 12 or 24.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "wallet_add_account",
+                    description = "Derives a new HD multi-chain account inside the active self-custodial Aqua Wallet after user confirmation.",
+                    parameters = mapOf(
+                        "label" to Schema.string(description = "Optional account label, e.g. 'Trading' or 'DeFi'.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "wallet_add_watch_wallet",
+                    description = "Adds a read-only watch portfolio wallet for public EVM, Solana, or Bitcoin addresses after user confirmation.",
+                    parameters = mapOf(
+                        "label" to Schema.string(description = "Watch-only wallet label."),
+                        "evmAddress" to Schema.string(description = "Optional 0x... EVM public address."),
+                        "solanaAddress" to Schema.string(description = "Optional Solana public address."),
+                        "bitcoinAddress" to Schema.string(description = "Optional Bitcoin SegWit bc1.../tb1... address.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "wallet_add_custom_token",
+                    description = "Adds a custom ERC-20 or SPL token contract to an Aqua Wallet network after user confirmation.",
+                    parameters = mapOf(
+                        "network" to Schema.string(description = "Target network name or ID (e.g. Ethereum, Base, Arbitrum, Solana)."),
+                        "symbol" to Schema.string(description = "Token ticker symbol, e.g. UNI."),
+                        "name" to Schema.string(description = "Token display name, e.g. Uniswap."),
+                        "contractOrMint" to Schema.string(description = "ERC-20 contract address or Solana SPL mint address."),
+                        "decimals" to Schema.integer(description = "Token decimals (default 18, e.g. 6 for USDC/USDT)."),
+                        "coingeckoId" to Schema.string(description = "Optional CoinGecko ID for USD pricing.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "wallet_add_custom_network",
+                    description = "Adds a custom HTTPS EVM RPC network to Aqua Wallet after explicit user confirmation.",
+                    parameters = mapOf(
+                        "name" to Schema.string(description = "Network name, e.g. Optimism."),
+                        "nativeSymbol" to Schema.string(description = "Native gas symbol, e.g. ETH."),
+                        "chainId" to Schema.integer(description = "Positive EVM chain ID, e.g. 10."),
+                        "rpcUrl" to Schema.string(description = "HTTPS JSON-RPC endpoint URL."),
+                        "explorerUrl" to Schema.string(description = "Optional block explorer base URL."),
+                        "isTestnet" to Schema.boolean(description = "True if this is a testnet.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "wallet_sign_message",
+                    description = "Signs an off-chain ownership proof message using EIP-191 (EVM) or Ed25519 (Solana), gated behind explicit user authorization and PIN/biometric unlock.",
+                    parameters = mapOf(
+                        "chainFamily" to Schema.string(description = "EVM or SOLANA."),
+                        "message" to Schema.string(description = "Plain-text message to sign.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "wallet_verify_message",
+                    description = "Cryptographically verifies an off-chain EIP-191 (EVM) or Ed25519 (Solana) message signature (Read permission).",
+                    parameters = mapOf(
+                        "chainFamily" to Schema.string(description = "EVM or SOLANA."),
+                        "signerAddress" to Schema.string(description = "Expected signer public address."),
+                        "message" to Schema.string(description = "Original plain-text message."),
+                        "signature" to Schema.string(description = "Hex (0x...) or Base58 signature string.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "wallet_parse_payment_uri",
+                    description = "Parses an EIP-681 ethereum:, BIP-21 bitcoin:, or solana: payment URI into address, network, asset, and amount (Read permission).",
+                    parameters = mapOf(
+                        "uri" to Schema.string(description = "Payment URI or raw address.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "wallet_update_preferences",
+                    description = "Updates non-secret Aqua Wallet display currency (USD, EUR, GBP, INR, JPY, AUD, CAD, CHF, SGD, AED) or testnet visibility (requires Write permission).",
+                    parameters = mapOf(
+                        "displayCurrencyCode" to Schema.string(description = "Optional fiat currency code, e.g. USD, EUR, GBP, AED."),
+                        "testnetModeEnabled" to Schema.boolean(description = "Optional boolean to enable/disable testnet networks.")
                     )
                 ),
                 FunctionDeclaration(
@@ -994,6 +1091,7 @@ class ToolCallingEngine(
                         return jsonResult(false, "ERC-20 approval revocation rejected by user authorization gate.")
                     }
                     val txRecord = bridge.signAndBroadcastAuthorized(prepared).getOrThrow()
+                    onWalletMutated()
                     val statusNote = "Revoke broadcast submitted (status: ${txRecord.status}, 0 confirmations). Hash: ${txRecord.txHash}. Explorer: ${txRecord.explorerUrl}"
                     onTrace(AgentStepTrace("Revoke Broadcast", name, "submitted_pending", txRecord.txHash))
                     jsonResult(true, statusNote)
@@ -1015,28 +1113,44 @@ class ToolCallingEngine(
                 }
 
                 "wallet_switch_network" -> {
-                    if (!settings.aiWalletAccessEnabled) {
-                        onTrace(AgentStepTrace("Wallet Access", name, "paused", "AI wallet access disabled by user"))
-                        return jsonResult(false, "Crypto wallet access for Aqua AI is currently paused in Settings or Wallet -> Aqua AI.")
+                    if (!settings.aiWalletAccessEnabled || !settings.aiWalletTransferPrepareEnabled) {
+                        onTrace(AgentStepTrace("Wallet Write", name, "paused", "AI wallet write permission disabled by user"))
+                        return jsonResult(false, "Crypto Wallet Write permission for Aqua AI is currently paused in Settings or Wallet -> Aqua AI.")
                     }
                     val bridge = aiWalletBridge
                         ?: return jsonResult(false, "Aqua Wallet engine is unavailable.")
                     val network = argStr("network")
                     val res = bridge.switchActiveNetworkText(network).getOrThrow()
+                    onWalletMutated()
                     onTrace(AgentStepTrace("Switch Network", name, "completed", res))
                     jsonResult(true, res)
                 }
 
                 "wallet_switch_account" -> {
-                    if (!settings.aiWalletAccessEnabled) {
-                        onTrace(AgentStepTrace("Wallet Access", name, "paused", "AI wallet access disabled by user"))
-                        return jsonResult(false, "Crypto wallet access for Aqua AI is currently paused in Settings or Wallet -> Aqua AI.")
+                    if (!settings.aiWalletAccessEnabled || !settings.aiWalletTransferPrepareEnabled) {
+                        onTrace(AgentStepTrace("Wallet Write", name, "paused", "AI wallet write permission disabled by user"))
+                        return jsonResult(false, "Crypto Wallet Write permission for Aqua AI is currently paused in Settings or Wallet -> Aqua AI.")
                     }
                     val bridge = aiWalletBridge
                         ?: return jsonResult(false, "Aqua Wallet engine is unavailable.")
                     val account = argStr("account")
                     val res = bridge.switchActiveAccountText(account).getOrThrow()
+                    onWalletMutated()
                     onTrace(AgentStepTrace("Switch Account", name, "completed", res))
+                    jsonResult(true, res)
+                }
+
+                "wallet_switch_wallet" -> {
+                    if (!settings.aiWalletAccessEnabled || !settings.aiWalletTransferPrepareEnabled) {
+                        onTrace(AgentStepTrace("Wallet Write", name, "paused", "AI wallet write permission disabled by user"))
+                        return jsonResult(false, "Crypto Wallet Write permission for Aqua AI is currently paused in Settings or Wallet -> Aqua AI.")
+                    }
+                    val bridge = aiWalletBridge
+                        ?: return jsonResult(false, "Aqua Wallet engine is unavailable.")
+                    val wallet = argStr("wallet")
+                    val res = bridge.switchActiveWalletText(wallet).getOrThrow()
+                    onWalletMutated()
+                    onTrace(AgentStepTrace("Switch Wallet", name, "completed", res))
                     jsonResult(true, res)
                 }
 
@@ -1099,9 +1213,9 @@ class ToolCallingEngine(
                 }
 
                 "wallet_save_contact" -> {
-                    if (!settings.aiWalletAccessEnabled) {
-                        onTrace(AgentStepTrace("Wallet Access", name, "paused", "AI wallet access disabled by user"))
-                        return jsonResult(false, "Crypto wallet access for Aqua AI is currently paused in Settings or Wallet -> Aqua AI.")
+                    if (!settings.aiWalletAccessEnabled || !settings.aiWalletTransferPrepareEnabled) {
+                        onTrace(AgentStepTrace("Wallet Write", name, "paused", "AI wallet write permission disabled by user"))
+                        return jsonResult(false, "Crypto Wallet Write permission for Aqua AI is currently paused in Settings or Wallet -> Aqua AI.")
                     }
                     val bridge = aiWalletBridge
                         ?: return jsonResult(false, "Aqua Wallet engine is unavailable.")
@@ -1131,8 +1245,311 @@ class ToolCallingEngine(
                         return jsonResult(false, "Saving wallet contact rejected by user.")
                     }
                     val savedMsg = bridge.saveAddressBookContact(label, chainFamily, address, note).getOrThrow()
+                    onWalletMutated()
                     onTrace(AgentStepTrace("Save Contact", name, "completed", savedMsg))
                     jsonResult(true, savedMsg)
+                }
+
+                "wallet_delete_contact" -> {
+                    if (!settings.aiWalletAccessEnabled || !settings.aiWalletTransferPrepareEnabled) {
+                        onTrace(AgentStepTrace("Wallet Write", name, "paused", "AI wallet write permission disabled by user"))
+                        return jsonResult(false, "Crypto Wallet Write permission for Aqua AI is currently paused in Settings or Wallet -> Aqua AI.")
+                    }
+                    val bridge = aiWalletBridge
+                        ?: return jsonResult(false, "Aqua Wallet engine is unavailable.")
+                    val queryOrId = argStr("queryOrId")
+                    val approved = requestAuthorization(
+                        PendingAuthorization(
+                            id = UUID.randomUUID().toString(),
+                            actionTitle = "Delete Wallet Contact",
+                            actionType = "Address Book Deletion (Explicit Approval)",
+                            description = "Confirm removing '$queryOrId' from your trusted Aqua Wallet Address Book.",
+                            parametersSummary = listOf("Contact Query / ID" to queryOrId),
+                            isFinancialOrSecurity = true,
+                            onApprove = { "User approved deleting contact" },
+                            onDeny = { "Cancelled deleting contact." }
+                        )
+                    )
+                    if (!approved) {
+                        onTrace(AgentStepTrace("Delete Contact", name, "denied", "User rejected deleting contact"))
+                        return jsonResult(false, "Deleting wallet contact rejected by user.")
+                    }
+                    val deletedMsg = bridge.deleteAddressBookContactText(queryOrId).getOrThrow()
+                    onWalletMutated()
+                    onTrace(AgentStepTrace("Delete Contact", name, "completed", deletedMsg))
+                    jsonResult(true, deletedMsg)
+                }
+
+                "wallet_create_wallet" -> {
+                    if (!settings.aiWalletAccessEnabled || !settings.aiWalletTransferPrepareEnabled) {
+                        onTrace(AgentStepTrace("Wallet Write", name, "paused", "AI wallet write permission disabled by user"))
+                        return jsonResult(false, "Crypto Wallet Write permission for Aqua AI is currently paused in Settings or Wallet -> Aqua AI.")
+                    }
+                    val bridge = aiWalletBridge
+                        ?: return jsonResult(false, "Aqua Wallet engine is unavailable.")
+                    val label = argStr("label").ifBlank { "Aqua Wallet" }
+                    val wordCount = if (argInt("wordCount", 12) == 24) 24 else 12
+                    val approved = requestAuthorization(
+                        PendingAuthorization(
+                            id = UUID.randomUUID().toString(),
+                            actionTitle = "Create New Self-Custodial Wallet",
+                            actionType = "Vault Creation (Zero-Key Boundary)",
+                            description = "Generate a new $wordCount-word multi-chain wallet locally using OS randomness and Android Keystore encryption.",
+                            parametersSummary = listOf("Wallet Label" to label, "Word Count" to "$wordCount words"),
+                            isFinancialOrSecurity = true,
+                            onApprove = { "User approved wallet creation" },
+                            onDeny = { "Wallet creation cancelled." }
+                        )
+                    )
+                    if (!approved) {
+                        onTrace(AgentStepTrace("Create Wallet", name, "denied", "User declined wallet creation"))
+                        return jsonResult(false, "Wallet creation cancelled by user.")
+                    }
+                    val resMsg = bridge.createWalletText(label, wordCount).getOrThrow()
+                    onWalletMutated()
+                    onTrace(AgentStepTrace("Create Wallet", name, "completed", "Created wallet '$label'"))
+                    jsonResult(true, resMsg)
+                }
+
+                "wallet_add_account" -> {
+                    if (!settings.aiWalletAccessEnabled || !settings.aiWalletTransferPrepareEnabled) {
+                        onTrace(AgentStepTrace("Wallet Write", name, "paused", "AI wallet write permission disabled by user"))
+                        return jsonResult(false, "Crypto Wallet Write permission for Aqua AI is currently paused in Settings or Wallet -> Aqua AI.")
+                    }
+                    val bridge = aiWalletBridge
+                        ?: return jsonResult(false, "Aqua Wallet engine is unavailable.")
+                    if (bridge.isEmergencyLocked()) {
+                        return jsonResult(false, "Emergency Wallet Lock is active. Unlock it in Wallet -> Security Center first.")
+                    }
+                    val label = argStr("label")
+                    val needsUnlock = bridge.isVaultLockedForSigning()
+                    val approved = requestAuthorization(
+                        PendingAuthorization(
+                            id = UUID.randomUUID().toString(),
+                            actionTitle = "Derive New HD Account",
+                            actionType = "Vault Derivation (Explicit Approval)",
+                            description = "Derive a new multi-chain HD account inside your active Aqua Wallet.",
+                            parametersSummary = listOf("Account Label" to label.ifBlank { "Next Sequential Account" }),
+                            isFinancialOrSecurity = true,
+                            requiresWalletUnlock = needsUnlock,
+                            onApprove = { "User approved deriving new account" },
+                            onDeny = { "Account derivation cancelled." }
+                        )
+                    )
+                    if (!approved) {
+                        onTrace(AgentStepTrace("Add Account", name, "denied", "User rejected account derivation"))
+                        return jsonResult(false, "Account derivation cancelled by user.")
+                    }
+                    val resMsg = bridge.addAccountText(label).getOrThrow()
+                    onWalletMutated()
+                    onTrace(AgentStepTrace("Add Account", name, "completed", "Derived new account"))
+                    jsonResult(true, resMsg)
+                }
+
+                "wallet_add_watch_wallet" -> {
+                    if (!settings.aiWalletAccessEnabled || !settings.aiWalletTransferPrepareEnabled) {
+                        onTrace(AgentStepTrace("Wallet Write", name, "paused", "AI wallet write permission disabled by user"))
+                        return jsonResult(false, "Crypto Wallet Write permission for Aqua AI is currently paused in Settings or Wallet -> Aqua AI.")
+                    }
+                    val bridge = aiWalletBridge
+                        ?: return jsonResult(false, "Aqua Wallet engine is unavailable.")
+                    val label = argStr("label").ifBlank { "Watch Portfolio" }
+                    val evmAddress = argStr("evmAddress")
+                    val solanaAddress = argStr("solanaAddress")
+                    val bitcoinAddress = argStr("bitcoinAddress")
+                    val approved = requestAuthorization(
+                        PendingAuthorization(
+                            id = UUID.randomUUID().toString(),
+                            actionTitle = "Add Watch-Only Wallet",
+                            actionType = "Vault Import (Public Addresses)",
+                            description = "Add a read-only watch portfolio tracking these public addresses.",
+                            parametersSummary = listOf(
+                                "Label" to label,
+                                "EVM" to evmAddress.ifBlank { "None" },
+                                "Solana" to solanaAddress.ifBlank { "None" },
+                                "Bitcoin" to bitcoinAddress.ifBlank { "None" }
+                            ),
+                            isFinancialOrSecurity = true,
+                            onApprove = { "User approved adding watch wallet" },
+                            onDeny = { "Watch wallet cancelled." }
+                        )
+                    )
+                    if (!approved) {
+                        onTrace(AgentStepTrace("Watch Wallet", name, "denied", "User declined watch wallet"))
+                        return jsonResult(false, "Watch-only wallet creation cancelled by user.")
+                    }
+                    val resMsg = bridge.addWatchOnlyWalletText(label, evmAddress, solanaAddress, bitcoinAddress).getOrThrow()
+                    onWalletMutated()
+                    onTrace(AgentStepTrace("Watch Wallet", name, "completed", resMsg))
+                    jsonResult(true, resMsg)
+                }
+
+                "wallet_add_custom_token" -> {
+                    if (!settings.aiWalletAccessEnabled || !settings.aiWalletTransferPrepareEnabled) {
+                        onTrace(AgentStepTrace("Wallet Write", name, "paused", "AI wallet write permission disabled by user"))
+                        return jsonResult(false, "Crypto Wallet Write permission for Aqua AI is currently paused in Settings or Wallet -> Aqua AI.")
+                    }
+                    val bridge = aiWalletBridge
+                        ?: return jsonResult(false, "Aqua Wallet engine is unavailable.")
+                    val network = argStr("network")
+                    val symbol = argStr("symbol")
+                    val tokenName = argStr("name")
+                    val contract = argStr("contractOrMint")
+                    val decimals = argInt("decimals", 18)
+                    val coingeckoId = argStr("coingeckoId")
+                    val approved = requestAuthorization(
+                        PendingAuthorization(
+                            id = UUID.randomUUID().toString(),
+                            actionTitle = "Add Custom Token Contract",
+                            actionType = "Token Registry Write (Explicit Approval)",
+                            description = "Verify token contract address and decimals before adding to your wallet.",
+                            parametersSummary = listOf(
+                                "Network" to network.ifBlank { "Active Network" },
+                                "Symbol / Name" to "$symbol (${tokenName.ifBlank { symbol }})",
+                                "Contract / Mint" to contract,
+                                "Decimals" to decimals.toString()
+                            ),
+                            isFinancialOrSecurity = true,
+                            onApprove = { "User approved custom token" },
+                            onDeny = { "Custom token cancelled." }
+                        )
+                    )
+                    if (!approved) {
+                        onTrace(AgentStepTrace("Custom Token", name, "denied", "User rejected adding token"))
+                        return jsonResult(false, "Adding custom token cancelled by user.")
+                    }
+                    val resMsg = bridge.addCustomTokenText(network, symbol, tokenName, contract, decimals, coingeckoId).getOrThrow()
+                    onWalletMutated()
+                    onTrace(AgentStepTrace("Custom Token", name, "completed", resMsg))
+                    jsonResult(true, resMsg)
+                }
+
+                "wallet_add_custom_network" -> {
+                    if (!settings.aiWalletAccessEnabled || !settings.aiWalletTransferPrepareEnabled) {
+                        onTrace(AgentStepTrace("Wallet Write", name, "paused", "AI wallet write permission disabled by user"))
+                        return jsonResult(false, "Crypto Wallet Write permission for Aqua AI is currently paused in Settings or Wallet -> Aqua AI.")
+                    }
+                    val bridge = aiWalletBridge
+                        ?: return jsonResult(false, "Aqua Wallet engine is unavailable.")
+                    val netName = argStr("name")
+                    val nativeSym = argStr("nativeSymbol")
+                    val chainId = argInt("chainId", 0).toLong()
+                    val rpcUrl = argStr("rpcUrl")
+                    val explorerUrl = argStr("explorerUrl")
+                    val isTestnet = argBool("isTestnet", false)
+                    val approved = requestAuthorization(
+                        PendingAuthorization(
+                            id = UUID.randomUUID().toString(),
+                            actionTitle = "Add Custom EVM RPC Network",
+                            actionType = "Network Registry Write (Explicit Approval)",
+                            description = "Verify HTTPS RPC endpoint and chain ID before adding a custom blockchain network.",
+                            parametersSummary = listOf(
+                                "Network Name" to netName,
+                                "Chain ID" to chainId.toString(),
+                                "Native Asset" to nativeSym,
+                                "RPC URL" to rpcUrl
+                            ),
+                            isFinancialOrSecurity = true,
+                            onApprove = { "User approved custom network" },
+                            onDeny = { "Custom network cancelled." }
+                        )
+                    )
+                    if (!approved) {
+                        onTrace(AgentStepTrace("Custom Network", name, "denied", "User rejected custom network"))
+                        return jsonResult(false, "Adding custom network cancelled by user.")
+                    }
+                    val resMsg = bridge.addCustomNetworkText(netName, nativeSym, chainId, rpcUrl, explorerUrl, isTestnet).getOrThrow()
+                    onWalletMutated()
+                    onTrace(AgentStepTrace("Custom Network", name, "completed", resMsg))
+                    jsonResult(true, resMsg)
+                }
+
+                "wallet_sign_message" -> {
+                    if (!settings.aiWalletAccessEnabled || !settings.aiWalletTransferPrepareEnabled) {
+                        onTrace(AgentStepTrace("Wallet Write", name, "paused", "AI wallet write permission disabled by user"))
+                        return jsonResult(false, "Crypto Wallet Write permission for Aqua AI is currently paused in Settings or Wallet -> Aqua AI.")
+                    }
+                    val bridge = aiWalletBridge
+                        ?: return jsonResult(false, "Aqua Wallet engine is unavailable.")
+                    if (bridge.isEmergencyLocked()) {
+                        onTrace(AgentStepTrace("Emergency Lock", name, "blocked", "Emergency Lock is active"))
+                        return jsonResult(false, "Emergency Wallet Lock is active. Unlock it manually in Wallet -> Security Center first.")
+                    }
+                    val chainFamily = argStr("chainFamily").ifBlank { "EVM" }
+                    val message = argStr("message")
+                    val needsUnlock = bridge.isVaultLockedForSigning()
+                    val approved = requestAuthorization(
+                        PendingAuthorization(
+                            id = UUID.randomUUID().toString(),
+                            actionTitle = "Sign Off-Chain Ownership Message",
+                            actionType = "Cryptographic Signature (Explicit Approval)",
+                            description = if (needsUnlock) {
+                                "Unlock your wallet vault and confirm signing this off-chain message."
+                            } else {
+                                "Review the exact plain-text message before signing with your local wallet key."
+                            },
+                            parametersSummary = listOf(
+                                "Chain Family" to chainFamily.uppercase(),
+                                "Message" to message.take(240)
+                            ),
+                            isFinancialOrSecurity = true,
+                            requiresWalletUnlock = needsUnlock,
+                            onApprove = { "User approved message signature" },
+                            onDeny = { "Message signing cancelled." }
+                        )
+                    )
+                    if (!approved) {
+                        onTrace(AgentStepTrace("Sign Message", name, "denied", "User declined message signing"))
+                        return jsonResult(false, "Off-chain message signing rejected by user.")
+                    }
+                    val proof = bridge.signMessageText(chainFamily, message).getOrThrow()
+                    val res = "Signed (${proof.standardName}) | Signer: ${proof.signerAddress} | Signature: ${proof.signature}"
+                    onTrace(AgentStepTrace("Sign Message", name, "completed", "Signed via ${proof.standardName}"))
+                    jsonResult(true, res)
+                }
+
+                "wallet_verify_message" -> {
+                    if (!settings.aiWalletAccessEnabled) {
+                        onTrace(AgentStepTrace("Wallet Access", name, "paused", "AI wallet read access disabled by user"))
+                        return jsonResult(false, "Crypto wallet access for Aqua AI is currently paused in Settings or Wallet -> Aqua AI.")
+                    }
+                    val bridge = aiWalletBridge
+                        ?: return jsonResult(false, "Aqua Wallet engine is unavailable.")
+                    val chainFamily = argStr("chainFamily").ifBlank { "EVM" }
+                    val signerAddress = argStr("signerAddress")
+                    val message = argStr("message")
+                    val signature = argStr("signature")
+                    val res = bridge.verifyMessageText(chainFamily, signerAddress, message, signature).getOrThrow()
+                    onTrace(AgentStepTrace("Verify Signature", name, "completed", res))
+                    jsonResult(true, res)
+                }
+
+                "wallet_parse_payment_uri" -> {
+                    if (!settings.aiWalletAccessEnabled) {
+                        onTrace(AgentStepTrace("Wallet Access", name, "paused", "AI wallet read access disabled by user"))
+                        return jsonResult(false, "Crypto wallet access for Aqua AI is currently paused in Settings or Wallet -> Aqua AI.")
+                    }
+                    val bridge = aiWalletBridge
+                        ?: return jsonResult(false, "Aqua Wallet engine is unavailable.")
+                    val uri = argStr("uri")
+                    val res = bridge.parsePaymentUriText(uri).getOrThrow()
+                    onTrace(AgentStepTrace("Parse URI", name, "completed", res))
+                    jsonResult(true, res)
+                }
+
+                "wallet_update_preferences" -> {
+                    if (!settings.aiWalletAccessEnabled || !settings.aiWalletTransferPrepareEnabled) {
+                        onTrace(AgentStepTrace("Wallet Write", name, "paused", "AI wallet write permission disabled by user"))
+                        return jsonResult(false, "Crypto Wallet Write permission for Aqua AI is currently paused in Settings or Wallet -> Aqua AI.")
+                    }
+                    val bridge = aiWalletBridge
+                        ?: return jsonResult(false, "Aqua Wallet engine is unavailable.")
+                    val currency = argStr("displayCurrencyCode").takeIf { it.isNotBlank() }
+                    val testnet = args["testnetModeEnabled"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull()
+                    val res = bridge.updateWalletPreferencesText(currency, testnet).getOrThrow()
+                    onWalletMutated()
+                    onTrace(AgentStepTrace("Wallet Prefs", name, "completed", res))
+                    jsonResult(true, res)
                 }
 
                 "wallet_prepare_transaction", "wallet_prepare_transfer" -> {
@@ -1190,6 +1607,7 @@ class ToolCallingEngine(
                             return jsonResult(false, "Transaction rejected by user authorization gate.")
                         }
                         val txRecord = aiWalletBridge.signAndBroadcastAuthorized(prepared).getOrThrow()
+                        onWalletMutated()
                         val statusNote = if (txRecord.status == TxStatus.PENDING) {
                             "Broadcast submitted (status: PENDING confirmation, 0 confirmations). Hash: ${txRecord.txHash}. Explorer: ${txRecord.explorerUrl}"
                         } else {

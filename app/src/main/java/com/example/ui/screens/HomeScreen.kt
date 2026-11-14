@@ -211,7 +211,11 @@ fun HomeScreen(
                             !telemetry.isOnline -> "OFFLINE"
                             else -> {
                                 val webLabel = if (settings.fullInternetAccessEnabled) "FULL WEB" else "WEB PAUSED"
-                                val walletLabel = if (settings.aiWalletAccessEnabled) "WALLET AI" else "WALLET PAUSED"
+                                val walletLabel = when {
+                                    !settings.aiWalletAccessEnabled -> "WALLET PAUSED"
+                                    settings.aiWalletTransferPrepareEnabled -> "WALLET R/W"
+                                    else -> "WALLET READ"
+                                }
                                 "ONLINE • ${telemetry.connectionType} • $webLabel • $walletLabel"
                             }
                         },

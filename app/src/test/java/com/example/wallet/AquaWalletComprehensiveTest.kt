@@ -562,7 +562,7 @@ class AquaWalletComprehensiveTest {
             nativeWalletOverview = overview
         )
         assertFalse(pausedPrompt.contains("Aqua Native Self-Custodial Wallet"))
-        assertTrue(pausedPrompt.contains("AI WALLET ACCESS PAUSED"))
+        assertTrue(pausedPrompt.contains("STRICT CRYPTO WALLET BOUNDARY (PAUSED)"))
         assertFalse(pausedPrompt.contains(acc0.evmAddress))
 
         val app = if (FirebaseApp.getApps(context).isEmpty()) {
@@ -615,7 +615,7 @@ class AquaWalletComprehensiveTest {
         )
         assertTrue(blockedPrep["success"].toString().contains("false"))
 
-        // Read-only mode allows receive addresses & switching while blocking transfer/revoke prep
+        // Read-only mode allows reads & URI parsing while blocking ALL write mutations
         val readOnlySettings = UserSettings(aiWalletAccessEnabled = true, aiWalletTransferPrepareEnabled = false)
         val receiveResp = toolEngine.executeFunctionCall(
             call = FunctionCallPart("wallet_get_receive_addresses", emptyMap()),
@@ -629,6 +629,30 @@ class AquaWalletComprehensiveTest {
         assertTrue(receiveResp["message"].toString().contains(acc0.evmAddress))
         assertTrue(receiveResp["message"].toString().contains(acc0.solanaAddress))
         assertFalse(receiveResp["message"].toString().contains(secretPhrase))
+
+        val parseUriResp = toolEngine.executeFunctionCall(
+            call = FunctionCallPart(
+                "wallet_parse_payment_uri",
+                mapOf("uri" to JsonPrimitive("ethereum:${acc0.evmAddress}@1?value=500000000000000000"))
+            ),
+            settings = readOnlySettings,
+            activeWallet = null,
+            onNavigateToBrowser = {},
+            requestAuthorization = { false },
+            onTrace = {}
+        )
+        assertTrue(parseUriResp["success"].toString().contains("true"))
+        assertTrue(parseUriResp["message"].toString().contains("0.5"))
+
+        val blockedWriteSwitch = toolEngine.executeFunctionCall(
+            call = FunctionCallPart("wallet_switch_network", mapOf("network" to JsonPrimitive("polygon"))),
+            settings = readOnlySettings,
+            activeWallet = null,
+            onNavigateToBrowser = {},
+            requestAuthorization = { true },
+            onTrace = {}
+        )
+        assertTrue(blockedWriteSwitch["success"].toString().contains("false"))
 
         val blockedRevoke = toolEngine.executeFunctionCall(
             call = FunctionCallPart(
@@ -646,10 +670,12 @@ class AquaWalletComprehensiveTest {
         )
         assertTrue(blockedRevoke["success"].toString().contains("false"))
 
-        // Switch network & account via ToolCallingEngine
+        // Read + Write mode enables network/account/wallet switch, vault creation, tokens, networks, signing, contacts
+        val fullSettings = UserSettings(aiWalletAccessEnabled = true, aiWalletTransferPrepareEnabled = true)
+
         val switchNetResp = toolEngine.executeFunctionCall(
             call = FunctionCallPart("wallet_switch_network", mapOf("network" to JsonPrimitive("polygon"))),
-            settings = readOnlySettings,
+            settings = fullSettings,
             activeWallet = null,
             onNavigateToBrowser = {},
             requestAuthorization = { false },
@@ -660,7 +686,7 @@ class AquaWalletComprehensiveTest {
 
         val switchAccResp = toolEngine.executeFunctionCall(
             call = FunctionCallPart("wallet_switch_account", mapOf("account" to JsonPrimitive("Spending"))),
-            settings = readOnlySettings,
+            settings = fullSettings,
             activeWallet = null,
             onNavigateToBrowser = {},
             requestAuthorization = { false },
@@ -669,8 +695,7 @@ class AquaWalletComprehensiveTest {
         assertTrue(switchAccResp["success"].toString().contains("true"))
         assertEquals(acc1.accountIndex, vault.getSecuritySettings().activeAccountIndex)
 
-        // Contact save obeys explicit authorization gate
-        val fullSettings = UserSettings(aiWalletAccessEnabled = true, aiWalletTransferPrepareEnabled = true)
+        // Contact save & delete obey explicit authorization gate
         val deniedContact = toolEngine.executeFunctionCall(
             call = FunctionCallPart(
                 "wallet_save_contact",
@@ -708,6 +733,124 @@ class AquaWalletComprehensiveTest {
         assertTrue(approvedContact["success"].toString().contains("true"))
         assertEquals(1, engine.utilities.getAddressBook().size)
 
+        val deleteContactResp = toolEngine.executeFunctionCall(
+            call = FunctionCallPart("wallet_delete_contact", mapOf("queryOrId" to JsonPrimitive("Treasury"))),
+            settings = fullSettings,
+            activeWallet = null,
+            onNavigateToBrowser = {},
+            requestAuthorization = { true },
+            onTrace = {}
+        )
+        assertTrue(deleteContactResp["success"].toString().contains("true"))
+        assertEquals(0, engine.utilities.getAddressBook().size)
+
+        // Sign and verify off-chain ownership proof via Read + Write tools
+        val signMsgResp = toolEngine.executeFunctionCall(
+            call = FunctionCallPart(
+                "wallet_sign_message",
+                mapOf("chainFamily" to JsonPrimitive("EVM"), "message" to JsonPrimitive("Aqua Write Proof"))
+            ),
+            settings = fullSettings,
+            activeWallet = null,
+            onNavigateToBrowser = {},
+            requestAuthorization = { true },
+            onTrace = {}
+        )
+        assertTrue(signMsgResp["success"].toString().contains("true"))
+        val signedText = signMsgResp["message"].toString().trim('"')
+        val sigHex = signedText.substringAfter("Signature: ").trim()
+        assertTrue(sigHex.startsWith("0x"))
+
+        val verifyMsgResp = toolEngine.executeFunctionCall(
+            call = FunctionCallPart(
+                "wallet_verify_message",
+                mapOf(
+                    "chainFamily" to JsonPrimitive("EVM"),
+                    "signerAddress" to JsonPrimitive(acc1.evmAddress),
+                    "message" to JsonPrimitive("Aqua Write Proof"),
+                    "signature" to JsonPrimitive(sigHex)
+                )
+            ),
+            settings = readOnlySettings,
+            activeWallet = null,
+            onNavigateToBrowser = {},
+            requestAuthorization = { false },
+            onTrace = {}
+        )
+        assertTrue(verifyMsgResp["success"].toString().contains("true"))
+        assertTrue(verifyMsgResp["message"].toString().contains("VALID"))
+
+        // Add custom token, custom network, account derivation, watch wallet & new HD wallet (zero-key safe)
+        val addTokResp = toolEngine.executeFunctionCall(
+            call = FunctionCallPart(
+                "wallet_add_custom_token",
+                mapOf(
+                    "network" to JsonPrimitive("eth_mainnet"),
+                    "symbol" to JsonPrimitive("UNI"),
+                    "name" to JsonPrimitive("Uniswap"),
+                    "contractOrMint" to JsonPrimitive("0x1f9840a85d5af5bf1d1762f925bdaddc4201f984"),
+                    "decimals" to JsonPrimitive(18)
+                )
+            ),
+            settings = fullSettings,
+            activeWallet = null,
+            onNavigateToBrowser = {},
+            requestAuthorization = { true },
+            onTrace = {}
+        )
+        assertTrue(addTokResp["success"].toString().contains("true"))
+        assertTrue(engine.getTokensForNetwork("eth_mainnet").any { it.symbol == "UNI" })
+
+        val addNetResp = toolEngine.executeFunctionCall(
+            call = FunctionCallPart(
+                "wallet_add_custom_network",
+                mapOf(
+                    "name" to JsonPrimitive("Optimism"),
+                    "nativeSymbol" to JsonPrimitive("ETH"),
+                    "chainId" to JsonPrimitive(10),
+                    "rpcUrl" to JsonPrimitive("https://mainnet.optimism.io")
+                )
+            ),
+            settings = fullSettings,
+            activeWallet = null,
+            onNavigateToBrowser = {},
+            requestAuthorization = { true },
+            onTrace = {}
+        )
+        assertTrue(addNetResp["success"].toString().contains("true"))
+        assertTrue(engine.getAvailableNetworks(true).any { it.chainId == 10L })
+
+        val createWalletResp = toolEngine.executeFunctionCall(
+            call = FunctionCallPart(
+                "wallet_create_wallet",
+                mapOf("label" to JsonPrimitive("Savings Vault"), "wordCount" to JsonPrimitive(12))
+            ),
+            settings = fullSettings,
+            activeWallet = null,
+            onNavigateToBrowser = {},
+            requestAuthorization = { true },
+            onTrace = {}
+        )
+        assertTrue(createWalletResp["success"].toString().contains("true"))
+        val newWalletMeta = vault.getAllWallets().first { it.label == "Savings Vault" }
+        val newWalletPhrase = vault.revealMnemonicForBackup(newWalletMeta.walletId).getOrThrow()
+        assertFalse(createWalletResp["message"].toString().contains(newWalletPhrase))
+
+        val prefsResp = toolEngine.executeFunctionCall(
+            call = FunctionCallPart(
+                "wallet_update_preferences",
+                mapOf("displayCurrencyCode" to JsonPrimitive("GBP"), "testnetModeEnabled" to JsonPrimitive(true))
+            ),
+            settings = fullSettings,
+            activeWallet = null,
+            onNavigateToBrowser = {},
+            requestAuthorization = { false },
+            onTrace = {}
+        )
+        assertTrue(prefsResp["success"].toString().contains("true"))
+        assertEquals("GBP", vault.getSecuritySettings().displayCurrencyCode)
+        assertTrue(vault.getSecuritySettings().testnetModeEnabled)
+
         // Bridge reflects vault PIN lock & emergency lock accurately
         assertFalse(bridge.isVaultLockedForSigning())
         vault.setPin("654321").getOrThrow()
@@ -720,4 +863,5 @@ class AquaWalletComprehensiveTest {
         assertTrue(bridge.isEmergencyLocked())
     }
 }
+
 

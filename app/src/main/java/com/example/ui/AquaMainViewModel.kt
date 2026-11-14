@@ -110,7 +110,8 @@ class AquaMainViewModel(
         firestoreRepo = firestoreRepo,
         driveHistoryRepo = driveHistoryRepo,
         workspaceRepo = workspaceRepo,
-        aiWalletBridge = walletCoordinator.aiBridge
+        aiWalletBridge = walletCoordinator.aiBridge,
+        onWalletMutated = { viewModelScope.launch { walletCoordinator.reloadAll() } }
     )
 
     private val geminiProvider = GeminiProvider(

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — Aqua AI</title>
+  <style>
+    :root {
+      --bg: #04111f;
+      --card: #0a1c30;
+      --border: #173759;
+      --cyan: #22d3ee;
+      --text: #e6f4ff;
+      --muted: #93b3cc;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+    }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 20px 14px 48px; }
+    nav { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 18px; font-size: 0.95rem; }
+    h1 { color: var(--text); margin-top: 0; margin-bottom: 6px; font-size: 1.55rem; }
+    h2 { color: var(--cyan); margin-top: 24px; font-size: 1.1rem; }
+    p, li { color: var(--muted); }
+    ul { padding-left: 20px; }
+    li { margin-bottom: 8px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+    }
+    a { color: var(--cyan); text-decoration: none; }
+    code { color: var(--text); }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="privacy.html"><strong>Privacy Policy</strong></a>
+      <a href="terms.html">Terms &amp; Conditions</a>
+    </nav>
+
+    <div class="card">
+      <h1>Privacy Policy for Aqua AI</h1>
+      <p><strong>Effective Date:</strong> November 14, 2026 &nbsp;|&nbsp; <strong>App Package:</strong> <code>com.aistudio.aquaai.vqrzmn</code></p>
+      <p><strong>Developer Contact:</strong> <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a></p>
+
+      <h2>1. Information We Access and Process</h2>
+      <ul>
+        <li><strong>Account Information:</strong> When you sign in with Google via Firebase Authentication, Aqua AI receives your Firebase user ID, display name, email address, and profile photo URL to sync your preferences, memories, and chat sessions.</li>
+        <li><strong>AI Prompts &amp; Attachments:</strong> Messages, voice transcripts, images, and tool outputs you submit to the assistant are processed via Gemini / Firebase AI Logic to generate responses.</li>
+        <li><strong>Live Web &amp; Network Requests:</strong> When <em>Full Internet Access</em> is enabled, search queries and URLs you ask Aqua AI to inspect are fetched directly over HTTPS without advertising trackers.</li>
+        <li><strong>Device Permissions (Opt-In):</strong> Camera (QR scanning and photo capture), Microphone (voice commands and optional wake-word service), Biometrics (local wallet unlock and transaction signing approval), Coarse Location (optional local context), and Alarms (when explicitly requested).</li>
+      </ul>
+
+      <h2>2. Google Workspace &amp; Google Drive Data (Limited Use Disclosure)</h2>
+      <p>Aqua AI only requests Google Drive or Google Workspace OAuth scopes when you explicitly connect those integrations:</p>
+      <ul>
+        <li><strong>Google Drive (<code>drive.appdata</code>, <code>drive.file</code>):</strong> Used strictly to back up and restore your Aqua AI conversation history and memory snapshots inside your own Google Drive account.</li>
+        <li><strong>Google Workspace (Gmail, Calendar, Contacts, Sheets, Forms, Chat):</strong> Accessed strictly on your explicit request to read, compose, schedule, inspect, or send items inside your connected Google account. Outbound emails and messages require your confirmation.</li>
+      </ul>
+      <p>
+        Aqua AI's use and transfer to any other app of information received from Google APIs adheres strictly to the
+        Google API Services User Data Policy, including the Limited Use requirements. Google user data is never sold, shared with data brokers, used for advertising, or used to train generalized AI/ML models.
+      </p>
+
+      <h2>3. Self-Custodial Crypto Wallet &amp; AI Wallet Controls</h2>
+      <ul>
+        <li><strong>Local Key Custody:</strong> Recovery phrases (BIP-39 mnemonics) and private keys for Aqua Wallet are generated on-device using operating-system secure randomness and stored locally using Android Keystore-backed AES encryption. Private keys, seeds, and PINs are <strong>never</strong> transmitted to Firebase, AI models, analytics services, or third-party servers.</li>
+        <li><strong>AI Wallet Boundary:</strong> You control whether Aqua AI has Wallet Read Permission or Wallet Write Permission through toggles in Settings and Wallet. Every transaction, allowance revoke, vault/account creation, or contact modification requires your explicit authorization and PIN/Biometric unlock when enabled.</li>
+      </ul>
+
+      <h2>4. Third-Party Blockchain &amp; Market Services</h2>
+      <p>
+        When checking balances, broadcasting signed transactions, resolving ENS names, or viewing prices, Aqua AI communicates directly with public blockchain RPC endpoints and CoinGecko market APIs using only public wallet addresses or coin identifiers.
+      </p>
+
+      <h2>5. Data Storage, Security, Retention &amp; Deletion</h2>
+      <p>
+        Cloud conversations and user memories are stored in user-scoped Firebase Firestore documents isolated to your signed-in account. Local wallet vaults and transaction caches remain encrypted or scoped inside the app's private storage on your device. You may sign out, delete conversations or local wallets, disable AI permissions anytime, revoke Google OAuth access in your Google Account security settings, or request complete account deletion by emailing <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a>.
+      </p>
+
+      <h2>6. Children's Privacy</h2>
+      <p>
+        Aqua AI is not intended for children under the age of 13 (or the applicable minimum age in your jurisdiction), and we do not knowingly collect personal information from children.
+      </p>
+
+      <h2>7. Updates &amp; Contact</h2>
+      <p>
+        We may update this Privacy Policy as features evolve. Material changes will be reflected by an updated Effective Date on this page. Questions or data deletion requests may be sent to <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a>.
+      </p>
+    </div>
+  </main>
+</body>
+</html>

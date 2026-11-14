@@ -411,7 +411,10 @@ class GeminiProvider(
             "receive", "my address", "bitcoin", "btc", "ethereum", "eth", "solana", "sol", "bnb",
             "polygon", "pol", "matic", "arbitrum", "base", "usdt", "usdc", "token", "coin",
             "address book", "contact", "ens", ".eth", "gas", "gwei", "nonce", "block height",
-            "allowance", "revoke", "approve", "switch network", "switch account", "seed", "mnemonic",
+            "allowance", "revoke", "approve", "switch network", "switch account", "switch wallet",
+            "create wallet", "new wallet", "add account", "watch wallet", "watch-only", "custom token",
+            "custom network", "add token", "add network", "sign message", "verify signature",
+            "payment uri", "testnet", "display currency", "seed", "mnemonic",
             "browser", "current page", "fill form", "remember", "save note", "memory",
             "gmail", "email", "inbox", "calendar", "schedule", "event",
             "sheet", "spreadsheet", "google form", "form response", "google chat", "space", "drive", "backup"
