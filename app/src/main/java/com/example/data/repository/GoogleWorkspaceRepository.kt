@@ -192,6 +192,11 @@ class GoogleWorkspaceRepository(
     }
 
     fun extractTokenFromIntent(intent: Intent?): Result<String> = runCatching {
+        if (intent == null) {
+            throw IllegalStateException(
+                "Google Workspace consent was cancelled or blocked (Error 403: access_denied if the selected account is not listed under OAuth Test Users)."
+            )
+        }
         val result = Identity.getAuthorizationClient(context)
             .getAuthorizationResultFromIntent(intent)
         result.accessToken?.takeIf { it.isNotBlank() }

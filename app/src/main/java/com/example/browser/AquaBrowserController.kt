@@ -6,12 +6,17 @@ import android.net.Uri
 import android.os.Environment
 import android.webkit.URLUtil
 import android.webkit.WebView
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URI
+import java.net.URL
 import kotlin.coroutines.resume
 
 data class BrowserLink(
@@ -40,6 +45,9 @@ class AquaBrowserController(private val context: Context) {
     private val _pendingUrl = MutableStateFlow<String?>(null)
     val pendingUrl: StateFlow<String?> = _pendingUrl.asStateFlow()
 
+    private val _hasActiveSession = MutableStateFlow(false)
+    val hasActiveSession: StateFlow<Boolean> = _hasActiveSession.asStateFlow()
+
     fun attachWebView(webView: WebView) {
         webViewRef = webView
     }
@@ -48,6 +56,10 @@ class AquaBrowserController(private val context: Context) {
         if (webView == null || webViewRef === webView) {
             webViewRef = null
         }
+    }
+
+    fun activateSession() {
+        _hasActiveSession.value = true
     }
 
     fun updatePageState(transform: (BrowserPageState) -> BrowserPageState) {
@@ -64,10 +76,22 @@ class AquaBrowserController(private val context: Context) {
 
     fun navigateTo(urlOrQuery: String): String {
         val resolved = normalizeUrlOrSearch(urlOrQuery)
+        _hasActiveSession.value = true
         _pendingUrl.value = resolved
+        _pageState.value = _pageState.value.copy(
+            currentUrl = resolved,
+            lastError = null
+        )
         val wv = webViewRef
-        if (wv != null) {
-            wv.post { wv.loadUrl(resolved) }
+        if (wv != null && wv.isAttachedToWindow) {
+            wv.post {
+                if (webViewRef === wv && wv.isAttachedToWindow) {
+                    runCatching {
+                        _pendingUrl.value = null
+                        wv.loadUrl(resolved)
+                    }
+                }
+            }
         }
         return resolved
     }
@@ -118,17 +142,21 @@ class AquaBrowserController(private val context: Context) {
         runOnWebView { wv -> wv.clearMatches() }
     }
 
-    suspend fun extractCurrentPageText(): Result<String> = suspendCancellableCoroutine { cont ->
+    suspend fun extractCurrentPageText(): Result<String> {
         val wv = webViewRef
-        if (wv == null) {
-            cont.resume(
-                Result.failure(
-                    IllegalStateException("Aqua Browser tab is not currently open. Navigate to a webpage first.")
-                )
-            )
-            return@suspendCancellableCoroutine
+        if (wv != null && wv.isAttachedToWindow) {
+            val fromWebView = extractTextFromWebView(wv)
+            if (fromWebView.isSuccess) return fromWebView
         }
+        return fetchUrlAsReader(_pageState.value.currentUrl).map { it.first }
+    }
+
+    private suspend fun extractTextFromWebView(wv: WebView): Result<String> = suspendCancellableCoroutine { cont ->
         wv.post {
+            if (webViewRef !== wv || !wv.isAttachedToWindow) {
+                if (cont.isActive) cont.resume(Result.failure(IllegalStateException("WebView detached.")))
+                return@post
+            }
             val js = """
                 (function() {
                     var title = document.title || '';
@@ -162,17 +190,21 @@ class AquaBrowserController(private val context: Context) {
         }
     }
 
-    suspend fun extractCurrentPageLinks(): Result<List<BrowserLink>> = suspendCancellableCoroutine { cont ->
+    suspend fun extractCurrentPageLinks(): Result<List<BrowserLink>> {
         val wv = webViewRef
-        if (wv == null) {
-            cont.resume(
-                Result.failure(
-                    IllegalStateException("Aqua Browser tab is not currently open. Navigate to a webpage first.")
-                )
-            )
-            return@suspendCancellableCoroutine
+        if (wv != null && wv.isAttachedToWindow) {
+            val fromWebView = extractLinksFromWebView(wv)
+            if (fromWebView.isSuccess) return fromWebView
         }
+        return fetchUrlAsReader(_pageState.value.currentUrl).map { it.second }
+    }
+
+    private suspend fun extractLinksFromWebView(wv: WebView): Result<List<BrowserLink>> = suspendCancellableCoroutine { cont ->
         wv.post {
+            if (webViewRef !== wv || !wv.isAttachedToWindow) {
+                if (cont.isActive) cont.resume(Result.failure(IllegalStateException("WebView detached.")))
+                return@post
+            }
             val js = """
                 (function() {
                     var seen = {};
@@ -209,13 +241,53 @@ class AquaBrowserController(private val context: Context) {
     }
 
     /**
+     * Fetches and extracts real webpage content & links directly over HTTP(S) without spawning a Chromium renderer.
+     */
+    suspend fun fetchUrlAsReader(urlString: String): Result<Pair<String, List<BrowserLink>>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val normalized = normalizeUrlOrSearch(urlString)
+            require(normalized.startsWith("https://") || normalized.startsWith("http://")) {
+                "Only HTTP/HTTPS URLs are supported."
+            }
+            val conn = (URL(normalized).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 10_000
+                readTimeout = 10_000
+                instanceFollowRedirects = true
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0 Mobile Safari/537.36")
+                setRequestProperty("Accept", "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8")
+            }
+            val finalUrl = conn.url.toString()
+            val code = conn.responseCode
+            val stream = if (code in 200..399) conn.inputStream else conn.errorStream
+            val html = stream?.bufferedReader(Charsets.UTF_8)?.use { reader ->
+                val buf = CharArray(524_288)
+                val read = reader.read(buf)
+                if (read > 0) String(buf, 0, read) else ""
+            }.orEmpty()
+            conn.disconnect()
+            if (code >= 400 && html.isBlank()) {
+                throw IllegalStateException("HTTP $code while loading $finalUrl")
+            }
+            val (title, bodyText, links) = parseHtmlForReader(html, finalUrl)
+            val formatted = "Title: ${title.ifBlank { finalUrl }}\nURL: $finalUrl\n\n${bodyText.ifBlank { "(No readable text extracted from this page.)" }}"
+            _pageState.value = _pageState.value.copy(
+                currentUrl = finalUrl,
+                currentTitle = title.ifBlank { _pageState.value.currentTitle },
+                lastExtractedText = bodyText,
+                isLoading = false
+            )
+            formatted to links
+        }
+    }
+
+    /**
      * Fills standard non-CAPTCHA, non-security form inputs on the active page after explicit user approval.
      */
     suspend fun fillStandardFormField(selectorOrName: String, value: String): Result<String> =
         suspendCancellableCoroutine { cont ->
             val wv = webViewRef
-            if (wv == null) {
-                cont.resume(Result.failure(IllegalStateException("Aqua Browser is not active.")))
+            if (wv == null || !wv.isAttachedToWindow) {
+                cont.resume(Result.failure(IllegalStateException("Aqua Browser WebView is not active.")))
                 return@suspendCancellableCoroutine
             }
             val safeSel = JSONObject.quote(selectorOrName)
@@ -272,6 +344,66 @@ class AquaBrowserController(private val context: Context) {
             JSONObject("{\"v\":$raw}").getString("v")
         } catch (_: Exception) {
             raw.trim('"')
+        }
+    }
+
+    companion object {
+        private val SCRIPT_STYLE_REGEX = Regex("(?is)<(script|style|noscript|svg)[^>]*>.*?</\\1>")
+        private val TITLE_REGEX = Regex("(?is)<title[^>]*>(.*?)</title>")
+        private val ANCHOR_REGEX = Regex("(?is)<a\\s+[^>]*href\\s*=\\s*[\"']([^\"'#]+)[\"'][^>]*>(.*?)</a>")
+        private val TAG_REGEX = Regex("(?s)<[^>]+>")
+        private val WHITESPACE_REGEX = Regex("[ \\t\\x0B\\f\\r]+")
+        private val NEWLINE_REGEX = Regex("\\n{3,}")
+
+        fun parseHtmlForReader(html: String, baseUrl: String): Triple<String, String, List<BrowserLink>> {
+            val titleRaw = TITLE_REGEX.find(html)?.groupValues?.getOrNull(1).orEmpty()
+            val title = decodeHtmlEntities(TAG_REGEX.replace(titleRaw, " ")).trim().take(180)
+
+            val cleanedHtml = SCRIPT_STYLE_REGEX.replace(html, "\n")
+            val baseUri = runCatching { URI(baseUrl) }.getOrNull()
+            val seenHrefs = linkedSetOf<String>()
+            val links = mutableListOf<BrowserLink>()
+
+            for (match in ANCHOR_REGEX.findAll(cleanedHtml)) {
+                if (links.size >= 25) break
+                val rawHref = decodeHtmlEntities(match.groupValues[1]).trim()
+                if (rawHref.startsWith("javascript:", ignoreCase = true) || rawHref.startsWith("mailto:", ignoreCase = true)) {
+                    continue
+                }
+                val resolvedHref = runCatching {
+                    if (baseUri != null) baseUri.resolve(rawHref).toString() else rawHref
+                }.getOrNull().orEmpty()
+                if ((resolvedHref.startsWith("http://") || resolvedHref.startsWith("https://")) && seenHrefs.add(resolvedHref)) {
+                    val label = decodeHtmlEntities(TAG_REGEX.replace(match.groupValues[2], " "))
+                        .replace(WHITESPACE_REGEX, " ")
+                        .trim()
+                        .take(90)
+                        .ifBlank { resolvedHref }
+                    links.add(BrowserLink(text = label, href = resolvedHref))
+                }
+            }
+
+            val withBreaks = cleanedHtml.replace(Regex("(?i)</?(p|div|li|br|h[1-6]|tr)[^>]*>"), "\n")
+            val plainText = decodeHtmlEntities(TAG_REGEX.replace(withBreaks, " "))
+                .lines()
+                .map { it.replace(WHITESPACE_REGEX, " ").trim() }
+                .filter { it.isNotEmpty() }
+                .joinToString("\n")
+                .replace(NEWLINE_REGEX, "\n\n")
+                .take(12_000)
+
+            return Triple(title, plainText, links)
+        }
+
+        private fun decodeHtmlEntities(input: String): String {
+            return input
+                .replace("&amp;", "&")
+                .replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&quot;", "\"")
+                .replace("&#39;", "'")
+                .replace("&apos;", "'")
+                .replace("&nbsp;", " ")
         }
     }
 }

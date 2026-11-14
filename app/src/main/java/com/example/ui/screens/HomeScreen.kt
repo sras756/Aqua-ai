@@ -193,7 +193,11 @@ fun HomeScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onOpenTab("settings") }
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
@@ -203,9 +207,15 @@ fun HomeScreen(
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        text = if (telemetry.isOnline) "ONLINE • ${telemetry.connectionType}" else "OFFLINE",
+                        text = when {
+                            !telemetry.isOnline -> "OFFLINE"
+                            settings.fullInternetAccessEnabled -> "ONLINE • ${telemetry.connectionType} • FULL WEB"
+                            else -> "ONLINE • ${telemetry.connectionType} • WEB PAUSED"
+                        },
                         style = MaterialTheme.typography.labelMedium,
-                        color = if (telemetry.isOnline) AquaMintSuccess else AquaCoralError
+                        color = if (telemetry.isOnline) AquaMintSuccess else AquaCoralError,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 Text(

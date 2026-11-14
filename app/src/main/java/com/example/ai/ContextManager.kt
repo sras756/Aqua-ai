@@ -26,14 +26,22 @@ object ContextManager {
         appendLine()
         appendLine("## Core Operating Rules")
         appendLine("1. Be concise, natural, accurate, and genuinely helpful in both spoken and written responses.")
-        appendLine("2. Never fabricate tool results, wallet balances, transaction confirmations, or webpage actions.")
-        appendLine("3. For reversible read-only tasks (checking battery, connectivity, spot prices, portfolio/balances/tx history/fees/risk, reading open webpage, setting alarms, opening apps, reading Google Contacts/Calendar/Gmail/Sheets/Forms/Chat), execute the declared tool directly.")
-        appendLine("4. For irreversible or sensitive actions (crypto transfer signing/preparation, initiating calls, drafting SMS, sending Gmail emails or Google Chat messages, filling web forms, uploading files), invoke the appropriate tool which enforces explicit user authorization.")
-        appendLine("5. STRICT CRYPTO WALLET BOUNDARY: Never ask for, read, log, or transmit wallet recovery phrases, private keys, or PINs. You cannot alter spending limits, unlock Emergency Lock, or bypass confirmation. Never report a newly broadcast transaction as confirmed until on-chain status is CONFIRMED.")
+        appendLine("2. Never fabricate tool results, search hits, webpage contents, wallet balances, transaction confirmations, or API responses.")
+        appendLine("3. LIVE INTERNET ACCESS (${if (settings.fullInternetAccessEnabled) "ENABLED" else "PAUSED BY USER"}): " +
+            if (settings.fullInternetAccessEnabled) {
+                "You have full live internet access via web_search, web_fetch_page, web_http_request, browser_open_url, and Google Search grounding. Actively search the web, read live URLs/docs, or query public HTTP/JSON APIs whenever questions require current facts, real-time events, documentation, or online data—never claim you lack internet access. Cite source URLs returned by tools."
+            } else {
+                "Live internet tools are currently paused in Settings; rely on device/local data or inform the user they can re-enable Full Internet Access in Settings."
+            }
+        )
+        appendLine("4. For reversible read-only tasks (web search, fetching public webpages, HTTP GET/HEAD APIs, checking battery/connectivity, spot prices, wallet portfolio/tx/fees/risk, setting alarms, opening apps, reading Google Contacts/Calendar/Gmail/Sheets/Forms/Chat), execute the declared tool directly.")
+        appendLine("5. For irreversible or sensitive actions (HTTP POST/PUT/PATCH/DELETE mutations, crypto transfer signing, initiating calls, drafting SMS, sending Gmail or Google Chat messages, filling web forms, uploading files), invoke the appropriate tool which enforces explicit user authorization.")
+        appendLine("6. STRICT CRYPTO WALLET BOUNDARY: Never ask for, read, log, or transmit wallet recovery phrases, private keys, or PINs. You cannot alter spending limits, unlock Emergency Lock, or bypass confirmation. Never report a newly broadcast transaction as confirmed until on-chain status is CONFIRMED.")
         appendLine()
         appendLine("## Live Android Device Telemetry")
         appendLine("- Battery: ${telemetry.batteryPercent}% (${if (telemetry.isCharging) "Charging" else "Discharging"})")
         appendLine("- Connectivity: ${telemetry.connectionType} (${if (telemetry.isOnline) "Online" else "Offline"})")
+        appendLine("- Internet Tools: ${if (settings.fullInternetAccessEnabled && telemetry.isOnline) "Full Live Web Access Active" else if (!settings.fullInternetAccessEnabled) "Paused in Settings" else "Device Offline"}")
         appendLine("- Media Volume: ${telemetry.mediaVolumePercent}%")
         appendLine("- Notification Access: ${if (telemetry.notificationAccessGranted) "Granted" else "Not granted"}")
         appendLine("- Active Aqua Browser Tab: $browserTitle ($browserUrl)")

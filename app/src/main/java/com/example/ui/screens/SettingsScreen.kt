@@ -43,6 +43,7 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -222,7 +223,7 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .menuAnchor()
+                                    .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
                             )
                             ExposedDropdownMenu(
                                 expanded = modelExpanded,
@@ -245,6 +246,12 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                             subtitle = "Enable structured reasoning trace for complex agent tasks.",
                             checked = settings.thinkingEnabled,
                             onCheckedChange = { viewModel.updateSettings(settings.copy(thinkingEnabled = it)) }
+                        )
+                        SettingSwitchRow(
+                            title = "Full Internet Access (Web, Reader & APIs)",
+                            subtitle = "Allow Aqua AI to search the live web, fetch public URLs, and query HTTP APIs anytime.",
+                            checked = settings.fullInternetAccessEnabled,
+                            onCheckedChange = { viewModel.updateSettings(settings.copy(fullInternetAccessEnabled = it)) }
                         )
                         SettingSwitchRow(
                             title = "Google Search Grounding",
@@ -421,7 +428,7 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .menuAnchor()
+                                    .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
                             )
                             ExposedDropdownMenu(
                                 expanded = langExpanded,

@@ -87,6 +87,7 @@ fun WorkspaceScreen(viewModel: AquaMainViewModel) {
 
     val busy by viewModel.workspaceBusy.collectAsStateWithLifecycle()
     val status by viewModel.workspaceStatus.collectAsStateWithLifecycle()
+    val consentHelpAccount by viewModel.workspaceConsentHelpAccount.collectAsStateWithLifecycle()
     val pendingIntent by viewModel.workspaceAuthPendingIntent.collectAsStateWithLifecycle()
 
     val contacts by viewModel.workspaceContacts.collectAsStateWithLifecycle()
@@ -106,11 +107,7 @@ fun WorkspaceScreen(viewModel: AquaMainViewModel) {
     val consentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            viewModel.handleWorkspaceConsentResult(result.data)
-        } else {
-            viewModel.handleWorkspaceConsentResult(null)
-        }
+        viewModel.handleWorkspaceConsentResult(result.data, result.resultCode)
     }
 
     LaunchedEffect(pendingIntent) {
@@ -168,6 +165,55 @@ fun WorkspaceScreen(viewModel: AquaMainViewModel) {
                 trackColor = AquaCardSurface,
                 modifier = Modifier.fillMaxWidth()
             )
+        }
+
+        if (consentHelpAccount != null) {
+            Spacer(Modifier.height(10.dp))
+            Card(
+                colors = CardDefaults.cardColors(containerColor = AquaCardSurface),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, com.example.ui.theme.AquaAmber, RoundedCornerShape(14.dp))
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Access Blocked (Error 403: access_denied)?",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = com.example.ui.theme.AquaAmber,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Your OAuth consent screen in Google Cloud is in Testing mode, so only the developer account or approved Test Users can authorize Workspace scopes. Add '$consentHelpAccount' under Google Auth Platform → Audience → Test users (project gen-lang-client-0656700857), or choose your developer Google account when consenting.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AquaIceText
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                viewModel.openBrowserUrlExternally(
+                                    "https://console.cloud.google.com/auth/audience?project=gen-lang-client-0656700857"
+                                )
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = AquaCyan, contentColor = AquaAbyss),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Add Test User", fontWeight = FontWeight.Bold)
+                        }
+                        OutlinedButton(
+                            onClick = { viewModel.dismissWorkspaceConsentHelp() }
+                        ) {
+                            Text("Dismiss", color = AquaMutedText)
+                        }
+                    }
+                }
+            }
         }
 
         Spacer(Modifier.height(12.dp))

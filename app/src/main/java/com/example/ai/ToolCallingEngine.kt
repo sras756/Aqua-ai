@@ -11,6 +11,7 @@ import com.example.data.repository.GoogleDriveHistoryRepository
 import com.example.data.repository.GoogleWorkspaceRepository
 import com.example.data.repository.WorkspaceService
 import com.example.device.AndroidDeviceController
+import com.example.network.AquaWebClient
 import com.example.wallet.FlashWalletConnector
 import com.example.wallet.ai.AquaAiWalletBridge
 import com.example.wallet.core.TxStatus
@@ -34,7 +35,8 @@ class ToolCallingEngine(
     private val firestoreRepo: AquaFirestoreRepository,
     private val driveHistoryRepo: GoogleDriveHistoryRepository? = null,
     private val workspaceRepo: GoogleWorkspaceRepository? = null,
-    private val aiWalletBridge: AquaAiWalletBridge? = null
+    private val aiWalletBridge: AquaAiWalletBridge? = null,
+    private val webClient: AquaWebClient = AquaWebClient()
 ) {
 
     fun buildToolDeclarations(): Tool {
@@ -112,15 +114,40 @@ class ToolCallingEngine(
                     )
                 ),
                 FunctionDeclaration(
+                    name = "web_search",
+                    description = "Searches the live internet via DuckDuckGo & Wikipedia for real-time news, facts, documentation, URLs, and current events. Read-only.",
+                    parameters = mapOf(
+                        "query" to Schema.string(description = "Search query string."),
+                        "maxResults" to Schema.integer(description = "Number of results (1-12, default 8).")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "web_fetch_page",
+                    description = "Fetches and extracts the live readable text, title, and links from any public http:// or https:// webpage, article, documentation page, or feed directly in the background.",
+                    parameters = mapOf(
+                        "url" to Schema.string(description = "Full public http:// or https:// URL to fetch.")
+                    )
+                ),
+                FunctionDeclaration(
+                    name = "web_http_request",
+                    description = "Makes a live HTTP/REST request to a public internet URL/API. GET and HEAD execute directly; POST/PUT/PATCH/DELETE require explicit user approval.",
+                    parameters = mapOf(
+                        "method" to Schema.string(description = "HTTP method: GET, HEAD, POST, PUT, PATCH, or DELETE."),
+                        "url" to Schema.string(description = "Full public http:// or https:// API endpoint URL."),
+                        "headersJson" to Schema.string(description = "Optional JSON object of HTTP headers."),
+                        "body" to Schema.string(description = "Optional request body string for POST/PUT/PATCH.")
+                    )
+                ),
+                FunctionDeclaration(
                     name = "browser_open_url",
-                    description = "Opens a website URL or web search query in the integrated Aqua Browser.",
+                    description = "Opens a website URL or web search query visibly in the integrated Aqua Browser UI.",
                     parameters = mapOf(
                         "urlOrQuery" to Schema.string(description = "Full https URL or search query.")
                     )
                 ),
                 FunctionDeclaration(
                     name = "browser_read_current_page",
-                    description = "Extracts the current webpage title, URL, and visible text from the active Aqua Browser tab.",
+                    description = "Extracts the current webpage title, URL, and visible text from the active Aqua Browser tab or its current URL.",
                     parameters = emptyMap()
                 ),
                 FunctionDeclaration(
@@ -569,6 +596,95 @@ class ToolCallingEngine(
                     }
                     onTrace(AgentStepTrace("SMS Draft", name, if (approved) "completed" else "denied", msg))
                     jsonResult(approved, msg)
+                }
+
+                "web_search" -> {
+                    if (!settings.fullInternetAccessEnabled) {
+                        onTrace(AgentStepTrace("Web Search", name, "disabled", "Full Internet Access disabled in Settings"))
+                        return jsonResult(false, "Full Internet Access is currently disabled in Aqua Settings.")
+                    }
+                    val query = argStr("query")
+                    val maxResults = argInt("maxResults", 8)
+                    val res = webClient.searchWeb(query, maxResults).getOrThrow()
+                    val formatted = buildString {
+                        appendLine("Live Web Search Results for '${res.query}':")
+                        if (res.instantAnswer.isNotBlank()) {
+                            appendLine("Instant Summary: ${res.instantAnswer}")
+                            appendLine()
+                        }
+                        res.hits.forEachIndexed { idx, hit ->
+                            appendLine("[${idx + 1}] ${hit.title} (${hit.sourceEngine})")
+                            appendLine("URL: ${hit.url}")
+                            if (hit.snippet.isNotBlank()) appendLine("Snippet: ${hit.snippet}")
+                            appendLine()
+                        }
+                    }.trim()
+                    onTrace(AgentStepTrace("Web Search", name, "completed", "Found ${res.hits.size} live results"))
+                    jsonResult(true, formatted.take(8000))
+                }
+
+                "web_fetch_page" -> {
+                    if (!settings.fullInternetAccessEnabled) {
+                        onTrace(AgentStepTrace("Web Fetch", name, "disabled", "Full Internet Access disabled in Settings"))
+                        return jsonResult(false, "Full Internet Access is currently disabled in Aqua Settings.")
+                    }
+                    val url = argStr("url")
+                    val page = webClient.fetchWebpage(url).getOrThrow()
+                    val formatted = buildString {
+                        appendLine("Title: ${page.title}")
+                        appendLine("URL: ${page.finalUrl} (HTTP ${page.statusCode}, ${page.contentType})")
+                        appendLine()
+                        appendLine(page.textContent.take(6500))
+                        if (page.links.isNotEmpty()) {
+                            appendLine()
+                            appendLine("Top Links:")
+                            page.links.take(10).forEach { link ->
+                                appendLine("- ${link.text}: ${link.href}")
+                            }
+                        }
+                    }.trim()
+                    onTrace(AgentStepTrace("Web Fetch", name, "completed", "Fetched ${page.finalUrl}"))
+                    jsonResult(true, formatted.take(8500))
+                }
+
+                "web_http_request" -> {
+                    if (!settings.fullInternetAccessEnabled) {
+                        onTrace(AgentStepTrace("HTTP Request", name, "disabled", "Full Internet Access disabled in Settings"))
+                        return jsonResult(false, "Full Internet Access is currently disabled in Aqua Settings.")
+                    }
+                    val method = argStr("method").uppercase().ifBlank { "GET" }
+                    val url = argStr("url")
+                    val headersJson = argStr("headersJson").ifBlank { null }
+                    val body = argStr("body").ifBlank { null }
+                    val isReadOnly = method == "GET" || method == "HEAD"
+
+                    if (!isReadOnly) {
+                        val approved = requestAuthorization(
+                            PendingAuthorization(
+                                id = UUID.randomUUID().toString(),
+                                actionTitle = "Authorize Outbound HTTP $method Request",
+                                actionType = "Internet API Mutation",
+                                description = "Review endpoint URL and payload before Aqua transmits this $method request.",
+                                parametersSummary = listOf(
+                                    "Method" to method,
+                                    "URL" to url,
+                                    "Body Preview" to (body ?: "(empty)").take(160)
+                                ),
+                                isFinancialOrSecurity = false,
+                                onApprove = { "User approved HTTP $method" },
+                                onDeny = { "User declined HTTP $method" }
+                            )
+                        )
+                        if (!approved) {
+                            onTrace(AgentStepTrace("HTTP $method", name, "denied", "User declined request"))
+                            return jsonResult(false, "HTTP $method request declined by user.")
+                        }
+                    }
+
+                    val resp = webClient.httpRequest(method, url, headersJson, body).getOrThrow()
+                    val formatted = "HTTP ${resp.statusCode} ${resp.method} ${resp.finalUrl} (${resp.contentType}):\n${resp.body}"
+                    onTrace(AgentStepTrace("HTTP $method", name, "completed", "HTTP ${resp.statusCode} from ${resp.finalUrl}"))
+                    jsonResult(resp.statusCode in 200..399, formatted.take(8500))
                 }
 
                 "browser_open_url" -> {

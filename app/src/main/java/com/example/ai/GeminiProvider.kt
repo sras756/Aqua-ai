@@ -84,10 +84,10 @@ class GeminiProvider(
         if (enableFunctionTools) {
             tools.add(toolCallingEngine.buildToolDeclarations())
         }
-        if (enableSearchGrounding && !enableFunctionTools) {
+        if (enableSearchGrounding && !enableFunctionTools && settings.fullInternetAccessEnabled) {
             tools.add(Tool.googleSearch())
         }
-        if (enableMapsGrounding && !enableFunctionTools) {
+        if (enableMapsGrounding && !enableFunctionTools && settings.fullInternetAccessEnabled) {
             tools.add(Tool.googleMaps())
         }
 
@@ -185,6 +185,7 @@ class GeminiProvider(
                 systemInstruction = systemInstructionText,
                 history = history,
                 userPrompt = userPrompt,
+                enableSearchGrounding = settings.fullInternetAccessEnabled && settings.searchGroundingEnabled,
                 onStreamChunk = onStreamChunk
             )
         }
@@ -269,8 +270,8 @@ class GeminiProvider(
             systemInstructionText = systemInstructionText,
             settings = settings,
             enableFunctionTools = !useGroundingInsteadOfTools && attachment == null,
-            enableSearchGrounding = useGroundingInsteadOfTools && settings.searchGroundingEnabled,
-            enableMapsGrounding = useGroundingInsteadOfTools && settings.mapsGroundingEnabled,
+            enableSearchGrounding = settings.fullInternetAccessEnabled && settings.searchGroundingEnabled && useGroundingInsteadOfTools,
+            enableMapsGrounding = settings.fullInternetAccessEnabled && settings.mapsGroundingEnabled && useGroundingInsteadOfTools,
             userLatLng = userLatLng
         )
 
@@ -396,22 +397,29 @@ class GeminiProvider(
     }
 
     private fun shouldUseWebOrMapsGrounding(prompt: String, settings: UserSettings): Boolean {
+        if (!settings.fullInternetAccessEnabled) return false
         if (!settings.searchGroundingEnabled && !settings.mapsGroundingEnabled) return false
         val lower = prompt.lowercase()
-        val isDeviceOrWalletIntent = listOf(
+
+        // Any explicit URL, REST API call, or action combining web data with device/wallet/workspace stays in Function Calling
+        // where web_search, web_fetch_page, and web_http_request run alongside all Android/Workspace/Wallet tools.
+        val requiresFunctionTools = listOf(
+            "http://", "https://", ".com", ".org", ".io", ".ai", ".dev", "api.", "fetch ", "read page",
             "battery", "volume", "flashlight", "torch", "brightness", "alarm", "reminder",
-            "call ", "sms", "message ", "launch ", "open app", "settings", "notification",
-            "wallet", "balance", "usdt", "transfer", "send crypto", "bitcoin price", "eth price",
-            "browser", "current page", "fill form", "remember",
-            "gmail", "email", "inbox", "calendar", "schedule", "event", "contact",
-            "sheet", "spreadsheet", "google form", "form response", "google chat", "space",
-            "drive", "backup"
+            "call ", "sms", "text ", "launch ", "open app", "settings", "notification", "clipboard", "share ",
+            "wallet", "balance", "usdt", "usdc", "transfer", "send crypto", "portfolio", "tx", "transaction",
+            "address book", "contact", "ens", ".eth", "gas fee", "block height",
+            "browser", "current page", "fill form", "remember", "save note", "memory",
+            "gmail", "email", "inbox", "calendar", "schedule", "event",
+            "sheet", "spreadsheet", "google form", "form response", "google chat", "space", "drive", "backup"
         ).any { lower.contains(it) }
-        if (isDeviceOrWalletIntent) return false
+        if (requiresFunctionTools) return false
 
         val looksLikeSearchOrMaps = listOf(
-            "weather", "news", "latest", "today", "who won", "near me", "nearby",
-            "restaurant", "directions", "coffee shop", "hours", "address of", "current score"
+            "weather", "news", "latest", "today", "yesterday", "this week", "current", "now",
+            "who won", "score", "match", "price of", "stock", "market cap", "release date", "version of",
+            "who is", "what happened", "search", "look up", "find out", "online", "internet", "web",
+            "near me", "nearby", "restaurant", "directions", "coffee shop", "hours", "address of", "map"
         ).any { lower.contains(it) }
         return looksLikeSearchOrMaps
     }
@@ -443,6 +451,7 @@ class GeminiProvider(
         systemInstruction: String,
         history: List<ChatMessage>,
         userPrompt: String,
+        enableSearchGrounding: Boolean,
         onStreamChunk: (String) -> Unit
     ): Result<AgentExecutionResult> = withContext(Dispatchers.IO) {
         runCatching {
@@ -461,6 +470,9 @@ class GeminiProvider(
             val bodyJson = JSONObject().apply {
                 put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", systemInstruction))))
                 put("contents", contents)
+                if (enableSearchGrounding) {
+                    put("tools", JSONArray().put(JSONObject().put("google_search", JSONObject())))
+                }
             }.toString()
 
             val url = "https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent"
@@ -475,16 +487,27 @@ class GeminiProvider(
                     throw IllegalStateException("Direct Gemini API returned HTTP ${resp.code}.")
                 }
                 val respJson = JSONObject(resp.body?.string() ?: "{}")
-                val text = respJson.optJSONArray("candidates")
-                    ?.optJSONObject(0)
+                val firstCand = respJson.optJSONArray("candidates")?.optJSONObject(0)
+                val text = firstCand
                     ?.optJSONObject("content")
                     ?.optJSONArray("parts")
                     ?.optJSONObject(0)
                     ?.optString("text", "")
                     .orEmpty()
                 if (text.isBlank()) throw IllegalStateException("Direct Gemini API returned an empty response.")
+                val sources = mutableListOf<String>()
+                val chunks = firstCand?.optJSONObject("groundingMetadata")?.optJSONArray("groundingChunks")
+                if (chunks != null) {
+                    for (i in 0 until chunks.length()) {
+                        val web = chunks.optJSONObject(i)?.optJSONObject("web") ?: continue
+                        val title = web.optString("title", "")
+                        val uri = web.optString("uri", "")
+                        val label = listOf(title, uri).filter { it.isNotBlank() }.joinToString(" — ")
+                        if (label.isNotBlank() && label !in sources) sources.add(label)
+                    }
+                }
                 onStreamChunk(text)
-                AgentExecutionResult(text, modelName, emptyList(), emptyList())
+                AgentExecutionResult(text, modelName, emptyList(), sources)
             }
         }
     }

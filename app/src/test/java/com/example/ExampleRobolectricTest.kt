@@ -17,6 +17,7 @@ import com.example.data.repository.GoogleWorkspaceRepository
 import com.example.data.repository.WorkspaceService
 import com.example.device.AndroidDeviceController
 import com.example.device.DeviceTelemetry
+import com.example.network.AquaWebClient
 import com.example.skills.SkillParserAndValidator
 import com.example.wallet.FlashWalletConnector
 import com.example.wallet.QrCodeGenerator
@@ -125,13 +126,36 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `browser controller converts search queries cleanly`() {
+    fun `browser controller converts search queries cleanly and parses html reader content`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val browser = AquaBrowserController(context)
+        assertFalse(browser.hasActiveSession.value)
+
         val url = browser.navigateTo("android developer docs")
+        assertTrue(browser.hasActiveSession.value)
         assertTrue(url.startsWith("https://duckduckgo.com/?q="))
+        assertEquals(url, browser.pageState.value.currentUrl)
+
         val direct = browser.navigateTo("example.com")
         assertEquals("https://example.com", direct)
+
+        val html = """
+            <html>
+              <head><title>Aqua &amp; Docs</title><style>body{color:red}</style></head>
+              <body>
+                <h1>Welcome</h1>
+                <script>console.log("ignore")</script>
+                <p>Read <a href="/guide">Android Guide</a> or <a href="javascript:void(0)">Skip</a>.</p>
+              </body>
+            </html>
+        """.trimIndent()
+        val (title, text, links) = AquaBrowserController.parseHtmlForReader(html, "https://example.com/start")
+        assertEquals("Aqua & Docs", title)
+        assertTrue(text.contains("Welcome"))
+        assertFalse(text.contains("console.log"))
+        assertEquals(1, links.size)
+        assertEquals("Android Guide", links.first().text)
+        assertEquals("https://example.com/guide", links.first().href)
     }
 
     @Test
@@ -205,5 +229,44 @@ class ExampleRobolectricTest {
         val link = BrowserLink(text = "Android Docs", href = "https://developer.android.com")
         assertEquals("Android Docs", link.text)
         assertTrue(link.href.startsWith("https://"))
+    }
+
+    @Test
+    fun `web client validates public urls blocks local hosts and parses search hits`() {
+        assertTrue(UserSettings().fullInternetAccessEnabled)
+
+        assertEquals("https://developer.android.com/docs", AquaWebClient.validatePublicHttpUrl("developer.android.com/docs"))
+        assertFalse(AquaWebClient.isPublicInternetHost("localhost"))
+        assertFalse(AquaWebClient.isPublicInternetHost("127.0.0.1"))
+        assertFalse(AquaWebClient.isPublicInternetHost("169.254.169.254"))
+        assertFalse(AquaWebClient.isPublicInternetHost("10.0.0.5"))
+        assertFalse(AquaWebClient.isPublicInternetHost("192.168.1.1"))
+        assertFalse(AquaWebClient.isPublicInternetHost("172.16.0.1"))
+        assertTrue(AquaWebClient.isPublicInternetHost("en.wikipedia.org"))
+
+        val sampleDdgHtml = """
+            <div class="result">
+              <a class="result__a" href="https://duckduckgo.com/l/?uddg=https%3A%2F%2Fkotlinlang.org%2Fdocs%2Fhome.html&amp;rut=1">Kotlin Docs</a>
+              <a class="result__snippet">Official Kotlin documentation &amp; guides.</a>
+            </div>
+        """.trimIndent()
+        val hits = AquaWebClient.parseDuckDuckGoHtml(sampleDdgHtml)
+        assertEquals(1, hits.size)
+        assertEquals("Kotlin Docs", hits.first().title)
+        assertEquals("https://kotlinlang.org/docs/home.html", hits.first().url)
+        assertEquals("Official Kotlin documentation & guides.", hits.first().snippet)
+
+        val prompt = ContextManager.buildSystemInstruction(
+            settings = UserSettings(fullInternetAccessEnabled = true),
+            memories = emptyList(),
+            enabledSkills = emptyList(),
+            activeWallet = null,
+            telemetry = DeviceTelemetry(90, false, true, "Wi-Fi", 60, true, false, false),
+            browserUrl = "https://duckduckgo.com",
+            browserTitle = "Aqua Browser"
+        )
+        assertTrue(prompt.contains("web_search"))
+        assertTrue(prompt.contains("web_fetch_page"))
+        assertTrue(prompt.contains("web_http_request"))
     }
 }

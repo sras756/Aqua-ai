@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.os.Build
 import android.util.Log
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
@@ -39,16 +40,17 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ChromeReaderMode
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FindInPage
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -103,6 +105,7 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
     val pageState by viewModel.browserPageState.collectAsStateWithLifecycle()
     val tabs by viewModel.browserTabs.collectAsStateWithLifecycle()
     val pendingUrl by viewModel.browserController.pendingUrl.collectAsStateWithLifecycle()
+    val hasActiveSession by viewModel.browserController.hasActiveSession.collectAsStateWithLifecycle()
     val readerData by viewModel.browserReaderData.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -113,13 +116,12 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
 
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     var webViewGeneration by remember { mutableIntStateOf(0) }
-    var autoRecoveryCount by remember { mutableIntStateOf(0) }
+    var initialUrlLoadedForGen by remember { mutableIntStateOf(-1) }
     var rendererUnavailable by remember { mutableStateOf(false) }
 
     fun navigateOrRecover(target: String) {
         viewModel.navigateBrowser(target)
         if (rendererUnavailable) {
-            autoRecoveryCount = 0
             rendererUnavailable = false
             webViewGeneration++
         }
@@ -200,9 +202,9 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
             }
             IconButton(
                 onClick = {
-                    if (rendererUnavailable) {
-                        autoRecoveryCount = 0
+                    if (!hasActiveSession || rendererUnavailable) {
                         rendererUnavailable = false
+                        viewModel.browserController.activateSession()
                         webViewGeneration++
                     } else {
                         viewModel.browserController.reload()
@@ -305,7 +307,6 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                             .clickable {
                                 viewModel.browserController.navigateTo(tab.url)
                                 if (rendererUnavailable) {
-                                    autoRecoveryCount = 0
                                     rendererUnavailable = false
                                     webViewGeneration++
                                 }
@@ -337,12 +338,19 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
             }
         }
 
-        LaunchedEffect(pendingUrl, webViewInstance, rendererUnavailable) {
-            val target = pendingUrl
+        LaunchedEffect(pendingUrl, webViewInstance, hasActiveSession, rendererUnavailable, webViewGeneration) {
             val wv = webViewInstance
-            if (target != null && wv != null && !rendererUnavailable) {
-                viewModel.browserController.consumePendingUrl()
-                wv.loadUrl(target)
+            if (wv != null && hasActiveSession && !rendererUnavailable) {
+                val target = pendingUrl
+                if (target != null) {
+                    viewModel.browserController.consumePendingUrl()
+                    initialUrlLoadedForGen = webViewGeneration
+                    wv.post { runCatching { wv.loadUrl(target) } }
+                } else if (initialUrlLoadedForGen != webViewGeneration) {
+                    initialUrlLoadedForGen = webViewGeneration
+                    val urlToLoad = viewModel.browserController.consumePendingUrl() ?: pageState.currentUrl
+                    wv.post { runCatching { wv.loadUrl(urlToLoad) } }
+                }
             }
         }
 
@@ -361,11 +369,11 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
             }
         }
 
-        DisposableEffect(webViewGeneration) {
+        DisposableEffect(webViewGeneration, hasActiveSession) {
             onDispose {
                 val wv = webViewInstance
                 webViewInstance = null
-                safelyDisposeWebView(wv, viewModel.browserController)
+                safelyDisposeWebView(wv, viewModel.browserController, rendererAlreadyGone = false)
             }
         }
 
@@ -401,18 +409,29 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                             color = AquaIceText
                         )
                         Text(
-                            text = "Android terminated the Chromium WebView renderer due to device/emulator memory constraints. You can retry inside Aqua or open the page in your external browser.",
+                            text = "Android terminated the Chromium WebView renderer due to device/emulator memory constraints. You can read the live page natively in Aqua Reader, retry WebView, or open externally.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = AquaMutedText
                         )
+                        Button(
+                            onClick = { viewModel.openBrowserReader() },
+                            colors = ButtonDefaults.buttonColors(containerColor = AquaCyan, contentColor = AquaAbyss),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("browser_reader_fallback_button")
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.ChromeReaderMode, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Read Page in Aqua Reader", fontWeight = FontWeight.Bold)
+                        }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             OutlinedButton(
                                 onClick = {
-                                    autoRecoveryCount = 0
                                     rendererUnavailable = false
+                                    viewModel.browserController.activateSession()
                                     webViewGeneration++
                                 },
                                 modifier = Modifier
@@ -421,35 +440,59 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                             ) {
                                 Text("Retry WebView", color = AquaCyan)
                             }
-                            Button(
+                            OutlinedButton(
                                 onClick = { viewModel.openBrowserUrlExternally(pageState.currentUrl) },
-                                colors = ButtonDefaults.buttonColors(containerColor = AquaCyan, contentColor = AquaAbyss),
                                 modifier = Modifier
                                     .weight(1f)
                                     .testTag("browser_external_fallback_button")
                             ) {
-                                Text("Open External", fontWeight = FontWeight.Bold)
+                                Text("Open External", color = AquaIceText)
                             }
                         }
                     }
                 }
             }
+        } else if (!hasActiveSession) {
+            BrowserStartHub(
+                currentUrl = addressText,
+                onOpenUrl = { url -> navigateOrRecover(url) },
+                onOpenReader = {
+                    viewModel.browserController.updatePageState {
+                        it.copy(currentUrl = viewModel.browserController.normalizeUrlOrSearch(addressText))
+                    }
+                    viewModel.openBrowserReader()
+                },
+                onOpenExternal = {
+                    val resolved = viewModel.browserController.normalizeUrlOrSearch(addressText)
+                    viewModel.openBrowserUrlExternally(resolved)
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            )
         } else {
             key(webViewGeneration) {
                 AndroidView(
                     factory = { ctx ->
                         WebView(ctx).apply {
+                            val onEmulator = isRunningOnEmulator()
+                            if (onEmulator) {
+                                // Prevent SwiftShader/Vulkan/HardwareBuffer GPU compositor crashes in Android Emulators
+                                setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+                            }
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                // Allow Android to reclaim offscreen renderer gracefully instead of killing mid-render
-                                setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_BOUND, true)
-                                settings.safeBrowsingEnabled = !isRunningOnEmulator()
+                                setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
+                                settings.safeBrowsingEnabled = !onEmulator
                             }
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
                             settings.loadsImagesAutomatically = true
                             settings.useWideViewPort = true
                             settings.loadWithOverviewMode = true
-                            settings.cacheMode = WebSettings.LOAD_DEFAULT
+                            settings.mediaPlaybackRequiresUserGesture = true
+                            settings.setGeolocationEnabled(false)
+                            settings.setSupportMultipleWindows(false)
+                            settings.cacheMode = if (onEmulator) WebSettings.LOAD_NO_CACHE else WebSettings.LOAD_DEFAULT
                             settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
 
                             webViewClient = object : WebViewClient() {
@@ -474,7 +517,6 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                                 }
 
                                 override fun onPageFinished(view: WebView?, url: String?) {
-                                    autoRecoveryCount = 0
                                     viewModel.browserController.updatePageState {
                                         it.copy(
                                             currentUrl = url ?: it.currentUrl,
@@ -492,19 +534,14 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                                 ): Boolean {
                                     Log.w("AquaBrowser", "WebView render process gone (didCrash=${detail?.didCrash()})")
                                     webViewInstance = null
-                                    safelyDisposeWebView(view, viewModel.browserController)
+                                    safelyDisposeWebView(view, viewModel.browserController, rendererAlreadyGone = true)
                                     viewModel.browserController.updatePageState {
                                         it.copy(
                                             isLoading = false,
                                             lastError = "Renderer stopped by system memory limits."
                                         )
                                     }
-                                    if (autoRecoveryCount < 1) {
-                                        autoRecoveryCount++
-                                        webViewGeneration++
-                                    } else {
-                                        rendererUnavailable = true
-                                    }
+                                    rendererUnavailable = true
                                     return true
                                 }
                             }
@@ -524,14 +561,13 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                             }
                             viewModel.browserController.attachWebView(this)
                             webViewInstance = this
-                            loadUrl(viewModel.browserController.consumePendingUrl() ?: pageState.currentUrl)
                         }
                     },
                     onRelease = { wv ->
                         if (webViewInstance === wv) {
                             webViewInstance = null
                         }
-                        safelyDisposeWebView(wv, viewModel.browserController)
+                        safelyDisposeWebView(wv, viewModel.browserController, rendererAlreadyGone = false)
                     },
                     modifier = Modifier
                         .weight(1f)
@@ -569,7 +605,7 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                         onClick = { viewModel.speakMessage(extractedText.take(3500)) },
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Filled.VolumeUp, contentDescription = null, tint = AquaCyan, modifier = Modifier.size(16.dp))
+                        Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = AquaCyan, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
                         Text("Listen", color = AquaCyan)
                     }
@@ -673,18 +709,145 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
     }
 }
 
+@Composable
+private fun BrowserStartHub(
+    currentUrl: String,
+    onOpenUrl: (String) -> Unit,
+    onOpenReader: () -> Unit,
+    onOpenExternal: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val quickSites = remember {
+        listOf(
+            "DuckDuckGo" to "https://duckduckgo.com",
+            "Wikipedia" to "https://en.m.wikipedia.org",
+            "CoinGecko" to "https://www.coingecko.com",
+            "GitHub" to "https://github.com",
+            "Android Docs" to "https://developer.android.com"
+        )
+    }
+
+    LazyColumn(
+        modifier = modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Surface(
+                color = AquaCardSurface,
+                shape = RoundedCornerShape(18.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, AquaBorderGlow, RoundedCornerShape(18.dp))
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.Language,
+                            contentDescription = null,
+                            tint = AquaCyan,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "Aqua Browser Hub",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = AquaIceText
+                        )
+                    }
+                    Text(
+                        text = "Enter a URL or search query above, pick a destination below, or extract clean readable text via Aqua Reader without spinning up a full Chromium renderer.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AquaMutedText
+                    )
+                    Button(
+                        onClick = { onOpenUrl(currentUrl) },
+                        colors = ButtonDefaults.buttonColors(containerColor = AquaCyan, contentColor = AquaAbyss),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("browser_launch_webview_button")
+                    ) {
+                        Text("Open Live WebView", fontWeight = FontWeight.Bold)
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = onOpenReader,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("browser_hub_reader_button")
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.ChromeReaderMode, contentDescription = null, tint = AquaTeal, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Aqua Reader", color = AquaTeal)
+                        }
+                        OutlinedButton(
+                            onClick = onOpenExternal,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("browser_hub_external_button")
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = AquaIceText, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("External", color = AquaIceText)
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Text(
+                text = "QUICK LAUNCH",
+                style = MaterialTheme.typography.labelMedium,
+                color = AquaCyan
+            )
+        }
+
+        items(quickSites) { (label, url) ->
+            Surface(
+                color = AquaDeepSurface,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, AquaBorderGlow.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
+                    .clickable { onOpenUrl(url) }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Link, contentDescription = null, tint = AquaTeal, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(label, style = MaterialTheme.typography.titleSmall, color = AquaIceText)
+                        Text(url, style = MaterialTheme.typography.labelSmall, color = AquaMutedText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+    }
+}
+
 private fun safelyDisposeWebView(
     webView: WebView?,
-    controller: AquaBrowserController
+    controller: AquaBrowserController,
+    rendererAlreadyGone: Boolean
 ) {
     if (webView == null || webView.tag == "aqua_webview_disposed") return
     webView.tag = "aqua_webview_disposed"
     controller.detachWebView(webView)
     runCatching {
-        webView.stopLoading()
-        webView.onPause()
-        webView.clearHistory()
-        webView.loadUrl("about:blank")
+        if (!rendererAlreadyGone) {
+            webView.stopLoading()
+            webView.onPause()
+            webView.clearHistory()
+            webView.loadUrl("about:blank")
+        }
         (webView.parent as? ViewGroup)?.removeView(webView)
         webView.removeAllViews()
         webView.destroy()
@@ -694,9 +857,13 @@ private fun safelyDisposeWebView(
 private fun isRunningOnEmulator(): Boolean {
     return Build.FINGERPRINT.contains("generic", ignoreCase = true) ||
         Build.FINGERPRINT.contains("emulator", ignoreCase = true) ||
+        Build.FINGERPRINT.startsWith("unknown", ignoreCase = true) ||
         Build.HARDWARE.contains("ranchu", ignoreCase = true) ||
         Build.HARDWARE.contains("goldfish", ignoreCase = true) ||
+        Build.HARDWARE.contains("vbox", ignoreCase = true) ||
         Build.MODEL.contains("Emulator", ignoreCase = true) ||
         Build.MODEL.contains("Android SDK built for", ignoreCase = true) ||
-        Build.PRODUCT.contains("sdk", ignoreCase = true)
+        Build.PRODUCT.contains("sdk", ignoreCase = true) ||
+        Build.PRODUCT.contains("emulator", ignoreCase = true) ||
+        Build.MANUFACTURER.contains("Genymotion", ignoreCase = true)
 }

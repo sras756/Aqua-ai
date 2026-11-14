@@ -248,6 +248,9 @@ class AquaMainViewModel(
     private val _workspaceStatus = MutableStateFlow<String?>(null)
     val workspaceStatus: StateFlow<String?> = _workspaceStatus.asStateFlow()
 
+    private val _workspaceConsentHelpAccount = MutableStateFlow<String?>(null)
+    val workspaceConsentHelpAccount: StateFlow<String?> = _workspaceConsentHelpAccount.asStateFlow()
+
     private val _workspaceAuthPendingIntent = MutableStateFlow<PendingIntent?>(null)
     val workspaceAuthPendingIntent: StateFlow<PendingIntent?> = _workspaceAuthPendingIntent.asStateFlow()
 
@@ -970,6 +973,7 @@ class AquaMainViewModel(
             }
             .onFailure { err ->
                 _driveBusy.value = false
+                _driveStatusLabel.value = "Drive consent cancelled/blocked — check OAuth Test Users in Google Cloud"
                 _bannerMessage.value = err.localizedMessage ?: "Google Drive consent cancelled."
             }
     }
@@ -1084,15 +1088,21 @@ class AquaMainViewModel(
 
     // --- GOOGLE WORKSPACE (Contacts, Forms, Calendar, Gmail, Sheets, Chat) ---
 
+    fun dismissWorkspaceConsentHelp() {
+        _workspaceConsentHelpAccount.value = null
+    }
+
     fun consumeWorkspaceAuthPendingIntent() {
         _workspaceAuthPendingIntent.value = null
     }
 
-    fun handleWorkspaceConsentResult(intent: Intent?) {
+    fun handleWorkspaceConsentResult(intent: Intent?, resultCode: Int = Activity.RESULT_OK) {
         val actionToRun = pendingWorkspaceAction
         pendingWorkspaceAction = null
-        workspaceRepo.extractTokenFromIntent(intent)
+        val targetIntent = if (resultCode == Activity.RESULT_OK) intent else null
+        workspaceRepo.extractTokenFromIntent(targetIntent)
             .onSuccess { token ->
+                _workspaceConsentHelpAccount.value = null
                 _workspaceStatus.value = "Google Workspace OAuth authorized"
                 if (actionToRun != null) {
                     viewModelScope.launch {
@@ -1107,6 +1117,9 @@ class AquaMainViewModel(
             }
             .onFailure { err ->
                 _workspaceBusy.value = false
+                val signedInEmail = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email.orEmpty()
+                _workspaceConsentHelpAccount.value = signedInEmail.ifBlank { "selected Google account" }
+                _workspaceStatus.value = "OAuth blocked or cancelled (Error 403 / Testing mode)"
                 _bannerMessage.value = err.localizedMessage ?: "Google Workspace consent cancelled."
             }
     }

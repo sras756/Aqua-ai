@@ -11,6 +11,7 @@ data class UserSettings(
     val userId: String = "",
     val preferredModel: String = MODEL_FLASH_38,
     val thinkingEnabled: Boolean = false,
+    val fullInternetAccessEnabled: Boolean = true,
     val searchGroundingEnabled: Boolean = true,
     val mapsGroundingEnabled: Boolean = false,
     val wakeWordEnabled: Boolean = false,
