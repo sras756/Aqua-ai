@@ -23,6 +23,8 @@ data class UserSettings(
     val autonomousReversibleActions: Boolean = true,
     val darkThemeMode: String = "aqua_abyss",
     val useCustomDirectApiKey: Boolean = false,
+    val aiWalletAccessEnabled: Boolean = true,
+    val aiWalletTransferPrepareEnabled: Boolean = true,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
@@ -156,6 +158,7 @@ data class PendingAuthorization(
     val description: String,
     val parametersSummary: List<Pair<String, String>>,
     val isFinancialOrSecurity: Boolean = false,
+    val requiresWalletUnlock: Boolean = false,
     val onApprove: suspend () -> String,
     val onDeny: suspend () -> String
 )

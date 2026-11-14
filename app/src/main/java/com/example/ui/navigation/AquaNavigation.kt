@@ -173,6 +173,7 @@ private fun AuthenticatedAquaShell(
 
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val pendingAuth by viewModel.pendingAuthorization.collectAsStateWithLifecycle()
+    val walletSecuritySettings by viewModel.walletCoordinator.securitySettings.collectAsStateWithLifecycle()
     val bannerMessage by viewModel.bannerMessage.collectAsStateWithLifecycle()
     val navEvent by viewModel.navigateToTabEvent.collectAsStateWithLifecycle()
 
@@ -303,6 +304,9 @@ private fun AuthenticatedAquaShell(
             pendingAuth?.let { auth ->
                 AuthorizationModal(
                     pending = auth,
+                    walletSecuritySettings = walletSecuritySettings,
+                    onUnlockWithPin = { pin -> viewModel.walletCoordinator.unlockWithPin(pin) },
+                    onUnlockWithBiometric = { viewModel.walletCoordinator.unlockWithBiometric() },
                     onApprove = { viewModel.resolvePendingAuthorization(true) },
                     onDeny = { viewModel.resolvePendingAuthorization(false) }
                 )

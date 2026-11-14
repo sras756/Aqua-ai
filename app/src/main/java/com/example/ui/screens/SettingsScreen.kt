@@ -2,7 +2,9 @@ package com.example.ui.screens
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,22 +18,29 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.BrightnessMedium
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Policy
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SettingsApplications
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -52,6 +61,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -112,6 +122,7 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
     val languages = listOf("en-US", "en-GB", "es-ES", "fr-FR", "de-DE", "ja-JP", "ko-KR", "zh-CN")
 
     var brightnessSlider by remember { mutableFloatStateOf(75f) }
+    var activeLegalDialog by remember { mutableStateOf<String?>(null) }
 
     val micAndNotifLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -270,6 +281,29 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                             subtitle = "Allow Aqua to run reversible tools automatically. Irreversible financial/security actions always ask.",
                             checked = settings.autonomousReversibleActions,
                             onCheckedChange = { viewModel.updateSettings(settings.copy(autonomousReversibleActions = it)) }
+                        )
+                        SettingSwitchRow(
+                            title = "Crypto Wallet Access for Aqua AI",
+                            subtitle = "Allow Aqua AI to read multi-chain balances, receive addresses, telemetry, ENS, allowances, and tx history (zero-key access).",
+                            checked = settings.aiWalletAccessEnabled,
+                            onCheckedChange = { enabled ->
+                                viewModel.updateSettings(
+                                    settings.copy(
+                                        aiWalletAccessEnabled = enabled,
+                                        aiWalletTransferPrepareEnabled = if (enabled) settings.aiWalletTransferPrepareEnabled else false
+                                    )
+                                )
+                            }
+                        )
+                        SettingSwitchRow(
+                            title = "Allow AI to Prepare Transfers & Revokes",
+                            subtitle = "Allow Aqua AI to draft unsigned transfers and ERC-20 revokes. Always requires your explicit confirmation & PIN/Biometrics.",
+                            checked = settings.aiWalletAccessEnabled && settings.aiWalletTransferPrepareEnabled,
+                            onCheckedChange = { enabled ->
+                                if (settings.aiWalletAccessEnabled) {
+                                    viewModel.updateSettings(settings.copy(aiWalletTransferPrepareEnabled = enabled))
+                                }
+                            }
                         )
                     }
                 }
@@ -561,6 +595,121 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                     }
                 }
             }
+
+            // Legal, Privacy Policy & Terms and Conditions
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = AquaCardSurface),
+                    shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, AquaBorderGlow, RoundedCornerShape(18.dp))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Policy, contentDescription = null, tint = AquaCyan)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Legal, Privacy Policy & Terms", style = MaterialTheme.typography.titleMedium, color = AquaIceText)
+                        }
+                        Text(
+                            text = "Review how Aqua AI handles Google account data, Gemini AI requests, and non-custodial wallet keys, along with our Terms & Conditions.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = AquaMutedText
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { activeLegalDialog = "privacy" },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("settings_privacy_policy_button")
+                            ) {
+                                Icon(Icons.Filled.Policy, contentDescription = null, tint = AquaCyan, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Privacy Policy", color = AquaCyan)
+                            }
+                            OutlinedButton(
+                                onClick = { activeLegalDialog = "terms" },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("settings_terms_conditions_button")
+                            ) {
+                                Icon(Icons.Filled.Description, contentDescription = null, tint = AquaCyan, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Terms & Conditions", color = AquaCyan)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (activeLegalDialog != null) {
+            val isPrivacy = activeLegalDialog == "privacy"
+            val externalUrl = if (isPrivacy) {
+                "https://sras756.github.io/aqua-ai/privacy.html"
+            } else {
+                "https://sras756.github.io/aqua-ai/terms.html"
+            }
+            AlertDialog(
+                onDismissRequest = { activeLegalDialog = null },
+                containerColor = AquaCardSurface,
+                title = {
+                    Text(
+                        text = if (isPrivacy) "Privacy Policy — Aqua AI" else "Terms & Conditions — Aqua AI",
+                        color = AquaIceText
+                    )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 400.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        if (isPrivacy) {
+                            Text("Effective Date: November 14, 2026\nApp Package: com.aistudio.aquaai.vqrzmn\nContact: srasmarkhor7289@gmail.com", style = MaterialTheme.typography.labelMedium, color = AquaCyan)
+                            Text("1. Account & AI Processing: Sign-in uses Firebase Authentication to sync settings, memories, and conversations. Prompts and attachments are processed via Gemini / Firebase AI Logic when you interact with the assistant.", style = MaterialTheme.typography.bodySmall, color = AquaMutedText)
+                            Text("2. Google Workspace & Drive Limited Use: Google Drive (drive.appdata, drive.file) and Google Workspace APIs (Gmail, Calendar, Contacts, Sheets, Forms, Chat) are accessed only when explicitly connected by you and strictly adhere to the Google API Services User Data Policy (Limited Use). Data is never sold or used for ads.", style = MaterialTheme.typography.bodySmall, color = AquaMutedText)
+                            Text("3. Self-Custodial Wallet Keys: Mnemonics and private keys are created on-device and encrypted locally via Android Keystore. Seeds, keys, and PINs are never sent to AI models, Firebase, or third parties.", style = MaterialTheme.typography.bodySmall, color = AquaMutedText)
+                            Text("4. Controls & Deletion: You can pause AI internet or wallet access anytime, clear conversations, revoke OAuth grants in your Google Account, or email srasmarkhor7289@gmail.com for data deletion.", style = MaterialTheme.typography.bodySmall, color = AquaMutedText)
+                        } else {
+                            Text("Effective Date: November 14, 2026\nApp Package: com.aistudio.aquaai.vqrzmn\nContact: srasmarkhor7289@gmail.com", style = MaterialTheme.typography.labelMedium, color = AquaCyan)
+                            Text("1. Acceptance of Terms: By using Aqua AI, you agree to these Terms & Conditions and our Privacy Policy.", style = MaterialTheme.typography.bodySmall, color = AquaMutedText)
+                            Text("2. AI & External Actions: Verify AI outputs before acting on critical decisions. High-impact actions (sending messages, mutations, or signing transactions) require explicit confirmation.", style = MaterialTheme.typography.bodySmall, color = AquaMutedText)
+                            Text("3. Non-Custodial Wallet Responsibility: Aqua Wallet is self-custodial software. You alone are responsible for backing up your recovery phrase and securing your PIN. Blockchain transfers and approvals/revocations are irreversible once broadcast, and market data is not financial advice.", style = MaterialTheme.typography.bodySmall, color = AquaMutedText)
+                            Text("4. Third-Party Services & Liability: Public RPC nodes, CoinGecko, and Google Workspace services remain subject to their respective availability and terms. Aqua AI is provided as-is without implied warranties.", style = MaterialTheme.typography.bodySmall, color = AquaMutedText)
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { activeLegalDialog = null },
+                        colors = ButtonDefaults.buttonColors(containerColor = AquaCyan, contentColor = AquaAbyss)
+                    ) {
+                        Text("Close")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            runCatching {
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(externalUrl)))
+                            }
+                        }
+                    ) {
+                        Icon(Icons.Filled.OpenInBrowser, contentDescription = null, tint = AquaCyan, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Open Web Page", color = AquaCyan)
+                    }
+                }
+            )
         }
     }
 }

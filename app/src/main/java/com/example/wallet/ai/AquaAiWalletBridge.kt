@@ -2,6 +2,8 @@ package com.example.wallet.ai
 
 import com.example.wallet.core.AddressRiskReport
 import com.example.wallet.core.AquaWalletEngine
+import com.example.wallet.core.ChainFamily
+import com.example.wallet.core.DisplayFiatCurrency
 import com.example.wallet.core.FeeEstimate
 import com.example.wallet.core.NetworkConfig
 import com.example.wallet.core.PortfolioSummary
@@ -18,15 +20,20 @@ import java.util.Locale
  * Security-isolated AI access bridge for Aqua Wallet.
  *
  * Strictly enforced capabilities:
- * - READ ONLY: balances, portfolio analytics, transaction history, network/token metadata,
- *   fee estimation, and recipient risk checks.
- * - GATED PREPARE: unsigned transaction preparation (`prepareUnsignedTransaction`) only;
- *   cannot bypass explicit user authorization, cannot sign autonomously, cannot access
- *   mnemonics/seeds/private keys, cannot alter spending limits, and cannot unlock emergency lock.
+ * - READ ONLY: balances, portfolio analytics, receive addresses, transaction history & status,
+ *   network/token metadata, EVM chain telemetry, ENS resolution, ERC-20 allowance audits,
+ *   CoinGecko market charts, fee estimation, and recipient risk checks.
+ * - GATED PREPARE: unsigned transaction preparation & ERC-20 approve(0) revoke preparation only;
+ *   cannot bypass explicit user authorization or PIN/Biometrics, cannot access mnemonics/seeds/private
+ *   keys, cannot alter spending limits, and cannot unlock emergency lock.
  */
 class AquaAiWalletBridge(
     private val engine: AquaWalletEngine
 ) {
+
+    fun isVaultLockedForSigning(): Boolean = engine.vault.isWalletLocked()
+
+    fun isEmergencyLocked(): Boolean = engine.vault.getSecuritySettings().emergencyLocked
 
     fun activeWalletAndAccount(): Pair<WalletMetadata, WalletAccountInfo>? {
         val settings = engine.vault.getSecuritySettings()
@@ -61,9 +68,75 @@ class AquaAiWalletBridge(
             if (account.solanaAddress.isNotBlank()) appendLine("- Solana: ${account.solanaAddress}")
             if (account.bitcoinMainnetAddress.isNotBlank()) appendLine("- Bitcoin Mainnet (SegWit): ${account.bitcoinMainnetAddress}")
             if (account.bitcoinTestnetAddress.isNotBlank()) appendLine("- Bitcoin Testnet4 (SegWit): ${account.bitcoinTestnetAddress}")
-            appendLine("Security Posture: PIN=${settings.hasPin}, Biometric=${settings.biometricEnabled}, EmergencyLock=${settings.emergencyLocked}, BackupVerified=${meta.backupVerified}")
+            appendLine("Security Posture: PIN=${settings.hasPin}, Biometric=${settings.biometricEnabled}, VaultLocked=${engine.vault.isWalletLocked()}, EmergencyLock=${settings.emergencyLocked}, BackupVerified=${meta.backupVerified}")
             appendLine("Limits: Per-Tx=$${"%.2f".format(Locale.US, settings.perTxLimitUsd)}, Daily=$${"%.2f".format(Locale.US, settings.dailyLimitUsd)} (Spent Today=$${"%.2f".format(Locale.US, settings.spentTodayUsd)})")
         }
+    }
+
+    suspend fun getReceiveAddressesText(): Result<String> = runCatching {
+        val allWallets = engine.vault.getAllWallets()
+        if (allWallets.isEmpty()) {
+            throw IllegalStateException("No Aqua Wallet created or imported yet. Open the Wallet tab to create or import one.")
+        }
+        val (meta, account) = activeWalletAndAccount()!!
+        val settings = engine.vault.getSecuritySettings()
+        val activeNet = activeNetwork()
+        val accounts = engine.vault.getAccountsForWallet(meta.walletId)
+        val networks = engine.getAvailableNetworks(settings.testnetModeEnabled)
+
+        buildString {
+            appendLine("Active Wallet: ${meta.label} (${if (meta.isWatchOnly) "Watch-Only" else "Self-Custody"})")
+            appendLine("Active Account: ${account.label} (index #${account.accountIndex})")
+            appendLine("Active Network: ${activeNet.name} (${activeNet.id})")
+            appendLine("Public Receive Addresses:")
+            if (account.evmAddress.isNotBlank()) {
+                appendLine("- EVM (Ethereum, BSC, Polygon, Base, Arbitrum): ${account.evmAddress}")
+            }
+            if (account.solanaAddress.isNotBlank()) {
+                appendLine("- Solana (SOL & SPL): ${account.solanaAddress}")
+            }
+            if (account.bitcoinMainnetAddress.isNotBlank()) {
+                appendLine("- Bitcoin Mainnet (SegWit): ${account.bitcoinMainnetAddress}")
+            }
+            if (account.bitcoinTestnetAddress.isNotBlank()) {
+                appendLine("- Bitcoin Testnet4 (SegWit): ${account.bitcoinTestnetAddress}")
+            }
+            if (accounts.size > 1) {
+                appendLine("Accounts in ${meta.label}: ${accounts.joinToString { "${it.label} (#${it.accountIndex})" }}")
+            }
+            if (allWallets.size > 1) {
+                appendLine("All Wallets in Vault: ${allWallets.joinToString { it.label }}")
+            }
+            appendLine("Enabled Networks (${networks.size}, Testnets=${settings.testnetModeEnabled}): ${networks.joinToString { "${it.name} [${it.id}]" }}")
+        }
+    }
+
+    suspend fun switchActiveNetworkText(networkQuery: String): Result<String> = runCatching {
+        val target = resolveNetwork(networkQuery)
+        val s = engine.vault.getSecuritySettings()
+        val enableTestnet = s.testnetModeEnabled || target.isTestnet
+        engine.vault.updateSecuritySettings(
+            s.copy(activeNetworkId = target.id, testnetModeEnabled = enableTestnet)
+        )
+        "Active Aqua Wallet network switched to ${target.name} (${target.id}, ${target.chainFamily.name})."
+    }
+
+    suspend fun switchActiveAccountText(accountQuery: String): Result<String> = runCatching {
+        val (meta, _) = activeWalletAndAccount()
+            ?: throw IllegalStateException("No Aqua Wallet initialized.")
+        val accounts = engine.vault.getAccountsForWallet(meta.walletId)
+        val q = accountQuery.trim()
+        val indexGuess = q.removePrefix("#").toIntOrNull()
+        val target = accounts.firstOrNull { acc ->
+            (indexGuess != null && acc.accountIndex == indexGuess) ||
+                acc.label.equals(q, ignoreCase = true) ||
+                acc.label.contains(q, ignoreCase = true)
+        } ?: throw IllegalArgumentException(
+            "Account '$accountQuery' not found in '${meta.label}'. Available: ${accounts.joinToString { "${it.label} (#${it.accountIndex})" }}"
+        )
+        val s = engine.vault.getSecuritySettings()
+        engine.vault.updateSecuritySettings(s.copy(activeAccountIndex = target.accountIndex))
+        "Switched active account in '${meta.label}' to ${target.label} (index #${target.accountIndex}). EVM: ${target.evmAddress}"
     }
 
     suspend fun getPortfolioSummaryText(includeTestnets: Boolean? = null): Result<String> = runCatching {
@@ -115,10 +188,44 @@ class AquaAiWalletBridge(
             buildString {
                 appendLine("Transactions (${filtered.size}, filter=$normalized):")
                 filtered.take(20).forEach { tx ->
-                    appendLine("- [${tx.status}] ${tx.networkName}: ${tx.amountDisplay} | ${tx.direction} | fee=${tx.feeDisplay} | conf=${tx.confirmations} | hash=${tx.txHash.take(18)}...")
+                    appendLine("- [${tx.status}] ${tx.networkName}: ${tx.amountDisplay} | ${tx.direction} | fee=${tx.feeDisplay} | conf=${tx.confirmations} | hash=${tx.txHash}")
                 }
             }
         }
+    }
+
+    suspend fun checkTxStatusText(txHash: String, networkQuery: String): Result<String> = runCatching {
+        val cleanHash = txHash.trim()
+        require(cleanHash.isNotBlank()) { "Transaction hash is required." }
+        val (meta, account) = activeWalletAndAccount()
+            ?: throw IllegalStateException("No wallet initialized.")
+        val settings = engine.vault.getSecuritySettings()
+        val synced = engine.syncTransactionHistory(meta.walletId, account, settings.testnetModeEnabled)
+        val cached = synced.firstOrNull { it.txHash.equals(cleanHash, ignoreCase = true) }
+        if (cached != null) {
+            val refreshed = engine.refreshSingleTxStatus(cached).getOrElse { cached }
+            return@runCatching "Transaction ${refreshed.txHash} on ${refreshed.networkName}: Status=${refreshed.status}, Confirmations=${refreshed.confirmations}, Amount=${refreshed.amountDisplay}, Fee=${refreshed.feeDisplay}, Explorer=${refreshed.explorerUrl}"
+        }
+        val net = if (networkQuery.isNotBlank()) resolveNetwork(networkQuery) else activeNetwork()
+        val placeholder = WalletTxRecord(
+            txHash = cleanHash,
+            idempotencyKey = "lookup_${cleanHash.take(12)}",
+            walletId = meta.walletId,
+            networkId = net.id,
+            networkName = net.name,
+            fromAddress = account.addressFor(net),
+            toAddress = "",
+            assetSymbol = net.nativeSymbol,
+            amountDisplay = "",
+            feeDisplay = "",
+            status = TxStatus.PENDING,
+            confirmations = 0,
+            timestampMs = System.currentTimeMillis(),
+            explorerUrl = "${net.explorerBaseUrl.trimEnd('/')}/tx/$cleanHash",
+            direction = com.example.wallet.core.TxDirection.OUTBOUND
+        )
+        val live = engine.adapterFor(net.chainFamily).fetchTransactionStatus(cleanHash, placeholder, net).getOrThrow()
+        "Transaction ${live.txHash} on ${live.networkName}: Status=${live.status}, Confirmations=${live.confirmations}, Explorer=${live.explorerUrl}"
     }
 
     suspend fun analyzePortfolioText(): Result<String> = runCatching {
@@ -196,6 +303,74 @@ class AquaAiWalletBridge(
         }
     }
 
+    suspend fun getEvmTelemetryText(networkQuery: String): Result<String> = runCatching {
+        val net = if (networkQuery.isNotBlank()) resolveNetwork(networkQuery) else activeNetwork()
+        require(net.chainFamily == ChainFamily.EVM) {
+            "${net.name} is a ${net.chainFamily.name} network; EVM gas/nonce telemetry applies to EVM chains."
+        }
+        val (_, account) = activeWalletAndAccount()
+            ?: throw IllegalStateException("No wallet account initialized.")
+        val telemetry = engine.utilities.fetchEvmTelemetry(account.evmAddress, net).getOrThrow()
+        "Live EVM Telemetry (${net.name}): Block #${telemetry.blockNumber} | Gas=${telemetry.gasPriceGwei.stripTrailingZeros().toPlainString()} Gwei | Confirmed Nonce=${telemetry.confirmedNonce} | Pending Nonce=${telemetry.pendingNonce} | Address=${account.evmAddress}"
+    }
+
+    suspend fun resolveEnsText(ensName: String): Result<String> = runCatching {
+        val resolved = engine.utilities.resolveEnsName(ensName).getOrThrow()
+        "ENS '${ensName.trim()}' resolves on Ethereum Mainnet to $resolved"
+    }
+
+    suspend fun checkTokenAllowanceText(
+        tokenQuery: String,
+        spenderAddress: String,
+        networkQuery: String
+    ): Result<String> = runCatching {
+        val (_, account) = activeWalletAndAccount()
+            ?: throw IllegalStateException("No wallet account initialized.")
+        val net = if (networkQuery.isNotBlank()) resolveNetwork(networkQuery) else activeNetwork()
+        require(net.chainFamily == ChainFamily.EVM) { "ERC-20 allowance checks require an EVM network." }
+        val tokens = engine.getTokensForNetwork(net.id)
+        val token = resolveToken(tokens, tokenQuery, net)
+        require(!token.isNative && token.contractOrMintAddress.isNotBlank()) {
+            "Select an ERC-20 token contract (e.g. USDT, USDC) on ${net.name}."
+        }
+        val resolvedSpender = resolveDestinationAddress(spenderAddress, net)
+        val res = engine.utilities.fetchErc20Allowance(account.evmAddress, token, resolvedSpender, net).getOrThrow()
+        "ERC-20 Allowance on ${net.name}: Owner=${res.ownerAddress} | Token=${res.tokenSymbol} (${res.tokenContract}) | Spender=${res.spenderAddress} | Allowance=${res.formattedAllowance} | UnlimitedRisk=${res.isUnlimited}"
+    }
+
+    suspend fun prepareRevokeAllowance(
+        tokenQuery: String,
+        spenderAddress: String,
+        networkQuery: String
+    ): Result<PreparedChainTransaction> = runCatching {
+        val (meta, account) = activeWalletAndAccount()
+            ?: throw IllegalStateException("No wallet initialized in Aqua Vault.")
+        val net = if (networkQuery.isNotBlank()) resolveNetwork(networkQuery) else activeNetwork()
+        val tokens = engine.getTokensForNetwork(net.id)
+        val token = resolveToken(tokens, tokenQuery, net)
+        val resolvedSpender = resolveDestinationAddress(spenderAddress, net)
+        engine.utilities.prepareErc20RevokeApproval(meta, account, net, token, resolvedSpender).getOrThrow()
+    }
+
+    suspend fun getMarketChartText(
+        coinOrSymbol: String,
+        days: Int = 7,
+        fiatCode: String = "USD"
+    ): Result<String> = runCatching {
+        val clean = coinOrSymbol.trim().ifBlank { "bitcoin" }
+        val coinId = engine.marketPriceService.normalizeCoinId(clean)
+        val boundedDays = days.coerceIn(1, 365)
+        val chart = engine.marketPriceService.fetchMarketChart(coinId, clean.uppercase(), boundedDays).getOrThrow()
+        val currency = DisplayFiatCurrency.fromCode(fiatCode)
+        val fxRate = if (currency == DisplayFiatCurrency.USD) 1.0 else {
+            engine.marketPriceService.fetchFiatRateFromUsd(currency).getOrDefault(1.0)
+        }
+        val usedCurrency = if (currency != DisplayFiatCurrency.USD && fxRate > 0.0) currency else DisplayFiatCurrency.USD
+        val mult = if (usedCurrency == DisplayFiatCurrency.USD) 1.0 else fxRate
+        val sym = usedCurrency.symbol
+        "CoinGecko Market Chart (${clean.uppercase()} / ${usedCurrency.code}, ${chart.days}d): Spot=$sym${"%,.4f".format(Locale.US, chart.currentPriceUsd * mult)} | PeriodChange=${"%+.2f".format(Locale.US, chart.periodChangePct)}% | Low=$sym${"%,.4f".format(Locale.US, chart.lowUsd * mult)} | High=$sym${"%,.4f".format(Locale.US, chart.highUsd * mult)} | Samples=${chart.points.size}"
+    }
+
     suspend fun getTokenInfoText(symbolOrAddress: String, networkQuery: String): Result<String> = runCatching {
         val q = symbolOrAddress.trim()
         require(q.isNotBlank()) { "Token symbol or contract/mint address is required." }
@@ -255,10 +430,26 @@ class AquaAiWalletBridge(
         }
     }
 
+    suspend fun saveAddressBookContact(
+        label: String,
+        chainFamilyName: String,
+        address: String,
+        note: String = ""
+    ): Result<String> = runCatching {
+        val family = when (chainFamilyName.trim().uppercase()) {
+            "EVM", "ETH", "ETHEREUM", "BSC", "POLYGON", "BASE", "ARBITRUM" -> ChainFamily.EVM
+            "SOL", "SOLANA" -> ChainFamily.SOLANA
+            "BTC", "BITCOIN" -> ChainFamily.BITCOIN
+            else -> throw IllegalArgumentException("Specify chainFamily as EVM, SOLANA, or BITCOIN.")
+        }
+        val entry = engine.utilities.saveContact(label, family, address, note).getOrThrow()
+        "Saved '${entry.label}' (${entry.chainFamily.name}: ${entry.address}) to Aqua Wallet Address Book."
+    }
+
     private suspend fun resolveDestinationAddress(rawDest: String, net: NetworkConfig): String {
         val clean = rawDest.trim()
         if (clean.isBlank()) return clean
-        if (net.chainFamily == com.example.wallet.core.ChainFamily.EVM && clean.endsWith(".eth", ignoreCase = true)) {
+        if (net.chainFamily == ChainFamily.EVM && clean.endsWith(".eth", ignoreCase = true)) {
             return engine.utilities.resolveEnsName(clean).getOrThrow()
         }
         if (!engine.adapterFor(net.chainFamily).validateAddress(clean, net)) {

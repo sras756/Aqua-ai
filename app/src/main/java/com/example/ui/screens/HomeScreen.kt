@@ -209,8 +209,11 @@ fun HomeScreen(
                     Text(
                         text = when {
                             !telemetry.isOnline -> "OFFLINE"
-                            settings.fullInternetAccessEnabled -> "ONLINE • ${telemetry.connectionType} • FULL WEB"
-                            else -> "ONLINE • ${telemetry.connectionType} • WEB PAUSED"
+                            else -> {
+                                val webLabel = if (settings.fullInternetAccessEnabled) "FULL WEB" else "WEB PAUSED"
+                                val walletLabel = if (settings.aiWalletAccessEnabled) "WALLET AI" else "WALLET PAUSED"
+                                "ONLINE • ${telemetry.connectionType} • $webLabel • $walletLabel"
+                            }
                         },
                         style = MaterialTheme.typography.labelMedium,
                         color = if (telemetry.isOnline) AquaMintSuccess else AquaCoralError,

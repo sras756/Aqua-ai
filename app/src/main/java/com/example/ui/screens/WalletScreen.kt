@@ -80,6 +80,7 @@ private val WALLET_SECTIONS = listOf(
 @Composable
 fun WalletScreen(viewModel: AquaMainViewModel) {
     val coordinator = viewModel.walletCoordinator
+    val userSettings by viewModel.settings.collectAsStateWithLifecycle()
     val wallets by coordinator.wallets.collectAsStateWithLifecycle()
     val accounts by coordinator.accounts.collectAsStateWithLifecycle()
     val securitySettings by coordinator.securitySettings.collectAsStateWithLifecycle()
@@ -121,6 +122,10 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
     var sendToAddress by rememberSaveable { mutableStateOf("") }
     var sendAmount by rememberSaveable { mutableStateOf("") }
     var sendTokensList by remember { mutableStateOf(tokens) }
+
+    LaunchedEffect(Unit) {
+        coordinator.reloadAll()
+    }
 
     LaunchedEffect(securitySettings.activeNetworkId, networks) {
         if (networks.none { it.id == sendNetworkId }) {
@@ -411,6 +416,8 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
                             )
 
                             6 -> WalletAiAssistantSection(
+                                settings = userSettings,
+                                onUpdateSettings = { viewModel.updateSettings(it) },
                                 onSendAiWalletPrompt = { prompt ->
                                     viewModel.startNewConversation()
                                     viewModel.sendMessage(prompt)

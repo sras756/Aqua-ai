@@ -407,8 +407,11 @@ class GeminiProvider(
             "http://", "https://", ".com", ".org", ".io", ".ai", ".dev", "api.", "fetch ", "read page",
             "battery", "volume", "flashlight", "torch", "brightness", "alarm", "reminder",
             "call ", "sms", "text ", "launch ", "open app", "settings", "notification", "clipboard", "share ",
-            "wallet", "balance", "usdt", "usdc", "transfer", "send crypto", "portfolio", "tx", "transaction",
-            "address book", "contact", "ens", ".eth", "gas fee", "block height",
+            "wallet", "crypto", "balance", "portfolio", "tx", "transaction", "transfer", "send ",
+            "receive", "my address", "bitcoin", "btc", "ethereum", "eth", "solana", "sol", "bnb",
+            "polygon", "pol", "matic", "arbitrum", "base", "usdt", "usdc", "token", "coin",
+            "address book", "contact", "ens", ".eth", "gas", "gwei", "nonce", "block height",
+            "allowance", "revoke", "approve", "switch network", "switch account", "seed", "mnemonic",
             "browser", "current page", "fill form", "remember", "save note", "memory",
             "gmail", "email", "inbox", "calendar", "schedule", "event",
             "sheet", "spreadsheet", "google form", "form response", "google chat", "space", "drive", "backup"

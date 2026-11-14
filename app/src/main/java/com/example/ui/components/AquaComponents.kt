@@ -36,7 +36,9 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Security
@@ -71,11 +73,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.fragment.app.FragmentActivity
 import com.example.data.model.AquaCoreState
 import com.example.data.model.ChatMessage
 import com.example.data.model.ImportedAttachment
@@ -91,6 +97,8 @@ import com.example.ui.theme.AquaDeepSurface
 import com.example.ui.theme.AquaIceText
 import com.example.ui.theme.AquaMutedText
 import com.example.ui.theme.AquaTeal
+import com.example.wallet.core.WalletSecuritySettings
+import com.example.wallet.security.BiometricAuthHelper
 import org.json.JSONArray
 import kotlin.math.cos
 import kotlin.math.sin
@@ -597,9 +605,22 @@ fun ChatMessageBubble(
 @Composable
 fun AuthorizationModal(
     pending: PendingAuthorization,
+    walletSecuritySettings: WalletSecuritySettings? = null,
+    onUnlockWithPin: (String) -> Boolean = { false },
+    onUnlockWithBiometric: () -> Unit = {},
     onApprove: () -> Unit,
     onDeny: () -> Unit
 ) {
+    val context = LocalContext.current
+    val activity = context as? FragmentActivity
+    var pinInput by remember(pending.id) { mutableStateOf("") }
+    var unlockError by remember(pending.id) { mutableStateOf<String?>(null) }
+
+    val hasPin = walletSecuritySettings?.hasPin == true
+    val canBiometric = walletSecuritySettings?.biometricEnabled == true &&
+        activity != null &&
+        BiometricAuthHelper.isBiometricAvailable(context)
+
     AlertDialog(
         onDismissRequest = onDeny,
         containerColor = AquaDeepSurface,
@@ -656,18 +677,113 @@ fun AuthorizationModal(
                         }
                     }
                 }
+
+                if (pending.requiresWalletUnlock) {
+                    Surface(
+                        color = AquaCardSurface,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, AquaAmber.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Lock, contentDescription = null, tint = AquaAmber, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "Wallet Vault Unlock Required",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = AquaAmber,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            if (hasPin) {
+                                OutlinedTextField(
+                                    value = pinInput,
+                                    onValueChange = {
+                                        pinInput = it.filter { ch -> ch.isDigit() }.take(12)
+                                        unlockError = null
+                                    },
+                                    label = { Text("Enter Wallet PIN") },
+                                    singleLine = true,
+                                    visualTransformation = PasswordVisualTransformation(),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = AquaCyan,
+                                        unfocusedBorderColor = AquaBorderGlow,
+                                        focusedTextColor = AquaIceText,
+                                        unfocusedTextColor = AquaIceText
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("auth_wallet_pin_input")
+                                )
+                            }
+                            if (canBiometric && activity != null) {
+                                OutlinedButton(
+                                    onClick = {
+                                        BiometricAuthHelper.authenticate(
+                                            activity = activity,
+                                            title = "Authorize Aqua Wallet Signing",
+                                            subtitle = "Verify on-device biometrics to execute transaction",
+                                            onSuccess = {
+                                                onUnlockWithBiometric()
+                                                onApprove()
+                                            },
+                                            onError = { err -> unlockError = err }
+                                        )
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp)
+                                        .testTag("auth_wallet_biometric_button")
+                                ) {
+                                    Icon(Icons.Filled.Fingerprint, contentDescription = null, tint = AquaCyan)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Biometric Unlock & Execute", color = AquaCyan)
+                                }
+                            }
+                            if (!unlockError.isNullOrBlank()) {
+                                Text(
+                                    text = unlockError.orEmpty(),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = AquaCoralError
+                                )
+                            }
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
             Button(
-                onClick = onApprove,
+                onClick = {
+                    if (pending.requiresWalletUnlock) {
+                        if (!hasPin) {
+                            unlockError = "Use biometric verification above to unlock this vault."
+                            return@Button
+                        }
+                        if (!onUnlockWithPin(pinInput)) {
+                            unlockError = "Incorrect Wallet PIN."
+                            return@Button
+                        }
+                    }
+                    onApprove()
+                },
+                enabled = !pending.requiresWalletUnlock || !hasPin || pinInput.length >= 4,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (pending.isFinancialOrSecurity) AquaAmber else AquaCyan,
                     contentColor = AquaAbyss
                 ),
                 modifier = Modifier.testTag("auth_approve_button")
             ) {
-                Text("Authorize & Execute", fontWeight = FontWeight.Bold)
+                Text(
+                    text = if (pending.requiresWalletUnlock && hasPin) "Unlock & Execute" else "Authorize & Execute",
+                    fontWeight = FontWeight.Bold
+                )
             }
         },
         dismissButton = {

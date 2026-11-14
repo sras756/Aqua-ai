@@ -65,6 +65,7 @@ import com.example.ui.theme.AquaIceText
 import com.example.ui.theme.AquaMintSuccess
 import com.example.ui.theme.AquaMutedText
 import com.example.ui.theme.AquaTeal
+import com.example.data.model.UserSettings
 import com.example.wallet.core.AquaWalletCoordinator
 import com.example.wallet.core.DefaultWalletRegistry
 import com.example.wallet.core.WalletAccountInfo
@@ -75,14 +76,18 @@ import java.util.Locale
 
 @Composable
 fun WalletAiAssistantSection(
+    settings: UserSettings = UserSettings(),
+    onUpdateSettings: (UserSettings) -> Unit = {},
     onSendAiWalletPrompt: (String) -> Unit
 ) {
     var customPrompt by remember { mutableStateOf("") }
     val presets = listOf(
+        "Show my EVM, Solana, and Bitcoin receiving addresses and active network.",
         "Analyze my wallet portfolio allocation, concentration, and security posture.",
+        "Check live EVM gas price, block height, and my account nonce on Ethereum.",
         "Check live gas and network transfer fees across Ethereum, Solana, and Bitcoin.",
         "Inspect my pending and confirmed wallet transaction history.",
-        "Compare Ethereum vs Arbitrum vs Base network fees and token support."
+        "Show the 7-day CoinGecko market chart for ETH and SOL in USD."
     )
 
     LazyColumn(
@@ -98,17 +103,77 @@ fun WalletAiAssistantSection(
                 shape = RoundedCornerShape(18.dp),
                 modifier = Modifier.fillMaxWidth().border(1.dp, AquaCyan.copy(alpha = 0.5f), RoundedCornerShape(18.dp))
             ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = AquaCyan)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Aqua AI Wallet Copilot (Zero-Key Access)", style = MaterialTheme.typography.titleMedium, color = AquaIceText)
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = AquaCyan)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Aqua AI Wallet Copilot (Zero-Key Access)", style = MaterialTheme.typography.titleMedium, color = AquaIceText)
+                        }
+                        Surface(
+                            color = if (settings.aiWalletAccessEnabled) AquaMintSuccess.copy(alpha = 0.18f) else AquaCoralError.copy(alpha = 0.18f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text(
+                                text = when {
+                                    !settings.aiWalletAccessEnabled -> "PAUSED"
+                                    settings.aiWalletTransferPrepareEnabled -> "ACTIVE"
+                                    else -> "READ-ONLY"
+                                },
+                                color = if (settings.aiWalletAccessEnabled) AquaMintSuccess else AquaCoralError,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
                     }
-                    Text(
-                        text = "Allowed: Read balances & tx history, analyze portfolio risk, inspect networks/tokens, estimate fees, audit suspicious recipient addresses, and draft unsigned transfers gated by your approval.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AquaMintSuccess
-                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Grant Wallet Read & Analysis Access", style = MaterialTheme.typography.bodyMedium, color = AquaIceText, fontWeight = FontWeight.SemiBold)
+                            Text("Balances, addresses, history, EVM telemetry, ENS, allowances & charts.", style = MaterialTheme.typography.labelSmall, color = AquaMutedText)
+                        }
+                        Switch(
+                            checked = settings.aiWalletAccessEnabled,
+                            onCheckedChange = { enabled ->
+                                onUpdateSettings(
+                                    settings.copy(
+                                        aiWalletAccessEnabled = enabled,
+                                        aiWalletTransferPrepareEnabled = if (enabled) settings.aiWalletTransferPrepareEnabled else false
+                                    )
+                                )
+                            },
+                            modifier = Modifier.testTag("wallet_ai_read_access_switch")
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Allow AI Transfer & Revoke Proposals", style = MaterialTheme.typography.bodyMedium, color = AquaIceText, fontWeight = FontWeight.SemiBold)
+                            Text("Always gated by your explicit approval dialog + PIN/Biometrics.", style = MaterialTheme.typography.labelSmall, color = AquaMutedText)
+                        }
+                        Switch(
+                            checked = settings.aiWalletAccessEnabled && settings.aiWalletTransferPrepareEnabled,
+                            enabled = settings.aiWalletAccessEnabled,
+                            onCheckedChange = { enabled ->
+                                onUpdateSettings(settings.copy(aiWalletTransferPrepareEnabled = enabled))
+                            },
+                            modifier = Modifier.testTag("wallet_ai_transfer_access_switch")
+                        )
+                    }
+
                     Text(
                         text = "Blocked by Architecture: AI can NEVER view recovery phrases, seeds, private keys, PINs, raise spending limits, unlock Emergency Lock, or broadcast unapproved transactions.",
                         style = MaterialTheme.typography.bodySmall,
@@ -123,7 +188,7 @@ fun WalletAiAssistantSection(
                 value = customPrompt,
                 onValueChange = { customPrompt = it },
                 label = { Text("Ask Aqua AI about your wallet") },
-                placeholder = { Text("e.g. Audit address 0x... on Ethereum before sending") },
+                placeholder = { Text("e.g. Check my ETH balance, resolve vitalik.eth, or prepare 0.01 SOL transfer") },
                 minLines = 2,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = AquaCyan,
@@ -142,11 +207,14 @@ fun WalletAiAssistantSection(
                         onSendAiWalletPrompt(p)
                     }
                 },
-                enabled = customPrompt.isNotBlank(),
+                enabled = customPrompt.isNotBlank() && settings.aiWalletAccessEnabled,
                 colors = ButtonDefaults.buttonColors(containerColor = AquaCyan, contentColor = AquaAbyss),
                 modifier = Modifier.fillMaxWidth().height(48.dp).testTag("wallet_ai_ask_button")
             ) {
-                Text("Run in Aqua Core Assistant", fontWeight = FontWeight.Bold)
+                Text(
+                    text = if (settings.aiWalletAccessEnabled) "Run in Aqua Core Assistant" else "Enable Wallet Access Above First",
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
 
@@ -157,11 +225,12 @@ fun WalletAiAssistantSection(
         items(presets) { preset ->
             OutlinedButton(
                 onClick = { onSendAiWalletPrompt(preset) },
+                enabled = settings.aiWalletAccessEnabled,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
                     text = preset,
-                    color = AquaIceText,
+                    color = if (settings.aiWalletAccessEnabled) AquaIceText else AquaMutedText,
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(vertical = 6.dp)
                 )

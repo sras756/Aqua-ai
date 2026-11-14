@@ -527,4 +527,197 @@ class AquaWalletComprehensiveTest {
         vault.updateSecuritySettings(s)
         assertEquals("EUR", vault.getSecuritySettings().displayCurrencyCode)
     }
+
+    @Test
+    fun `ai wallet access switches new tools vault lock detection and gated contact saving work safely`() = runBlocking {
+        val (meta, acc0) = vault.createWallet("Full AI Wallet", wordCount = 12).getOrThrow()
+        val acc1 = vault.addDerivedAccount(meta.walletId, "Spending").getOrThrow()
+        val secretPhrase = vault.revealMnemonicForBackup(meta.walletId).getOrThrow()
+        val bridge = AquaAiWalletBridge(engine)
+
+        val overview = bridge.getPublicOverviewText()
+        // ContextManager includes wallet metadata when enabled, omits when paused
+        val enabledPrompt = ContextManager.buildSystemInstruction(
+            settings = UserSettings(aiWalletAccessEnabled = true, aiWalletTransferPrepareEnabled = true),
+            memories = emptyList(),
+            enabledSkills = emptyList(),
+            activeWallet = null,
+            telemetry = DeviceTelemetry(88, false, true, "Wi-Fi", 50, false, false, false),
+            browserUrl = "",
+            browserTitle = "",
+            nativeWalletOverview = overview
+        )
+        assertTrue(enabledPrompt.contains("Aqua Native Self-Custodial Wallet"))
+        assertTrue(enabledPrompt.contains(acc0.evmAddress))
+        assertFalse(enabledPrompt.contains(secretPhrase))
+
+        val pausedPrompt = ContextManager.buildSystemInstruction(
+            settings = UserSettings(aiWalletAccessEnabled = false),
+            memories = emptyList(),
+            enabledSkills = emptyList(),
+            activeWallet = null,
+            telemetry = DeviceTelemetry(88, false, true, "Wi-Fi", 50, false, false, false),
+            browserUrl = "",
+            browserTitle = "",
+            nativeWalletOverview = overview
+        )
+        assertFalse(pausedPrompt.contains("Aqua Native Self-Custodial Wallet"))
+        assertTrue(pausedPrompt.contains("AI WALLET ACCESS PAUSED"))
+        assertFalse(pausedPrompt.contains(acc0.evmAddress))
+
+        val app = if (FirebaseApp.getApps(context).isEmpty()) {
+            FirebaseApp.initializeApp(
+                context,
+                FirebaseOptions.Builder()
+                    .setApplicationId("com.aistudio.aquaai.vqrzmn")
+                    .setProjectId("test-project")
+                    .setApiKey("test-api-key")
+                    .build()
+            )
+        } else {
+            FirebaseApp.getInstance()
+        }
+        val firestoreRepo = AquaFirestoreRepository(FirebaseFirestore.getInstance(app))
+        val toolEngine = ToolCallingEngine(
+            deviceController = AndroidDeviceController(context),
+            browserController = AquaBrowserController(context),
+            walletConnector = FlashWalletConnector(context),
+            firestoreRepo = firestoreRepo,
+            aiWalletBridge = bridge
+        )
+
+        // When aiWalletAccessEnabled = false, all wallet tools refuse cleanly
+        val pausedSettings = UserSettings(aiWalletAccessEnabled = false)
+        val blockedReceive = toolEngine.executeFunctionCall(
+            call = FunctionCallPart("wallet_get_receive_addresses", emptyMap()),
+            settings = pausedSettings,
+            activeWallet = null,
+            onNavigateToBrowser = {},
+            requestAuthorization = { true },
+            onTrace = {}
+        )
+        assertTrue(blockedReceive["success"].toString().contains("false"))
+
+        val blockedPrep = toolEngine.executeFunctionCall(
+            call = FunctionCallPart(
+                "wallet_prepare_transaction",
+                mapOf(
+                    "destinationAddress" to JsonPrimitive(acc0.evmAddress),
+                    "assetSymbol" to JsonPrimitive("ETH"),
+                    "amount" to JsonPrimitive("0.01")
+                )
+            ),
+            settings = pausedSettings,
+            activeWallet = null,
+            onNavigateToBrowser = {},
+            requestAuthorization = { true },
+            onTrace = {}
+        )
+        assertTrue(blockedPrep["success"].toString().contains("false"))
+
+        // Read-only mode allows receive addresses & switching while blocking transfer/revoke prep
+        val readOnlySettings = UserSettings(aiWalletAccessEnabled = true, aiWalletTransferPrepareEnabled = false)
+        val receiveResp = toolEngine.executeFunctionCall(
+            call = FunctionCallPart("wallet_get_receive_addresses", emptyMap()),
+            settings = readOnlySettings,
+            activeWallet = null,
+            onNavigateToBrowser = {},
+            requestAuthorization = { false },
+            onTrace = {}
+        )
+        assertTrue(receiveResp["success"].toString().contains("true"))
+        assertTrue(receiveResp["message"].toString().contains(acc0.evmAddress))
+        assertTrue(receiveResp["message"].toString().contains(acc0.solanaAddress))
+        assertFalse(receiveResp["message"].toString().contains(secretPhrase))
+
+        val blockedRevoke = toolEngine.executeFunctionCall(
+            call = FunctionCallPart(
+                "wallet_prepare_revoke_allowance",
+                mapOf(
+                    "token" to JsonPrimitive("USDC"),
+                    "spenderAddress" to JsonPrimitive("0x1111111111111111111111111111111111111111")
+                )
+            ),
+            settings = readOnlySettings,
+            activeWallet = null,
+            onNavigateToBrowser = {},
+            requestAuthorization = { true },
+            onTrace = {}
+        )
+        assertTrue(blockedRevoke["success"].toString().contains("false"))
+
+        // Switch network & account via ToolCallingEngine
+        val switchNetResp = toolEngine.executeFunctionCall(
+            call = FunctionCallPart("wallet_switch_network", mapOf("network" to JsonPrimitive("polygon"))),
+            settings = readOnlySettings,
+            activeWallet = null,
+            onNavigateToBrowser = {},
+            requestAuthorization = { false },
+            onTrace = {}
+        )
+        assertTrue(switchNetResp["success"].toString().contains("true"))
+        assertEquals("polygon_mainnet", vault.getSecuritySettings().activeNetworkId)
+
+        val switchAccResp = toolEngine.executeFunctionCall(
+            call = FunctionCallPart("wallet_switch_account", mapOf("account" to JsonPrimitive("Spending"))),
+            settings = readOnlySettings,
+            activeWallet = null,
+            onNavigateToBrowser = {},
+            requestAuthorization = { false },
+            onTrace = {}
+        )
+        assertTrue(switchAccResp["success"].toString().contains("true"))
+        assertEquals(acc1.accountIndex, vault.getSecuritySettings().activeAccountIndex)
+
+        // Contact save obeys explicit authorization gate
+        val fullSettings = UserSettings(aiWalletAccessEnabled = true, aiWalletTransferPrepareEnabled = true)
+        val deniedContact = toolEngine.executeFunctionCall(
+            call = FunctionCallPart(
+                "wallet_save_contact",
+                mapOf(
+                    "label" to JsonPrimitive("Treasury"),
+                    "chainFamily" to JsonPrimitive("EVM"),
+                    "address" to JsonPrimitive(acc0.evmAddress)
+                )
+            ),
+            settings = fullSettings,
+            activeWallet = null,
+            onNavigateToBrowser = {},
+            requestAuthorization = { false },
+            onTrace = {}
+        )
+        assertTrue(deniedContact["success"].toString().contains("false"))
+        assertEquals(0, engine.utilities.getAddressBook().size)
+
+        val approvedContact = toolEngine.executeFunctionCall(
+            call = FunctionCallPart(
+                "wallet_save_contact",
+                mapOf(
+                    "label" to JsonPrimitive("Treasury"),
+                    "chainFamily" to JsonPrimitive("EVM"),
+                    "address" to JsonPrimitive(acc0.evmAddress),
+                    "note" to JsonPrimitive("Verified self")
+                )
+            ),
+            settings = fullSettings,
+            activeWallet = null,
+            onNavigateToBrowser = {},
+            requestAuthorization = { auth -> auth.isFinancialOrSecurity },
+            onTrace = {}
+        )
+        assertTrue(approvedContact["success"].toString().contains("true"))
+        assertEquals(1, engine.utilities.getAddressBook().size)
+
+        // Bridge reflects vault PIN lock & emergency lock accurately
+        assertFalse(bridge.isVaultLockedForSigning())
+        vault.setPin("654321").getOrThrow()
+        vault.lockSessionNow()
+        assertTrue(bridge.isVaultLockedForSigning())
+        assertFalse(bridge.isEmergencyLocked())
+
+        vault.triggerEmergencyLock()
+        assertTrue(bridge.isVaultLockedForSigning())
+        assertTrue(bridge.isEmergencyLocked())
+    }
 }
+
