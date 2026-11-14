@@ -187,7 +187,7 @@ fun WorkspaceScreen(viewModel: AquaMainViewModel) {
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Your OAuth consent screen in Google Cloud is in Testing mode, so only the developer account or approved Test Users can authorize Workspace scopes. Add '$consentHelpAccount' under Google Auth Platform → Audience → Test users (project gen-lang-client-0656700857), or choose your developer Google account when consenting.",
+                        text = "Your OAuth consent screen in Google Cloud is in Testing mode, so only the developer account or approved Test Users can authorize Workspace scopes. Add '$consentHelpAccount' under Google Auth Platform → Audience → Test users (project gen-lang-client-0405170912), or choose your developer Google account when consenting.",
                         style = MaterialTheme.typography.bodySmall,
                         color = AquaIceText
                     )
@@ -198,7 +198,7 @@ fun WorkspaceScreen(viewModel: AquaMainViewModel) {
                         Button(
                             onClick = {
                                 viewModel.openBrowserUrlExternally(
-                                    "https://console.cloud.google.com/auth/audience?project=gen-lang-client-0656700857"
+                                    "https://console.cloud.google.com/auth/audience?project=gen-lang-client-0405170912"
                                 )
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = AquaCyan, contentColor = AquaAbyss),
