@@ -1,5 +1,10 @@
 package com.example.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,10 +30,13 @@ import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.ContentPasteGo
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.core.content.ContextCompat
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -111,11 +119,37 @@ private val ROUTINE_COMPOSER_STARTERS = listOf(
 
 @Composable
 fun RoutinesScreen(viewModel: AquaMainViewModel) {
+    val context = LocalContext.current
     val routines by viewModel.routines.collectAsStateWithLifecycle()
     val telemetry by viewModel.telemetry.collectAsStateWithLifecycle()
     val sysStats by viewModel.storageAndMemory.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val fgsRunning by viewModel.wakeWordRunning.collectAsStateWithLifecycle()
+    val automationKeepAlive by viewModel.automationKeepAliveActive.collectAsStateWithLifecycle()
+    val activeTasks by viewModel.activeAutomationTasks.collectAsStateWithLifecycle()
+    val fgSummary by viewModel.foregroundStatusSummary.collectAsStateWithLifecycle()
 
     var showCreateDialog by remember { mutableStateOf(false) }
+
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) {
+        viewModel.setAutomationKeepAliveEnabled(true)
+    }
+
+    fun toggleAutomationForegroundService(enable: Boolean) {
+        if (!enable) {
+            viewModel.setAutomationKeepAliveEnabled(false)
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            viewModel.setAutomationKeepAliveEnabled(true)
+        }
+    }
 
     val ramUsedMb = (sysStats.ramTotalMb - sysStats.ramAvailableMb).coerceAtLeast(0L)
     val ramProgress = if (sysStats.ramTotalMb > 0L) {
@@ -180,6 +214,71 @@ fun RoutinesScreen(viewModel: AquaMainViewModel) {
             contentPadding = PaddingValues(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Foreground Priority Service Card
+            item {
+                val isPrioritized = fgsRunning || automationKeepAlive || settings.backgroundAutomationEnabled
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isPrioritized) AquaTeal.copy(alpha = 0.14f) else AquaCardSurface
+                    ),
+                    shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(
+                            1.dp,
+                            if (isPrioritized) AquaTeal else AquaBorderGlow,
+                            RoundedCornerShape(18.dp)
+                        )
+                        .testTag("routines_foreground_service_card")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Notifications,
+                            contentDescription = "Persistent Foreground Service",
+                            tint = if (isPrioritized) AquaTeal else AquaCyan
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = when {
+                                    activeTasks.isNotEmpty() ->
+                                        "OS Priority Active (${activeTasks.size} Running)"
+                                    isPrioritized ->
+                                        "Foreground Priority Notification Active"
+                                    else ->
+                                        "Keep Automation & Voice Prioritized"
+                                },
+                                style = MaterialTheme.typography.titleSmall,
+                                color = AquaIceText
+                            )
+                            Text(
+                                text = when {
+                                    fgSummary.isNotBlank() -> fgSummary
+                                    isPrioritized -> "Android keeps background routines & voice active."
+                                    else -> "Runs a persistent notification so OS won't pause routines."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AquaMutedText,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Switch(
+                            checked = isPrioritized,
+                            onCheckedChange = { toggleAutomationForegroundService(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = AquaAbyss,
+                                checkedTrackColor = AquaTeal
+                            ),
+                            modifier = Modifier.testTag("routines_foreground_switch")
+                        )
+                    }
+                }
+            }
+
             // Live Device Hardware & System Pulse Card (Real Android StatFs + ActivityManager)
             item {
                 Card(

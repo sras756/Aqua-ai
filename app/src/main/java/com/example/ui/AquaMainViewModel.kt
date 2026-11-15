@@ -183,6 +183,9 @@ class AquaMainViewModel(
     val waveformBars: StateFlow<FloatArray> = voiceManager.waveformBars
     val wakeWordRunning: StateFlow<Boolean> = AquaWakeWordService.isRunning
     val wakeWordPaused: StateFlow<Boolean> = AquaWakeWordService.isPaused
+    val automationKeepAliveActive: StateFlow<Boolean> = AquaWakeWordService.isAutomationKeepAliveActive
+    val activeAutomationTasks: StateFlow<List<String>> = AquaWakeWordService.activeAutomationTasks
+    val foregroundStatusSummary: StateFlow<String> = AquaWakeWordService.foregroundStatusSummary
     val backgroundMicError: StateFlow<String?> = AquaWakeWordService.serviceError
 
     private val _coreState = MutableStateFlow(AquaCoreState.IDLE)
@@ -335,6 +338,9 @@ class AquaMainViewModel(
         }
         viewModelScope.launch {
             settings.collect { s ->
+                if (s.backgroundAutomationEnabled && !AquaWakeWordService.isAutomationKeepAliveActive.value) {
+                    AquaWakeWordService.startAutomationKeepAlive(appContext)
+                }
                 if (s.wakeWordEnabled &&
                     AquaWakeWordService.hasMicPermission(appContext) &&
                     !AquaWakeWordService.isRunning.value
@@ -462,6 +468,7 @@ class AquaMainViewModel(
     fun sendMessage(
         promptText: String,
         speakReply: Boolean = false,
+        automationTaskLabel: String? = null,
         onCompletedSummary: ((String) -> Unit)? = null
     ) {
         val trimmed = promptText.trim()
@@ -530,92 +537,107 @@ class AquaMainViewModel(
             _streamingReply.value = ""
             _agentTraces.value = emptyList()
 
-            val nativeWalletOverview = runCatching { walletCoordinator.aiBridge.getPublicOverviewText() }.getOrNull()
-            val sysInstruction = ContextManager.buildSystemInstruction(
-                settings = currentSettings,
-                memories = memories.value,
-                enabledSkills = skills.value,
-                activeWallet = wallets.value.firstOrNull(),
-                telemetry = _telemetry.value,
-                browserUrl = browserPageState.value.currentUrl,
-                browserTitle = browserPageState.value.currentTitle,
-                nativeWalletOverview = nativeWalletOverview,
-                launcherOverview = buildLauncherOverviewText()
-            )
+            val taskLabel = automationTaskLabel?.takeIf { it.isNotBlank() }
+                ?: "AI: ${trimmed.ifBlank { attachment?.displayName ?: "Agent Turn" }.take(45)}"
+            val taskId = AquaWakeWordService.beginAutomationTask(appContext, taskLabel)
+            var taskOutcomeSummary = ""
 
-            val result = geminiProvider.executeAgentTurn(
-                userPrompt = trimmed,
-                history = messages.value,
-                attachment = attachment,
-                settings = currentSettings,
-                systemInstructionText = sysInstruction,
-                activeWallet = wallets.value.firstOrNull(),
-                onNavigateToBrowser = { _ -> _navigateToTabEvent.value = "browser" },
-                requestAuthorization = { req -> requestUserAuthorization(req) },
-                onStreamChunk = { partial -> _streamingReply.value = partial },
-                onTrace = { trace ->
-                    _coreState.value = AquaCoreState.EXECUTING_TOOL
-                    _agentTraces.value = _agentTraces.value + trace
-                    viewModelScope.launch(Dispatchers.IO) {
-                        cacheDb.deviceActionLogDao().insertLog(
-                            DeviceActionLogEntity(
-                                userId = currentUserId,
-                                toolName = trace.toolName,
-                                status = trace.status,
-                                detail = trace.detail
-                            )
+            try {
+                val nativeWalletOverview = runCatching { walletCoordinator.aiBridge.getPublicOverviewText() }.getOrNull()
+                val sysInstruction = ContextManager.buildSystemInstruction(
+                    settings = currentSettings,
+                    memories = memories.value,
+                    enabledSkills = skills.value,
+                    activeWallet = wallets.value.firstOrNull(),
+                    telemetry = _telemetry.value,
+                    browserUrl = browserPageState.value.currentUrl,
+                    browserTitle = browserPageState.value.currentTitle,
+                    nativeWalletOverview = nativeWalletOverview,
+                    launcherOverview = buildLauncherOverviewText()
+                )
+
+                val result = geminiProvider.executeAgentTurn(
+                    userPrompt = trimmed,
+                    history = messages.value,
+                    attachment = attachment,
+                    settings = currentSettings,
+                    systemInstructionText = sysInstruction,
+                    activeWallet = wallets.value.firstOrNull(),
+                    onNavigateToBrowser = { _ -> _navigateToTabEvent.value = "browser" },
+                    requestAuthorization = { req -> requestUserAuthorization(req) },
+                    onStreamChunk = { partial -> _streamingReply.value = partial },
+                    onTrace = { trace ->
+                        _coreState.value = AquaCoreState.EXECUTING_TOOL
+                        _agentTraces.value = _agentTraces.value + trace
+                        AquaWakeWordService.updateAutomationTaskStep(
+                            appContext,
+                            "${trace.toolName} (${trace.status})"
                         )
+                        viewModelScope.launch(Dispatchers.IO) {
+                            cacheDb.deviceActionLogDao().insertLog(
+                                DeviceActionLogEntity(
+                                    userId = currentUserId,
+                                    toolName = trace.toolName,
+                                    status = trace.status,
+                                    detail = trace.detail
+                                )
+                            )
+                        }
                     }
-                }
-            )
+                )
 
-            _streamingReply.value = ""
-            result.onSuccess { exec ->
-                val tracesJson = JSONArray().apply {
-                    exec.traces.forEach { t ->
-                        put(JSONObject().apply {
-                            put("step", t.stepName)
-                            put("tool", t.toolName)
-                            put("status", t.status)
-                            put("detail", t.detail)
-                        })
-                    }
-                }.toString()
-                val sourcesJson = JSONArray(exec.groundingSources).toString()
+                _streamingReply.value = ""
+                result.onSuccess { exec ->
+                    val tracesJson = JSONArray().apply {
+                        exec.traces.forEach { t ->
+                            put(JSONObject().apply {
+                                put("step", t.stepName)
+                                put("tool", t.toolName)
+                                put("status", t.status)
+                                put("detail", t.detail)
+                            })
+                        }
+                    }.toString()
+                    val sourcesJson = JSONArray(exec.groundingSources).toString()
 
-                firestoreRepo.addMessage(
-                    ChatMessage(
+                    firestoreRepo.addMessage(
+                        ChatMessage(
+                            conversationId = convId,
+                            role = "model",
+                            content = exec.text,
+                            modelUsed = exec.modelUsed,
+                            toolActionsJson = if (exec.traces.isEmpty()) "" else tracesJson,
+                            groundingSourcesJson = if (exec.groundingSources.isEmpty()) "" else sourcesJson
+                        )
+                    )
+                    firestoreRepo.updateConversationMeta(
                         conversationId = convId,
-                        role = "model",
-                        content = exec.text,
+                        summary = exec.text.take(240),
                         modelUsed = exec.modelUsed,
-                        toolActionsJson = if (exec.traces.isEmpty()) "" else tracesJson,
-                        groundingSourcesJson = if (exec.groundingSources.isEmpty()) "" else sourcesJson
+                        incrementMessageCountBy = 1L
                     )
-                )
-                firestoreRepo.updateConversationMeta(
-                    conversationId = convId,
-                    summary = exec.text.take(240),
-                    modelUsed = exec.modelUsed,
-                    incrementMessageCountBy = 1L
-                )
-                _coreState.value = AquaCoreState.IDLE
-                onCompletedSummary?.invoke(exec.text)
-                if (speakReply) {
-                    voiceManager.speak(exec.text, currentSettings, viewModelScope)
+                    _coreState.value = AquaCoreState.IDLE
+                    taskOutcomeSummary = "Completed: ${exec.text.take(80)}"
+                    onCompletedSummary?.invoke(exec.text)
+                    if (speakReply) {
+                        voiceManager.speak(exec.text, currentSettings, viewModelScope)
+                    }
+                }.onFailure { err ->
+                    _coreState.value = AquaCoreState.ERROR
+                    val errMsg = err.localizedMessage ?: "Aqua AI failed to respond."
+                    taskOutcomeSummary = "Task error: ${errMsg.take(60)}"
+                    _bannerMessage.value = errMsg
+                    firestoreRepo.addMessage(
+                        ChatMessage(
+                            conversationId = convId,
+                            role = "agent",
+                            content = "Error: $errMsg",
+                            modelUsed = currentSettings.preferredModel
+                        )
+                    )
                 }
-            }.onFailure { err ->
-                _coreState.value = AquaCoreState.ERROR
-                val errMsg = err.localizedMessage ?: "Aqua AI failed to respond."
-                _bannerMessage.value = errMsg
-                firestoreRepo.addMessage(
-                    ChatMessage(
-                        conversationId = convId,
-                        role = "agent",
-                        content = "Error: $errMsg",
-                        modelUsed = currentSettings.preferredModel
-                    )
-                )
+            } finally {
+                AquaWakeWordService.endAutomationTask(appContext, taskId, taskOutcomeSummary)
             }
         }
     }
@@ -648,11 +670,7 @@ class AquaMainViewModel(
         if (voiceManager.isLiveSessionActive.value) {
             voiceManager.stopLiveConversation()
             _liveStatus.value = "Live voice session disconnected"
-            if (settings.value.wakeWordEnabled) {
-                AquaWakeWordService.setExternalMicActive(appContext, false)
-            } else {
-                AquaWakeWordService.stop(appContext)
-            }
+            AquaWakeWordService.setExternalMicActive(appContext, false)
             return
         }
         // Keep foreground microphone service active so Live audio continues even if user minimizes the app or locks screen
@@ -690,15 +708,16 @@ class AquaMainViewModel(
                 requestAuthorization = { req -> requestUserAuthorization(req) },
                 onTrace = { trace ->
                     _agentTraces.value = _agentTraces.value + trace
+                    AquaWakeWordService.updateAutomationTaskStep(
+                        appContext,
+                        "Live Tool: ${trace.toolName} (${trace.status})"
+                    )
                 },
                 onStatusChanged = { status ->
                     _liveStatus.value = status
+                    AquaWakeWordService.updateStatusNotification(appContext, status)
                     if (status.startsWith("Live session ended")) {
-                        if (settings.value.wakeWordEnabled) {
-                            AquaWakeWordService.setExternalMicActive(appContext, false)
-                        } else {
-                            AquaWakeWordService.stop(appContext)
-                        }
+                        AquaWakeWordService.setExternalMicActive(appContext, false)
                     }
                 }
             )
@@ -715,15 +734,74 @@ class AquaMainViewModel(
             )
             if (started) {
                 updateSettings(settings.value.copy(wakeWordEnabled = true))
-                _bannerMessage.value = "Background App & Mic active — listening for '${settings.value.wakeWordPhrase}'."
+                _bannerMessage.value = "Voice & Background Service active — listening for '${settings.value.wakeWordPhrase}'."
             } else {
                 updateSettings(settings.value.copy(wakeWordEnabled = false))
             }
         } else {
             updateSettings(settings.value.copy(wakeWordEnabled = false))
-            AquaWakeWordService.stop(appContext)
-            _bannerMessage.value = "Background App & Mic stopped."
+            if (settings.value.backgroundAutomationEnabled) {
+                // Keep automation priority running if enabled; only exit mic listener mode cleanly
+                AquaWakeWordService.setExternalMicActive(appContext, false)
+                AquaWakeWordService.saveBackgroundConfig(appContext, enabled = false)
+            } else {
+                AquaWakeWordService.stop(appContext)
+            }
+            _bannerMessage.value = "Background voice listener stopped."
         }
+    }
+
+    fun setAutomationKeepAliveEnabled(enabled: Boolean) {
+        if (enabled) {
+            val started = AquaWakeWordService.startAutomationKeepAlive(appContext)
+            updateSettings(settings.value.copy(backgroundAutomationEnabled = started))
+            if (started) {
+                _bannerMessage.value = "Persistent Foreground Service active — Aqua AI voice & automation tasks prioritized."
+            }
+        } else {
+            updateSettings(settings.value.copy(backgroundAutomationEnabled = false))
+            AquaWakeWordService.stopAutomationKeepAlive(appContext)
+            _bannerMessage.value = "Persistent automation priority service disabled."
+        }
+    }
+
+    fun setVoiceAndAutomationServiceEnabled(voiceEnabled: Boolean, automationEnabled: Boolean) {
+        val voiceStarted = if (voiceEnabled) {
+            AquaWakeWordService.start(
+                context = appContext,
+                wakePhrase = settings.value.wakeWordPhrase,
+                languageTag = settings.value.voiceLanguage,
+                keepAliveOnly = false
+            )
+        } else {
+            false
+        }
+        val autoStarted = if (automationEnabled) {
+            AquaWakeWordService.startAutomationKeepAlive(appContext)
+        } else {
+            false
+        }
+        if (!voiceEnabled && !automationEnabled) {
+            AquaWakeWordService.stop(appContext)
+            _bannerMessage.value = "Voice & automation priority service stopped."
+        } else {
+            if (!voiceEnabled) {
+                AquaWakeWordService.saveBackgroundConfig(appContext, enabled = false)
+                AquaWakeWordService.setExternalMicActive(appContext, false)
+            }
+            if (!automationEnabled) {
+                AquaWakeWordService.stopAutomationKeepAlive(appContext)
+            }
+            if (voiceStarted || autoStarted) {
+                _bannerMessage.value = "Aqua AI priority foreground service active."
+            }
+        }
+        updateSettings(
+            settings.value.copy(
+                wakeWordEnabled = if (voiceEnabled) voiceStarted else false,
+                backgroundAutomationEnabled = if (automationEnabled) autoStarted else false
+            )
+        )
     }
 
     fun toggleBackgroundMicPaused() {
@@ -930,7 +1008,8 @@ class AquaMainViewModel(
         _navigateToTabEvent.value = "home"
         sendMessage(
             promptText = routine.prompt,
-            speakReply = routine.speakResult
+            speakReply = routine.speakResult,
+            automationTaskLabel = "Routine: ${routine.title}"
         ) { reply ->
             if (routine.id.isNotBlank()) {
                 viewModelScope.launch {

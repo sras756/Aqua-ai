@@ -112,6 +112,7 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
     val telemetry by viewModel.telemetry.collectAsStateWithLifecycle()
     val wakeRunning by viewModel.wakeWordRunning.collectAsStateWithLifecycle()
     val wakePaused by viewModel.wakeWordPaused.collectAsStateWithLifecycle()
+    val automationKeepAlive by viewModel.automationKeepAliveActive.collectAsStateWithLifecycle()
     var wakePhraseInput by remember(settings.wakeWordPhrase) { mutableStateOf(settings.wakeWordPhrase) }
 
     var apiKeyInput by remember { mutableStateOf("") }
@@ -425,6 +426,19 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                             Spacer(Modifier.width(8.dp))
                             Text("Voice & 'Hey Aqua' Wake Word", style = MaterialTheme.typography.titleMedium, color = AquaIceText)
                         }
+
+                        SettingSwitchRow(
+                            title = "Prioritize Automation & Voice Tasks",
+                            subtitle = if (automationKeepAlive || settings.backgroundAutomationEnabled) {
+                                "Persistent foreground notification active for routines & agent tasks."
+                            } else {
+                                "Uses Android dataSync foreground service without requiring mic listener."
+                            },
+                            checked = settings.backgroundAutomationEnabled || automationKeepAlive,
+                            onCheckedChange = { enable ->
+                                viewModel.setAutomationKeepAliveEnabled(enable)
+                            }
+                        )
 
                         SettingSwitchRow(
                             title = "Run App & Mic in Background",

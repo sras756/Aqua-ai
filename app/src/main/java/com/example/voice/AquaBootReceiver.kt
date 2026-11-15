@@ -28,8 +28,9 @@ class AquaBootReceiver : BroadcastReceiver() {
         if (action != Intent.ACTION_BOOT_COMPLETED && action != Intent.ACTION_MY_PACKAGE_REPLACED) {
             return
         }
-        if (!AquaWakeWordService.isSavedBackgroundEnabled(ctx)) return
-        if (!AquaWakeWordService.hasMicPermission(ctx)) return
+        val micSaved = AquaWakeWordService.isSavedBackgroundEnabled(ctx) && AquaWakeWordService.hasMicPermission(ctx)
+        val automationSaved = AquaWakeWordService.isSavedAutomationKeepAliveEnabled(ctx)
+        if (!micSaved && !automationSaved) return
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -44,14 +45,18 @@ class AquaBootReceiver : BroadcastReceiver() {
                 "Aqua Background Resume",
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = "Allows 1-tap resume of Aqua AI background mic after device restart."
+                description = "Allows 1-tap resume of Aqua AI voice and automation priority service after restart."
             }
             manager.createNotificationChannel(channel)
         }
 
         val wakePhrase = AquaWakeWordService.savedWakePhrase(ctx)
         val resumeServiceIntent = Intent(ctx, AquaWakeWordService::class.java).apply {
-            this.action = AquaWakeWordService.ACTION_START
+            this.action = if (micSaved) {
+                AquaWakeWordService.ACTION_START
+            } else {
+                AquaWakeWordService.ACTION_START_AUTOMATION_KEEP_ALIVE
+            }
             putExtra(AquaWakeWordService.EXTRA_WAKE_PHRASE, wakePhrase)
         }
         val resumePendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

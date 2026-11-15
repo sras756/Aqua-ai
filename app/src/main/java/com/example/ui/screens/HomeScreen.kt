@@ -123,6 +123,8 @@ fun HomeScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val wakeWordRunning by viewModel.wakeWordRunning.collectAsStateWithLifecycle()
     val wakeWordPaused by viewModel.wakeWordPaused.collectAsStateWithLifecycle()
+    val automationKeepAliveActive by viewModel.automationKeepAliveActive.collectAsStateWithLifecycle()
+    val activeAutomationTasks by viewModel.activeAutomationTasks.collectAsStateWithLifecycle()
 
     var chatInput by rememberSaveable { mutableStateOf("") }
     var conversationExpanded by rememberSaveable { mutableStateOf(false) }
@@ -160,14 +162,15 @@ fun HomeScreen(
     ) { results ->
         val micGranted = results[Manifest.permission.RECORD_AUDIO] == true ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        if (micGranted) {
-            viewModel.setWakeWordServiceEnabled(true)
-        }
+        viewModel.setVoiceAndAutomationServiceEnabled(
+            voiceEnabled = micGranted,
+            automationEnabled = true
+        )
     }
 
     fun toggleBackgroundAppAndMic(enable: Boolean) {
         if (!enable) {
-            viewModel.setWakeWordServiceEnabled(false)
+            viewModel.setVoiceAndAutomationServiceEnabled(voiceEnabled = false, automationEnabled = false)
             return
         }
         val perms = mutableListOf(Manifest.permission.RECORD_AUDIO)
@@ -178,7 +181,7 @@ fun HomeScreen(
             ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
         }
         if (allGranted) {
-            viewModel.setWakeWordServiceEnabled(true)
+            viewModel.setVoiceAndAutomationServiceEnabled(voiceEnabled = true, automationEnabled = true)
         } else {
             bgMicPermissionLauncher.launch(perms.toTypedArray())
         }
@@ -444,12 +447,13 @@ fun HomeScreen(
                         }
                     }
 
-                    // Background App & Mic Keep-Alive Card
+                    // Foreground Priority Service Card (Voice Conversation & Automation Tasks)
                     item {
-                        val bgActive = wakeWordRunning || settings.wakeWordEnabled
+                        val bgActive = wakeWordRunning || settings.wakeWordEnabled || automationKeepAliveActive || settings.backgroundAutomationEnabled
+                        val fgsRunning = wakeWordRunning || automationKeepAliveActive
                         Card(
                             colors = CardDefaults.cardColors(
-                                containerColor = if (wakeWordRunning && !wakeWordPaused) {
+                                containerColor = if (fgsRunning && !wakeWordPaused) {
                                     AquaTeal.copy(alpha = 0.14f)
                                 } else {
                                     AquaCardSurface
@@ -460,7 +464,7 @@ fun HomeScreen(
                                 .fillMaxWidth()
                                 .border(
                                     1.dp,
-                                    if (wakeWordRunning && !wakeWordPaused) AquaTeal else AquaBorderGlow,
+                                    if (fgsRunning && !wakeWordPaused) AquaTeal else AquaBorderGlow,
                                     RoundedCornerShape(18.dp)
                                 )
                                 .testTag("background_mic_card")
@@ -470,15 +474,15 @@ fun HomeScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Surface(
-                                    color = if (wakeWordRunning && !wakeWordPaused) AquaTeal else AquaAzure.copy(alpha = 0.22f),
+                                    color = if (fgsRunning && !wakeWordPaused) AquaTeal else AquaAzure.copy(alpha = 0.22f),
                                     shape = CircleShape,
                                     modifier = Modifier.size(40.dp)
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
                                         Icon(
                                             imageVector = Icons.Filled.Mic,
-                                            contentDescription = "Background App and Mic",
-                                            tint = if (wakeWordRunning && !wakeWordPaused) AquaAbyss else AquaTeal
+                                            contentDescription = "Voice and Automation Foreground Service",
+                                            tint = if (fgsRunning && !wakeWordPaused) AquaAbyss else AquaTeal
                                         )
                                     }
                                 }
@@ -486,18 +490,28 @@ fun HomeScreen(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = when {
-                                            wakeWordRunning && wakeWordPaused -> "Background Mic Paused"
-                                            wakeWordRunning -> "App & Mic Active in Background"
-                                            else -> "Run App & Mic in Background"
+                                            activeAutomationTasks.isNotEmpty() ->
+                                                "Priority Service • ${activeAutomationTasks.size} Task(s) Active"
+                                            fgsRunning && wakeWordPaused ->
+                                                "Priority Service (Mic Paused)"
+                                            fgsRunning ->
+                                                "Voice & Automation Service Active"
+                                            else ->
+                                                "Run Voice & Automation in Background"
                                         },
                                         style = MaterialTheme.typography.titleSmall,
                                         color = AquaIceText
                                     )
                                     Text(
                                         text = when {
-                                            wakeWordRunning && wakeWordPaused -> "Foreground service active • Tap play to resume '${settings.wakeWordPhrase}'"
-                                            wakeWordRunning -> "Listening for '${settings.wakeWordPhrase}' even when minimized"
-                                            else -> "Keep Aqua AI & microphone running when minimized"
+                                            activeAutomationTasks.isNotEmpty() ->
+                                                "Running: ${activeAutomationTasks.first()} (OS prioritized)"
+                                            fgsRunning && wakeWordPaused ->
+                                                "Persistent notification active • Tap play to resume '${settings.wakeWordPhrase}'"
+                                            fgsRunning ->
+                                                "Persistent notification active • Voice & routines prioritized"
+                                            else ->
+                                                "Keep Aqua AI voice conversation & tasks prioritized by Android OS"
                                         },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = AquaMutedText,
@@ -521,7 +535,9 @@ fun HomeScreen(
                                 }
                                 Switch(
                                     checked = bgActive,
-                                    onCheckedChange = { toggleBackgroundAppAndMic(it) },
+                                    onCheckedChange = { enable ->
+                                        toggleBackgroundAppAndMic(enable)
+                                    },
                                     colors = SwitchDefaults.colors(
                                         checkedThumbColor = AquaAbyss,
                                         checkedTrackColor = AquaTeal

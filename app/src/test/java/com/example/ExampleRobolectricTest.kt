@@ -1,7 +1,10 @@
 package com.example
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import androidx.test.core.app.ApplicationProvider
 import com.example.ai.ContextManager
 import com.example.browser.AquaBrowserController
@@ -29,6 +32,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.ByteArrayOutputStream
@@ -296,5 +300,47 @@ class ExampleRobolectricTest {
             "AquaBootReceiver must be registered for BOOT_COMPLETED",
             bootReceivers.any { it.activityInfo.packageName == context.packageName }
         )
+    }
+
+    @Test
+    fun `foreground service supports microphone and dataSync automation priority with clean lifecycle and timeout`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val serviceComponent = ComponentName(context, AquaWakeWordService::class.java)
+        val serviceInfo = context.packageManager.getServiceInfo(
+            serviceComponent,
+            PackageManager.GET_META_DATA
+        )
+        val expectedTypes = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        assertEquals(expectedTypes, serviceInfo.foregroundServiceType)
+
+        // Start persistent automation service even when RECORD_AUDIO is not granted
+        assertTrue(AquaWakeWordService.startAutomationKeepAlive(context))
+        assertTrue(AquaWakeWordService.isSavedAutomationKeepAliveEnabled(context))
+
+        // Automation task lease tracks active work & steps cleanly
+        val taskId = AquaWakeWordService.beginAutomationTask(context, "Routine: Device Diagnostics")
+        assertTrue(AquaWakeWordService.activeAutomationTasks.value.contains("Routine: Device Diagnostics"))
+        AquaWakeWordService.updateAutomationTaskStep(context, "device_get_telemetry (completed)")
+        assertEquals("device_get_telemetry (completed)", AquaWakeWordService.activeTaskStep.value)
+
+        // Service handles Android 15+ dataSync onTimeout cleanly without throwing
+        val controller = Robolectric.buildService(
+            AquaWakeWordService::class.java,
+            Intent(context, AquaWakeWordService::class.java).apply {
+                action = AquaWakeWordService.ACTION_START_AUTOMATION_KEEP_ALIVE
+            }
+        ).create().startCommand(0, 1)
+        val service = controller.get()
+        assertTrue(AquaWakeWordService.isRunning.value)
+        assertTrue(AquaWakeWordService.foregroundStatusSummary.value.contains("Automation"))
+
+        service.onTimeout(1, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        assertFalse(AquaWakeWordService.isRunning.value)
+        assertFalse(AquaWakeWordService.isSavedAutomationKeepAliveEnabled(context))
+
+        AquaWakeWordService.endAutomationTask(context, taskId)
+        assertTrue(AquaWakeWordService.activeAutomationTasks.value.isEmpty())
+        AquaWakeWordService.clearServiceError()
     }
 }

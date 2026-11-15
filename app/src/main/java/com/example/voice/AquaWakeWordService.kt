@@ -1,6 +1,7 @@
 package com.example.voice
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -15,6 +16,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -29,19 +31,28 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Play-Policy compliant foreground microphone service (`foregroundServiceType="microphone"`).
- * Keeps both the Aqua AI app process and microphone input active when the app is minimized
- * or the screen is off, supporting both continuous wake-word listening and active Live/Mic keep-alive.
+ * Play-Policy and Android 14/15/16 compliant unified Foreground Service
+ * (`foregroundServiceType="microphone|dataSync"`).
+ *
+ * Ensures both:
+ * 1. Aqua AI voice conversations (wake-word listening, voice capture, Gemini Live Voice, TTS)
+ * 2. Background automation tasks (Autonomous Routines, multi-step Gemini + tool chains)
+ * remain active and prioritized by the Android OS with an immediate persistent notification.
  */
 class AquaWakeWordService : Service() {
 
     private val handler = Handler(Looper.getMainLooper())
     private var recognizer: SpeechRecognizer? = null
+    private var wakeLock: PowerManager.WakeLock? = null
+
     private var wakePhrase: String = DEFAULT_WAKE_PHRASE
     private var languageTag: String = DEFAULT_LANGUAGE
-    private var keepRunning = false
+    private var micModeActive = false
+    private var automationKeepAliveActive = false
     private var externalMicKeepAliveOnly = false
     private var lastTriggerTimeMs = 0L
     private var lastTriggerText = ""
@@ -50,68 +61,167 @@ class AquaWakeWordService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_STOP -> {
-                saveBackgroundConfig(this, enabled = false)
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+
+        // Sticky null-intent OS restart: restore saved Voice & Automation modes safely
+        if (intent == null) {
+            val savedMic = isSavedBackgroundEnabled(this) && hasMicPermission(this)
+            val savedAutomation = isSavedAutomationKeepAliveEnabled(this)
+            if (!savedMic && !savedAutomation) {
                 stopSelfCleanly()
                 return START_NOT_STICKY
             }
+            wakePhrase = prefs.getString(KEY_WAKE_PHRASE, DEFAULT_WAKE_PHRASE)
+                ?.lowercase()?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_WAKE_PHRASE
+            languageTag = prefs.getString(KEY_LANGUAGE_TAG, DEFAULT_LANGUAGE)
+                ?.takeIf { it.isNotBlank() } ?: DEFAULT_LANGUAGE
+            micModeActive = savedMic
+            automationKeepAliveActive = savedAutomation
+            _isAutomationKeepAliveActive.value = savedAutomation
+            externalMicKeepAliveOnly = false
+            _isPaused.value = false
+            if (!promoteToForeground()) return START_NOT_STICKY
+            _isRunning.value = true
+            if (micModeActive) {
+                scheduleListenCycle(150L)
+            }
+            return START_STICKY
+        }
+
+        when (intent.action) {
+            ACTION_STOP -> {
+                saveBackgroundConfig(this, enabled = false)
+                saveAutomationKeepAliveConfig(this, enabled = false)
+                activeTaskRegistry.clear()
+                _activeAutomationTasks.value = emptyList()
+                _activeTaskStep.value = ""
+                stopSelfCleanly()
+                return START_NOT_STICKY
+            }
+
+            ACTION_STOP_AUTOMATION_KEEP_ALIVE -> {
+                automationKeepAliveActive = false
+                _isAutomationKeepAliveActive.value = false
+                saveAutomationKeepAliveConfig(this, enabled = false)
+                if (!micModeActive && activeTaskRegistry.isEmpty()) {
+                    stopSelfCleanly()
+                    return START_NOT_STICKY
+                }
+                if (!promoteToForeground()) return START_NOT_STICKY
+                refreshWakeLockState()
+                return START_STICKY
+            }
+
             ACTION_PAUSE -> {
                 _isPaused.value = true
                 destroyRecognizerOnMain()
                 if (_isRunning.value) {
-                    updateForegroundNotification("Paused — tap Resume to listen for \"$wakePhrase\"")
+                    updateForegroundNotification()
                 }
                 return START_STICKY
             }
+
             ACTION_RESUME -> {
-                _isPaused.value = false
-                externalMicKeepAliveOnly = false
                 if (!hasMicPermission(this)) {
-                    reportErrorAndStop("Microphone permission (RECORD_AUDIO) is required for background mic.")
-                    return START_NOT_STICKY
+                    reportError("Microphone permission (RECORD_AUDIO) is required to resume voice listener.")
+                    if (!automationKeepAliveActive && activeTaskRegistry.isEmpty()) {
+                        stopSelfCleanly()
+                        return START_NOT_STICKY
+                    }
+                    return START_STICKY
                 }
-                startForegroundWithMicType("Listening for \"$wakePhrase\"")
-                keepRunning = true
+                micModeActive = true
+                externalMicKeepAliveOnly = false
+                _isPaused.value = false
+                if (!promoteToForeground()) return START_NOT_STICKY
                 _isRunning.value = true
                 scheduleListenCycle(150L)
                 return START_STICKY
             }
+
             ACTION_ENTER_EXTERNAL_MIC_MODE -> {
+                if (hasMicPermission(this)) {
+                    micModeActive = true
+                }
                 externalMicKeepAliveOnly = true
                 destroyRecognizerOnMain()
                 if (_isRunning.value) {
-                    updateForegroundNotification("Live microphone active in background")
+                    promoteToForeground()
                 }
                 return START_STICKY
             }
+
             ACTION_EXIT_EXTERNAL_MIC_MODE -> {
                 externalMicKeepAliveOnly = false
-                if (_isRunning.value && !_isPaused.value && keepRunning) {
-                    updateForegroundNotification("Listening for \"$wakePhrase\"")
-                    scheduleListenCycle(350L)
+                val savedMic = isSavedBackgroundEnabled(this) && hasMicPermission(this)
+                micModeActive = savedMic
+                if (!micModeActive && !automationKeepAliveActive && activeTaskRegistry.isEmpty()) {
+                    stopSelfCleanly()
+                    return START_NOT_STICKY
+                }
+                if (_isRunning.value) {
+                    promoteToForeground()
+                    if (micModeActive && !_isPaused.value) {
+                        scheduleListenCycle(350L)
+                    }
                 }
                 return START_STICKY
             }
+
             ACTION_UPDATE_STATUS -> {
                 val status = intent.getStringExtra(EXTRA_STATUS_TEXT).orEmpty().trim()
                 if (status.isNotEmpty() && _isRunning.value) {
                     lastStatusLine = status
-                    updateForegroundNotification(status)
+                    updateForegroundNotification()
                 }
+                return START_STICKY
+            }
+
+            ACTION_START_AUTOMATION_KEEP_ALIVE -> {
+                automationKeepAliveActive = true
+                _isAutomationKeepAliveActive.value = true
+                saveAutomationKeepAliveConfig(this, enabled = true)
+                micModeActive = micModeActive || (isSavedBackgroundEnabled(this) && hasMicPermission(this))
+                _serviceError.value = null
+                if (!promoteToForeground()) return START_NOT_STICKY
+                _isRunning.value = true
+                if (micModeActive && !_isPaused.value && !externalMicKeepAliveOnly) {
+                    scheduleListenCycle(150L)
+                }
+                return START_STICKY
+            }
+
+            ACTION_SYNC_AUTOMATION_TASKS -> {
+                val hasActiveTasks = activeTaskRegistry.isNotEmpty()
+                automationKeepAliveActive = automationKeepAliveActive || isSavedAutomationKeepAliveEnabled(this)
+                _isAutomationKeepAliveActive.value = automationKeepAliveActive
+                micModeActive = micModeActive || (isSavedBackgroundEnabled(this) && hasMicPermission(this))
+                if (!hasActiveTasks && !automationKeepAliveActive && !micModeActive) {
+                    stopSelfCleanly()
+                    return START_NOT_STICKY
+                }
+                _serviceError.value = null
+                if (!promoteToForeground()) return START_NOT_STICKY
+                _isRunning.value = true
+                refreshWakeLockState()
                 return START_STICKY
             }
         }
 
+        // Default ACTION_START (Voice Conversation / Wake-Word / Live Keep-Alive)
         if (!hasMicPermission(this)) {
-            reportErrorAndStop("Microphone permission (RECORD_AUDIO) is required before starting background mic.")
+            if (automationKeepAliveActive || activeTaskRegistry.isNotEmpty()) {
+                reportError("Microphone permission (RECORD_AUDIO) required for voice mode; automation service remains active.")
+                return START_STICKY
+            }
+            reportError("Microphone permission (RECORD_AUDIO) is required before starting voice foreground service.")
+            stopSelfCleanly()
             return START_NOT_STICKY
         }
 
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        val requestedPhrase = intent?.getStringExtra(EXTRA_WAKE_PHRASE)?.lowercase()?.trim()
-        val requestedLang = intent?.getStringExtra(EXTRA_LANGUAGE_TAG)?.trim()
-        val keepAliveOnly = intent?.getBooleanExtra(EXTRA_KEEP_ALIVE_ONLY, false) ?: false
+        val requestedPhrase = intent.getStringExtra(EXTRA_WAKE_PHRASE)?.lowercase()?.trim()
+        val requestedLang = intent.getStringExtra(EXTRA_LANGUAGE_TAG)?.trim()
+        val keepAliveOnly = intent.getBooleanExtra(EXTRA_KEEP_ALIVE_ONLY, false)
 
         wakePhrase = requestedPhrase?.takeIf { it.isNotEmpty() }
             ?: prefs.getString(KEY_WAKE_PHRASE, DEFAULT_WAKE_PHRASE)?.lowercase()?.trim()
@@ -125,59 +235,116 @@ class AquaWakeWordService : Service() {
             saveBackgroundConfig(this, enabled = true, wakePhrase = wakePhrase, languageTag = languageTag)
         }
 
+        micModeActive = true
+        automationKeepAliveActive = automationKeepAliveActive || isSavedAutomationKeepAliveEnabled(this)
+        _isAutomationKeepAliveActive.value = automationKeepAliveActive
         externalMicKeepAliveOnly = keepAliveOnly
         _isPaused.value = false
         _serviceError.value = null
-        keepRunning = true
 
-        val initialText = if (keepAliveOnly) {
-            "Live microphone active in background"
-        } else {
-            "Running in background • Listening for \"$wakePhrase\""
-        }
-        val startedFg = startForegroundWithMicType(initialText)
-        if (!startedFg) {
+        if (!promoteToForeground()) {
             return START_NOT_STICKY
         }
 
         _isRunning.value = true
+        refreshWakeLockState()
         if (!keepAliveOnly) {
             scheduleListenCycle(0L)
         }
         return START_STICKY
     }
 
-    private fun startForegroundWithMicType(contentText: String): Boolean {
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        // Android 15+ (API 35+) enforces a rolling 6-hour limit on dataSync foreground services.
+        // Immediately release dataSync type or stop cleanly to avoid RemoteServiceException.
+        Log.w(TAG, "Foreground service timeout reached for fgsType=$fgsType (startId=$startId)")
+        automationKeepAliveActive = false
+        _isAutomationKeepAliveActive.value = false
+        saveAutomationKeepAliveConfig(this, enabled = false)
+        activeTaskRegistry.clear()
+        _activeAutomationTasks.value = emptyList()
+        _activeTaskStep.value = ""
+        releaseWakeLock()
+
+        if (micModeActive && hasMicPermission(this) &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+        ) {
+            val downgraded = runCatching {
+                val notification = buildNotification()
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+                true
+            }.getOrDefault(false)
+            if (downgraded) {
+                _serviceError.value = "Automation dataSync daily OS quota reached; voice mode remains prioritized."
+                return
+            }
+        }
+        _serviceError.value = "Background automation OS time limit reached; open Aqua AI to reset priority window."
+        stopSelfCleanly()
+    }
+
+    private fun computeActiveForegroundType(): Int {
+        var types = 0
+        if (micModeActive && hasMicPermission(this)) {
+            types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        }
+        if (automationKeepAliveActive || activeTaskRegistry.isNotEmpty()) {
+            types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        }
+        if (types == 0) {
+            types = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        }
+        return types
+    }
+
+    private fun promoteToForeground(): Boolean {
         val manager = getSystemService(NotificationManager::class.java)
         ensureChannel(manager)
-        val notification = buildNotification(contentText)
+        val notification = buildNotification()
+        val fgsType = computeActiveForegroundType()
         return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                startForeground(
-                    NOTIFICATION_ID,
-                    notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-                )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification, fgsType)
             } else {
                 startForeground(NOTIFICATION_ID, notification)
             }
             true
         } catch (e: SecurityException) {
-            Log.e(TAG, "SecurityException starting microphone foreground service", e)
-            reportErrorAndStop("Microphone foreground permission denied by Android.")
+            Log.e(TAG, "SecurityException starting foreground service (type=$fgsType)", e)
+            // If microphone failed in edge state, retry with dataSync only when automation is active
+            if ((fgsType and ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE) != 0 &&
+                (automationKeepAliveActive || activeTaskRegistry.isNotEmpty()) &&
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+            ) {
+                micModeActive = false
+                return runCatching {
+                    startForeground(
+                        NOTIFICATION_ID,
+                        buildNotification(),
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                    )
+                    true
+                }.onFailure {
+                    reportError("Foreground permission denied by Android OS.")
+                    stopSelfCleanly()
+                }.getOrDefault(false)
+            }
+            reportError("Foreground microphone/service permission denied by Android.")
+            stopSelfCleanly()
             false
         } catch (e: Exception) {
-            Log.e(TAG, "Unable to start foreground service", e)
-            reportErrorAndStop(e.localizedMessage ?: "Failed to start background microphone service.")
+            Log.e(TAG, "Unable to promote to foreground service", e)
+            reportError(e.localizedMessage ?: "Failed to start Aqua priority foreground service.")
+            stopSelfCleanly()
             false
         }
     }
 
-    private fun updateForegroundNotification(contentText: String) {
+    private fun updateForegroundNotification() {
         runCatching {
             val manager = getSystemService(NotificationManager::class.java)
             ensureChannel(manager)
-            manager.notify(NOTIFICATION_ID, buildNotification(contentText))
+            manager.notify(NOTIFICATION_ID, buildNotification())
         }
     }
 
@@ -185,31 +352,22 @@ class AquaWakeWordService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Aqua Background App & Mic",
+                "Aqua AI Voice & Automation Priority",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Keeps Aqua AI active and listening in the background."
+                description = "Persistent notification keeping Aqua AI voice conversations and automation tasks active in the background."
                 setShowBadge(false)
             }
             manager.createNotificationChannel(channel)
         }
     }
 
-    private fun buildNotification(contentText: String): Notification {
+    private fun buildNotification(): Notification {
         val openIntent = PendingIntent.getActivity(
             this,
             0,
             Intent(this, MainActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val pauseOrResumeIntent = PendingIntent.getService(
-            this,
-            2,
-            Intent(this, AquaWakeWordService::class.java).apply {
-                action = if (_isPaused.value) ACTION_RESUME else ACTION_PAUSE
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -221,46 +379,130 @@ class AquaWakeWordService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val title = when {
-            externalMicKeepAliveOnly -> "Aqua AI Background Mic Active"
-            _isPaused.value -> "Aqua AI Background Mic Paused"
-            else -> "Aqua AI Running in Background"
+        val tasks = _activeAutomationTasks.value
+        val step = _activeTaskStep.value
+
+        val voiceStatus = when {
+            externalMicKeepAliveOnly -> "Voice: Live conversation active"
+            micModeActive && _isPaused.value -> "Voice: Mic paused"
+            micModeActive -> "Voice: Listening for \"$wakePhrase\""
+            else -> "Voice: Standby"
         }
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val automationStatus = when {
+            tasks.isNotEmpty() && step.isNotBlank() ->
+                "Automation (${tasks.size}): ${tasks.first()} • $step"
+            tasks.isNotEmpty() ->
+                "Automation (${tasks.size} active): ${tasks.joinToString(", ").take(90)}"
+            automationKeepAliveActive ->
+                "Automation: Ready & OS-prioritized"
+            lastStatusLine.isNotBlank() ->
+                lastStatusLine
+            else ->
+                "Automation: On-demand task protection"
+        }
+
+        val title = when {
+            micModeActive && (automationKeepAliveActive || tasks.isNotEmpty()) ->
+                "Aqua AI Voice & Automation Active"
+            tasks.isNotEmpty() ->
+                "Aqua AI Running Background Task"
+            automationKeepAliveActive ->
+                "Aqua AI Automation Service Active"
+            externalMicKeepAliveOnly ->
+                "Aqua AI Live Voice Active"
+            _isPaused.value ->
+                "Aqua AI Service Active (Mic Paused)"
+            else ->
+                "Aqua AI Voice & Background Active"
+        }
+
+        val summary = "$voiceStatus\n$automationStatus"
+        _foregroundStatusSummary.value = "$voiceStatus • $automationStatus"
+
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
-            .setContentText(contentText)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(contentText))
+            .setContentText("$voiceStatus • $automationStatus")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(summary))
             .setSmallIcon(R.mipmap.ic_launcher)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setContentIntent(openIntent)
-            .addAction(
+
+        if (micModeActive && !externalMicKeepAliveOnly) {
+            val pauseOrResumeIntent = PendingIntent.getService(
+                this,
+                2,
+                Intent(this, AquaWakeWordService::class.java).apply {
+                    action = if (_isPaused.value) ACTION_RESUME else ACTION_PAUSE
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            builder.addAction(
                 if (_isPaused.value) android.R.drawable.ic_media_play else android.R.drawable.ic_media_pause,
                 if (_isPaused.value) "Resume Mic" else "Pause Mic",
                 pauseOrResumeIntent
             )
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopIntent)
-            .build()
+        }
+
+        builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopIntent)
+        return builder.build()
+    }
+
+    @SuppressLint("WakelockTimeout")
+    private fun refreshWakeLockState() {
+        val shouldHoldWakeLock = externalMicKeepAliveOnly || activeTaskRegistry.isNotEmpty()
+        if (shouldHoldWakeLock) {
+            if (wakeLock?.isHeld != true) {
+                runCatching {
+                    val pm = getSystemService(PowerManager::class.java)
+                    val lock = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$TAG::PriorityTaskLock")
+                    lock?.setReferenceCounted(false)
+                    // Bounded 10-minute lease guarantees CPU priority for live voice & automation tasks without battery drain leaks
+                    lock?.acquire(10 * 60 * 1000L)
+                    wakeLock = lock
+                }
+            }
+        } else {
+            releaseWakeLock()
+        }
+    }
+
+    private fun releaseWakeLock() {
+        runCatching {
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.release()
+            }
+        }
+        wakeLock = null
     }
 
     private fun scheduleListenCycle(delayMs: Long) {
         handler.removeCallbacksAndMessages(null)
-        if (!keepRunning || _isPaused.value || externalMicKeepAliveOnly) return
+        if (!micModeActive || _isPaused.value || externalMicKeepAliveOnly) return
         handler.postDelayed({
-            if (!keepRunning || _isPaused.value || externalMicKeepAliveOnly) return@postDelayed
+            if (!micModeActive || _isPaused.value || externalMicKeepAliveOnly) return@postDelayed
             startRecognizerCycle()
         }, delayMs)
     }
 
     private fun startRecognizerCycle() {
         if (!hasMicPermission(this)) {
-            reportErrorAndStop("Microphone permission revoked.")
+            reportError("Microphone permission revoked.")
+            micModeActive = false
+            if (!automationKeepAliveActive && activeTaskRegistry.isEmpty()) {
+                stopSelfCleanly()
+            } else {
+                promoteToForeground()
+            }
             return
         }
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            _serviceError.value = "On-device SpeechRecognizer unavailable; keeping background process & Live mic keep-alive active."
-            updateForegroundNotification("App running in background (device SpeechRecognizer unavailable)")
+            _serviceError.value = "On-device SpeechRecognizer unavailable; keeping foreground process & automation priority active."
+            lastStatusLine = "Device SpeechRecognizer unavailable"
+            updateForegroundNotification()
             return
         }
         destroyRecognizerOnMain()
@@ -277,7 +519,13 @@ class AquaWakeWordService : Service() {
             override fun onError(error: Int) {
                 when (error) {
                     SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
-                        reportErrorAndStop("Microphone permission missing for background listening.")
+                        reportError("Microphone permission missing for background listening.")
+                        micModeActive = false
+                        if (!automationKeepAliveActive && activeTaskRegistry.isEmpty()) {
+                            stopSelfCleanly()
+                        } else {
+                            promoteToForeground()
+                        }
                     }
                     SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
                     SpeechRecognizer.ERROR_CLIENT -> {
@@ -289,7 +537,6 @@ class AquaWakeWordService : Service() {
                         scheduleListenCycle(4000L)
                     }
                     else -> {
-                        // Normal silence / no speech timeout
                         scheduleListenCycle(650L)
                     }
                 }
@@ -336,11 +583,10 @@ class AquaWakeWordService : Service() {
         lastTriggerTimeMs = now
         lastTriggerText = commandAfterWake
 
-        val displayCmd = commandAfterWake.ifBlank { "Listening for command..." }
-        updateForegroundNotification("Heard: \"$displayCmd\"")
+        lastStatusLine = "Heard: \"${commandAfterWake.ifBlank { "Listening..." }}\""
+        updateForegroundNotification()
         _wakeEvents.tryEmit(commandAfterWake)
 
-        // Best-effort bring-to-front only if permitted; background ViewModel still executes & speaks reply if OS blocks BAL
         runCatching {
             val launchIntent = Intent(this, MainActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -360,29 +606,36 @@ class AquaWakeWordService : Service() {
         recognizer = null
     }
 
-    private fun reportErrorAndStop(message: String) {
+    private fun reportError(message: String) {
         _serviceError.value = message
-        stopSelfCleanly()
     }
 
     private fun stopSelfCleanly() {
-        keepRunning = false
+        micModeActive = false
+        automationKeepAliveActive = false
         externalMicKeepAliveOnly = false
         _isRunning.value = false
         _isPaused.value = false
+        _isAutomationKeepAliveActive.value = false
+        _foregroundStatusSummary.value = ""
         handler.removeCallbacksAndMessages(null)
         destroyRecognizerOnMain()
+        releaseWakeLock()
         runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
         stopSelf()
     }
 
     override fun onDestroy() {
-        keepRunning = false
+        micModeActive = false
+        automationKeepAliveActive = false
         externalMicKeepAliveOnly = false
         _isRunning.value = false
         _isPaused.value = false
+        _isAutomationKeepAliveActive.value = false
+        _foregroundStatusSummary.value = ""
         handler.removeCallbacksAndMessages(null)
         destroyRecognizerOnMain()
+        releaseWakeLock()
         super.onDestroy()
     }
 
@@ -395,6 +648,9 @@ class AquaWakeWordService : Service() {
         const val ACTION_ENTER_EXTERNAL_MIC_MODE = "com.example.voice.ENTER_EXTERNAL_MIC"
         const val ACTION_EXIT_EXTERNAL_MIC_MODE = "com.example.voice.EXIT_EXTERNAL_MIC"
         const val ACTION_UPDATE_STATUS = "com.example.voice.UPDATE_STATUS"
+        const val ACTION_START_AUTOMATION_KEEP_ALIVE = "com.example.voice.START_AUTOMATION_KEEP_ALIVE"
+        const val ACTION_STOP_AUTOMATION_KEEP_ALIVE = "com.example.voice.STOP_AUTOMATION_KEEP_ALIVE"
+        const val ACTION_SYNC_AUTOMATION_TASKS = "com.example.voice.SYNC_AUTOMATION_TASKS"
 
         const val EXTRA_WAKE_PHRASE = "extra_wake_phrase"
         const val EXTRA_LANGUAGE_TAG = "extra_language_tag"
@@ -404,6 +660,7 @@ class AquaWakeWordService : Service() {
 
         private const val PREFS_NAME = "aqua_bg_mic_prefs"
         private const val KEY_BG_ENABLED = "bg_mic_enabled"
+        private const val KEY_AUTOMATION_ENABLED = "automation_keep_alive_enabled"
         private const val KEY_WAKE_PHRASE = "wake_phrase"
         private const val KEY_LANGUAGE_TAG = "language_tag"
 
@@ -412,11 +669,25 @@ class AquaWakeWordService : Service() {
         private const val CHANNEL_ID = "aqua_wake_word_channel"
         private const val NOTIFICATION_ID = 4042
 
+        private val activeTaskRegistry = ConcurrentHashMap<String, String>()
+
         private val _isRunning = MutableStateFlow(false)
         val isRunning: StateFlow<Boolean> = _isRunning.asStateFlow()
 
         private val _isPaused = MutableStateFlow(false)
         val isPaused: StateFlow<Boolean> = _isPaused.asStateFlow()
+
+        private val _isAutomationKeepAliveActive = MutableStateFlow(false)
+        val isAutomationKeepAliveActive: StateFlow<Boolean> = _isAutomationKeepAliveActive.asStateFlow()
+
+        private val _activeAutomationTasks = MutableStateFlow<List<String>>(emptyList())
+        val activeAutomationTasks: StateFlow<List<String>> = _activeAutomationTasks.asStateFlow()
+
+        private val _activeTaskStep = MutableStateFlow("")
+        val activeTaskStep: StateFlow<String> = _activeTaskStep.asStateFlow()
+
+        private val _foregroundStatusSummary = MutableStateFlow("")
+        val foregroundStatusSummary: StateFlow<String> = _foregroundStatusSummary.asStateFlow()
 
         private val _serviceError = MutableStateFlow<String?>(null)
         val serviceError: StateFlow<String?> = _serviceError.asStateFlow()
@@ -445,9 +716,21 @@ class AquaWakeWordService : Service() {
                 .apply()
         }
 
+        fun saveAutomationKeepAliveConfig(context: Context, enabled: Boolean) {
+            context.applicationContext.getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_AUTOMATION_ENABLED, enabled)
+                .apply()
+        }
+
         fun isSavedBackgroundEnabled(context: Context): Boolean {
             return context.applicationContext.getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
                 .getBoolean(KEY_BG_ENABLED, false)
+        }
+
+        fun isSavedAutomationKeepAliveEnabled(context: Context): Boolean {
+            return context.applicationContext.getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .getBoolean(KEY_AUTOMATION_ENABLED, false)
         }
 
         fun savedWakePhrase(context: Context): String {
@@ -480,8 +763,86 @@ class AquaWakeWordService : Service() {
             }.getOrDefault(false)
         }
 
+        fun startAutomationKeepAlive(context: Context): Boolean {
+            saveAutomationKeepAliveConfig(context, enabled = true)
+            _isAutomationKeepAliveActive.value = true
+            val intent = Intent(context, AquaWakeWordService::class.java).apply {
+                action = ACTION_START_AUTOMATION_KEEP_ALIVE
+            }
+            return runCatching {
+                ContextCompat.startForegroundService(context, intent)
+                true
+            }.onFailure { err ->
+                _serviceError.value = err.localizedMessage ?: "Android blocked starting automation foreground service."
+            }.getOrDefault(false)
+        }
+
+        fun stopAutomationKeepAlive(context: Context) {
+            saveAutomationKeepAliveConfig(context, enabled = false)
+            _isAutomationKeepAliveActive.value = false
+            if (!_isRunning.value) return
+            val intent = Intent(context, AquaWakeWordService::class.java).apply {
+                action = ACTION_STOP_AUTOMATION_KEEP_ALIVE
+            }
+            runCatching { context.startService(intent) }
+        }
+
+        /**
+         * Registers an active automation task or AI turn so the Android OS elevates and keeps
+         * the process alive via a `dataSync` foreground service while executing tools/network calls.
+         */
+        fun beginAutomationTask(context: Context, taskLabel: String): String {
+            val taskId = UUID.randomUUID().toString()
+            val cleanLabel = taskLabel.trim().ifEmpty { "Aqua AI Task" }.take(60)
+            activeTaskRegistry[taskId] = cleanLabel
+            _activeAutomationTasks.value = activeTaskRegistry.values.toList()
+            _activeTaskStep.value = "Initializing..."
+
+            val intent = Intent(context, AquaWakeWordService::class.java).apply {
+                action = ACTION_SYNC_AUTOMATION_TASKS
+            }
+            runCatching {
+                if (_isRunning.value) {
+                    context.startService(intent)
+                } else {
+                    ContextCompat.startForegroundService(context, intent)
+                }
+            }
+            return taskId
+        }
+
+        fun updateAutomationTaskStep(context: Context, stepLabel: String) {
+            _activeTaskStep.value = stepLabel.trim().take(80)
+            if (_isRunning.value) {
+                updateStatusNotification(context, stepLabel)
+            }
+        }
+
+        fun endAutomationTask(context: Context, taskId: String, completionSummary: String = "") {
+            activeTaskRegistry.remove(taskId)
+            val remaining = activeTaskRegistry.values.toList()
+            _activeAutomationTasks.value = remaining
+            if (remaining.isEmpty()) {
+                _activeTaskStep.value = ""
+            }
+            if (!_isRunning.value) return
+
+            if (completionSummary.isNotBlank()) {
+                updateStatusNotification(context, completionSummary)
+            }
+            val intent = Intent(context, AquaWakeWordService::class.java).apply {
+                action = ACTION_SYNC_AUTOMATION_TASKS
+            }
+            runCatching { context.startService(intent) }
+        }
+
         fun stop(context: Context) {
             saveBackgroundConfig(context, enabled = false)
+            saveAutomationKeepAliveConfig(context, enabled = false)
+            _isAutomationKeepAliveActive.value = false
+            activeTaskRegistry.clear()
+            _activeAutomationTasks.value = emptyList()
+            _activeTaskStep.value = ""
             if (!_isRunning.value) return
             val intent = Intent(context, AquaWakeWordService::class.java).apply {
                 action = ACTION_STOP

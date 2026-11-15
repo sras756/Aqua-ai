@@ -15,6 +15,7 @@ data class UserSettings(
     val searchGroundingEnabled: Boolean = true,
     val mapsGroundingEnabled: Boolean = false,
     val wakeWordEnabled: Boolean = false,
+    val backgroundAutomationEnabled: Boolean = false,
     val wakeWordPhrase: String = "Hey Aqua",
     val voiceLanguage: String = "en-US",
     val voiceSpeed: Double = 1.0,
