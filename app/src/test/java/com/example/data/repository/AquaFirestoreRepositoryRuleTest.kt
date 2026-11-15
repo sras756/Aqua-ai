@@ -210,6 +210,22 @@ class AquaFirestoreRepositoryRuleTest : FirestoreEmulatorTestBase() {
         org.junit.Assert.assertNotNull(engine.buildToolDeclarations())
     }
 
+    @Test
+    fun authenticatedUser_canSaveAndObserveLauncherCloudSyncPreferences() = runBlocking {
+        signInTestUser(ALICE_EMAIL)
+        val repo = AquaFirestoreRepository(firestore)
+
+        val saveRes = withTimeout(TIMEOUT_MS) {
+            repo.saveLauncherSync("""{"themePreset":"gaming","gridColumns":5}""")
+        }
+        assertTrue(saveRes.isSuccess)
+
+        val observed = withTimeout(FLOW_TIMEOUT_MS) {
+            repo.observeLauncherSync().first { it != null }
+        }
+        assertTrue(observed?.configJson?.contains("gaming") == true)
+    }
+
     private companion object {
         const val ALICE_EMAIL = "alice_aqua@test.com"
         const val BOB_EMAIL = "bob_aqua@test.com"

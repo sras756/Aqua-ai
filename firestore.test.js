@@ -251,6 +251,39 @@ test("Owner can create, list, update, and delete settings, conversations, messag
   await assertFails(bobDb.doc(`users/${ALICE_UID}/routines/routine_1`).get());
   await assertSucceeds(aliceDb.doc(`users/${ALICE_UID}/routines/routine_1`).delete());
 
+  // 7. Launcher Cloud Preference Sync CRUD, ghost-field guard, and cross-user isolation
+  await assertFails(testEnv.unauthenticatedContext().firestore().collection(`users/${ALICE_UID}/launcher_configs`).get());
+  await assertSucceeds(
+    aliceDb.doc(`users/${ALICE_UID}/launcher_configs/default`).set({
+      userId: ALICE_UID,
+      configJson: "{\"themePreset\":\"aqua_blue\"}",
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+  await assertFails(
+    aliceDb.doc(`users/${ALICE_UID}/launcher_configs/ghost`).set({
+      userId: ALICE_UID,
+      configJson: "{}",
+      installedApps: ["com.evil"],
+      createdAt: ts,
+      updatedAt: ts,
+    })
+  );
+  await assertSucceeds(
+    aliceDb.doc(`users/${ALICE_UID}/launcher_configs/default`).update({
+      configJson: "{\"themePreset\":\"midnight_dark\"}",
+      updatedAt: nowTs(),
+    })
+  );
+  await assertFails(bobDb.doc(`users/${ALICE_UID}/launcher_configs/default`).get());
+  await assertFails(bobDb.doc(`users/${ALICE_UID}/launcher_configs/default`).set({
+    userId: BOB_UID,
+    configJson: "{}",
+    createdAt: ts,
+    updatedAt: ts,
+  }));
+
   // Delete succeeds
   await assertSucceeds(aliceDb.doc(`users/${ALICE_UID}/browser_tabs/tab_1`).delete());
 });

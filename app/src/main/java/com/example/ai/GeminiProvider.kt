@@ -20,6 +20,7 @@ import com.google.firebase.ai.type.GenerativeBackend
 import com.google.firebase.ai.type.InlineDataPart
 import com.google.firebase.ai.type.LatLng
 import com.google.firebase.ai.type.PublicPreviewAPI
+import com.google.firebase.ai.type.QuotaExceededException
 import com.google.firebase.ai.type.ResponseModality
 import com.google.firebase.ai.type.SpeechConfig
 import com.google.firebase.ai.type.ThinkingLevel
@@ -34,6 +35,7 @@ import com.google.firebase.ai.type.thinkingConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import okhttp3.MediaType.Companion.toMediaType
@@ -68,7 +70,8 @@ class GeminiProvider(
         enableFunctionTools: Boolean,
         enableSearchGrounding: Boolean = false,
         enableMapsGrounding: Boolean = false,
-        userLatLng: Pair<Double, Double>? = null
+        userLatLng: Pair<Double, Double>? = null,
+        promptHint: String = ""
     ): GenerativeModel {
         val resolvedModel = normalizeSupportedModel(modelName)
         val useDeepThinking = resolvedModel == UserSettings.MODEL_ARGON && settings.thinkingEnabled
@@ -82,7 +85,7 @@ class GeminiProvider(
 
         val tools = mutableListOf<Tool>()
         if (enableFunctionTools) {
-            tools.add(toolCallingEngine.buildToolDeclarations())
+            tools.add(toolCallingEngine.buildToolDeclarations(settings = settings, promptHint = promptHint))
         }
         if (enableSearchGrounding && !enableFunctionTools && settings.fullInternetAccessEnabled) {
             tools.add(Tool.googleSearch())
@@ -173,13 +176,14 @@ class GeminiProvider(
         onTrace: (AgentStepTrace) -> Unit
     ): Result<AgentExecutionResult> {
         val selectedModel = selectOptimalModel(userPrompt, attachment, settings)
+        val promptHint = (history.takeLast(2).map { it.content } + userPrompt).joinToString(" ")
         val traces = mutableListOf<AgentStepTrace>()
         val groundingSources = mutableListOf<String>()
 
         // Optional direct API key path if user explicitly configured & enabled their own Gemini API key
         val customKey = secureConfigStore.getGeminiApiKey()
         if (settings.useCustomDirectApiKey && !customKey.isNullOrBlank() && attachment == null) {
-            return executeDirectRestFallback(
+            val directPrimary = executeDirectRestFallback(
                 apiKey = customKey,
                 modelName = selectedModel,
                 systemInstruction = systemInstructionText,
@@ -188,11 +192,28 @@ class GeminiProvider(
                 enableSearchGrounding = settings.fullInternetAccessEnabled && settings.searchGroundingEnabled,
                 onStreamChunk = onStreamChunk
             )
-        }
+            if (directPrimary.isSuccess) return directPrimary
 
-        return try {
-            executeWithFirebaseAi(
-                modelToUse = selectedModel,
+            val primaryErr = directPrimary.exceptionOrNull()
+            Log.w(TAG, "Direct Gemini REST failed on $selectedModel: ${primaryErr?.message}")
+            if (primaryErr != null && isRateLimitOrQuotaError(primaryErr)) {
+                delay(1000L)
+                val retryModel = if (selectedModel != UserSettings.MODEL_FLASH_LITE) UserSettings.MODEL_FLASH_LITE else selectedModel
+                val directRetry = executeDirectRestFallback(
+                    apiKey = customKey,
+                    modelName = retryModel,
+                    systemInstruction = systemInstructionText,
+                    history = history,
+                    userPrompt = userPrompt,
+                    enableSearchGrounding = settings.fullInternetAccessEnabled && settings.searchGroundingEnabled,
+                    onStreamChunk = onStreamChunk
+                )
+                if (directRetry.isSuccess) return directRetry
+                Log.w(TAG, "Direct Gemini REST retry on $retryModel failed; falling back to Firebase AI Logic")
+            }
+            // Seamless fallback to Firebase AI Logic (supports function calling & separate quota)
+            return executeFirebaseAiWithResilience(
+                primaryModel = selectedModel,
                 userPrompt = userPrompt,
                 history = history,
                 attachment = attachment,
@@ -200,6 +221,66 @@ class GeminiProvider(
                 systemInstructionText = systemInstructionText,
                 activeWallet = activeWallet,
                 userLatLng = userLatLng,
+                promptHint = promptHint,
+                traces = traces,
+                groundingSources = groundingSources,
+                onNavigateToBrowser = onNavigateToBrowser,
+                requestAuthorization = requestAuthorization,
+                onStreamChunk = onStreamChunk,
+                onTrace = onTrace,
+                priorDirectError = primaryErr
+            )
+        }
+
+        return executeFirebaseAiWithResilience(
+            primaryModel = selectedModel,
+            userPrompt = userPrompt,
+            history = history,
+            attachment = attachment,
+            settings = settings,
+            systemInstructionText = systemInstructionText,
+            activeWallet = activeWallet,
+            userLatLng = userLatLng,
+            promptHint = promptHint,
+            traces = traces,
+            groundingSources = groundingSources,
+            onNavigateToBrowser = onNavigateToBrowser,
+            requestAuthorization = requestAuthorization,
+            onStreamChunk = onStreamChunk,
+            onTrace = onTrace,
+            priorDirectError = null
+        )
+    }
+
+    private suspend fun executeFirebaseAiWithResilience(
+        primaryModel: String,
+        userPrompt: String,
+        history: List<ChatMessage>,
+        attachment: ImportedAttachment?,
+        settings: UserSettings,
+        systemInstructionText: String,
+        activeWallet: WalletConfig?,
+        userLatLng: Pair<Double, Double>?,
+        promptHint: String,
+        traces: MutableList<AgentStepTrace>,
+        groundingSources: MutableList<String>,
+        onNavigateToBrowser: (String) -> Unit,
+        requestAuthorization: suspend (PendingAuthorization) -> Boolean,
+        onStreamChunk: (String) -> Unit,
+        onTrace: (AgentStepTrace) -> Unit,
+        priorDirectError: Throwable?
+    ): Result<AgentExecutionResult> {
+        return try {
+            executeWithFirebaseAi(
+                modelToUse = primaryModel,
+                userPrompt = userPrompt,
+                history = history,
+                attachment = attachment,
+                settings = settings,
+                systemInstructionText = systemInstructionText,
+                activeWallet = activeWallet,
+                userLatLng = userLatLng,
+                promptHint = promptHint,
                 traces = traces,
                 groundingSources = groundingSources,
                 onNavigateToBrowser = onNavigateToBrowser,
@@ -208,44 +289,125 @@ class GeminiProvider(
                 onTrace = onTrace
             )
         } catch (e: TimeoutCancellationException) {
-            Log.w(TAG, "Gemini request timed out on $selectedModel, attempting fast fallback", e)
-            if (selectedModel != UserSettings.MODEL_FLASH_LITE) {
-                try {
-                    return executeWithFirebaseAi(
-                        modelToUse = UserSettings.MODEL_FLASH_LITE,
-                        userPrompt = userPrompt,
-                        history = history,
-                        attachment = attachment,
-                        settings = settings.copy(thinkingEnabled = false),
-                        systemInstructionText = systemInstructionText,
-                        activeWallet = activeWallet,
-                        userLatLng = userLatLng,
-                        traces = traces,
-                        groundingSources = groundingSources,
-                        onNavigateToBrowser = onNavigateToBrowser,
-                        requestAuthorization = requestAuthorization,
-                        onStreamChunk = onStreamChunk,
-                        onTrace = onTrace
-                    )
-                } catch (fallbackErr: CancellationException) {
-                    if (fallbackErr is TimeoutCancellationException) {
-                        Log.e(TAG, "Gemini fallback request timed out", fallbackErr)
-                        return Result.failure(Exception("Aqua AI timed out after 60 seconds. Check network connectivity and retry."))
-                    }
-                    throw fallbackErr
-                } catch (fallbackErr: Exception) {
-                    Log.e(TAG, "Gemini fallback failed", fallbackErr)
-                    return Result.failure(fallbackErr)
-                }
-            }
-            Log.e(TAG, "Gemini request timed out", e)
-            Result.failure(Exception("Aqua AI timed out after 60 seconds. Check network and retry."))
+            Log.w(TAG, "Gemini request timed out on $primaryModel, cascading to Flash-Lite", e)
+            cascadeToFlashLite(
+                failedModel = primaryModel,
+                waitBeforeRetryMs = 300L,
+                userPrompt = userPrompt,
+                history = history,
+                attachment = attachment,
+                settings = settings,
+                systemInstructionText = systemInstructionText,
+                activeWallet = activeWallet,
+                userLatLng = userLatLng,
+                promptHint = promptHint,
+                traces = traces,
+                groundingSources = groundingSources,
+                onNavigateToBrowser = onNavigateToBrowser,
+                requestAuthorization = requestAuthorization,
+                onStreamChunk = onStreamChunk,
+                onTrace = onTrace,
+                rootCause = e
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.e(TAG, "Gemini execution failed on $selectedModel", e)
-            Result.failure(e)
+            if (isRateLimitOrQuotaError(e)) {
+                Log.w(TAG, "Gemini quota/rate-limit on $primaryModel, backing off and cascading to Flash-Lite", e)
+                return cascadeToFlashLite(
+                    failedModel = primaryModel,
+                    waitBeforeRetryMs = if (primaryModel == UserSettings.MODEL_FLASH_LITE) 1500L else 900L,
+                    userPrompt = userPrompt,
+                    history = history,
+                    attachment = attachment,
+                    settings = settings,
+                    systemInstructionText = systemInstructionText,
+                    activeWallet = activeWallet,
+                    userLatLng = userLatLng,
+                    promptHint = promptHint,
+                    traces = traces,
+                    groundingSources = groundingSources,
+                    onNavigateToBrowser = onNavigateToBrowser,
+                    requestAuthorization = requestAuthorization,
+                    onStreamChunk = onStreamChunk,
+                    onTrace = onTrace,
+                    rootCause = e
+                )
+            }
+            Log.e(TAG, "Gemini execution failed on $primaryModel", e)
+            Result.failure(priorDirectError?.takeIf { e.message.isNullOrBlank() } ?: e)
         }
+    }
+
+    private suspend fun cascadeToFlashLite(
+        failedModel: String,
+        waitBeforeRetryMs: Long,
+        userPrompt: String,
+        history: List<ChatMessage>,
+        attachment: ImportedAttachment?,
+        settings: UserSettings,
+        systemInstructionText: String,
+        activeWallet: WalletConfig?,
+        userLatLng: Pair<Double, Double>?,
+        promptHint: String,
+        traces: MutableList<AgentStepTrace>,
+        groundingSources: MutableList<String>,
+        onNavigateToBrowser: (String) -> Unit,
+        requestAuthorization: suspend (PendingAuthorization) -> Boolean,
+        onStreamChunk: (String) -> Unit,
+        onTrace: (AgentStepTrace) -> Unit,
+        rootCause: Exception
+    ): Result<AgentExecutionResult> {
+        delay(waitBeforeRetryMs)
+        val fallbackModel = UserSettings.MODEL_FLASH_LITE
+        traces.clear()
+        groundingSources.clear()
+        return try {
+            executeWithFirebaseAi(
+                modelToUse = fallbackModel,
+                userPrompt = userPrompt,
+                history = history,
+                attachment = attachment,
+                settings = settings.copy(thinkingEnabled = false),
+                systemInstructionText = systemInstructionText,
+                activeWallet = activeWallet,
+                userLatLng = userLatLng,
+                promptHint = promptHint,
+                traces = traces,
+                groundingSources = groundingSources,
+                onNavigateToBrowser = onNavigateToBrowser,
+                requestAuthorization = requestAuthorization,
+                onStreamChunk = onStreamChunk,
+                onTrace = onTrace
+            )
+        } catch (fallbackErr: TimeoutCancellationException) {
+            Log.e(TAG, "Gemini fallback timed out on $fallbackModel", fallbackErr)
+            Result.failure(Exception("Aqua AI timed out after 60 seconds. Check network connectivity and retry."))
+        } catch (fallbackErr: CancellationException) {
+            throw fallbackErr
+        } catch (fallbackErr: Exception) {
+            Log.e(TAG, "Gemini fallback failed on $fallbackModel (after $failedModel)", fallbackErr)
+            if (isRateLimitOrQuotaError(fallbackErr) || isRateLimitOrQuotaError(rootCause)) {
+                Result.failure(
+                    IllegalStateException(
+                        "Gemini rate limit reached (HTTP 429) on both $failedModel and $fallbackModel. Please wait 30–60 seconds before retrying, or verify your quota/Direct API key in Settings -> Gemini Intelligence."
+                    )
+                )
+            } else {
+                Result.failure(fallbackErr)
+            }
+        }
+    }
+
+    private fun isRateLimitOrQuotaError(t: Throwable): Boolean {
+        if (t is QuotaExceededException) return true
+        val msg = listOfNotNull(t.message, t.cause?.message).joinToString(" ").lowercase()
+        return msg.contains("429") ||
+            msg.contains("quota") ||
+            msg.contains("rate limit") ||
+            msg.contains("rate-limit") ||
+            msg.contains("resource_exhausted") ||
+            msg.contains("too many requests")
     }
 
     private suspend fun executeWithFirebaseAi(
@@ -257,6 +419,7 @@ class GeminiProvider(
         systemInstructionText: String,
         activeWallet: WalletConfig?,
         userLatLng: Pair<Double, Double>?,
+        promptHint: String,
         traces: MutableList<AgentStepTrace>,
         groundingSources: MutableList<String>,
         onNavigateToBrowser: (String) -> Unit,
@@ -272,12 +435,13 @@ class GeminiProvider(
             enableFunctionTools = !useGroundingInsteadOfTools && attachment == null,
             enableSearchGrounding = settings.fullInternetAccessEnabled && settings.searchGroundingEnabled && useGroundingInsteadOfTools,
             enableMapsGrounding = settings.fullInternetAccessEnabled && settings.mapsGroundingEnabled && useGroundingInsteadOfTools,
-            userLatLng = userLatLng
+            userLatLng = userLatLng,
+            promptHint = promptHint
         )
 
         val historyContents = history
             .filter { it.role == "user" || it.role == "model" }
-            .takeLast(14)
+            .takeLast(10)
             .map { msg ->
                 content(role = msg.role) { text(msg.content) }
             }
@@ -489,10 +653,15 @@ class GeminiProvider(
                 .build()
 
             httpClient.newCall(req).execute().use { resp ->
+                val rawBody = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) {
-                    throw IllegalStateException("Direct Gemini API returned HTTP ${resp.code}.")
+                    val serverMsg = runCatching {
+                        JSONObject(rawBody).optJSONObject("error")?.optString("message", "")
+                    }.getOrNull().orEmpty()
+                    val detail = if (serverMsg.isNotBlank()) "HTTP ${resp.code}: $serverMsg" else "HTTP ${resp.code}"
+                    throw IllegalStateException("Direct Gemini API returned $detail.")
                 }
-                val respJson = JSONObject(resp.body?.string() ?: "{}")
+                val respJson = JSONObject(rawBody.ifBlank { "{}" })
                 val firstCand = respJson.optJSONArray("candidates")?.optJSONObject(0)
                 val text = firstCand
                     ?.optJSONObject("content")

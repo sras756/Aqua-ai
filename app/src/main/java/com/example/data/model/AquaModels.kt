@@ -191,3 +191,12 @@ data class AgentStepTrace(
     val status: String,
     val detail: String
 )
+
+@IgnoreExtraProperties
+data class LauncherCloudSyncRecord(
+    @DocumentId val id: String = "default",
+    val userId: String = "",
+    val configJson: String = "{}",
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+)

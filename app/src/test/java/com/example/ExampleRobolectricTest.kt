@@ -1,6 +1,7 @@
 package com.example
 
 import android.content.Context
+import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
 import com.example.ai.ContextManager
 import com.example.browser.AquaBrowserController
@@ -19,6 +20,7 @@ import com.example.device.AndroidDeviceController
 import com.example.device.DeviceTelemetry
 import com.example.network.AquaWebClient
 import com.example.skills.SkillParserAndValidator
+import com.example.voice.AquaWakeWordService
 import com.example.wallet.FlashWalletConnector
 import com.example.wallet.QrCodeGenerator
 import org.junit.Assert.assertEquals
@@ -268,5 +270,31 @@ class ExampleRobolectricTest {
         assertTrue(prompt.contains("web_search"))
         assertTrue(prompt.contains("web_fetch_page"))
         assertTrue(prompt.contains("web_http_request"))
+    }
+
+    @Test
+    fun `background mic service persists wake config enforces mic permission and registers boot receiver`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        AquaWakeWordService.saveBackgroundConfig(context, enabled = true, wakePhrase = "Hey Aqua Test", languageTag = "en-US")
+        assertTrue(AquaWakeWordService.isSavedBackgroundEnabled(context))
+        assertEquals("hey aqua test", AquaWakeWordService.savedWakePhrase(context))
+
+        // Without RECORD_AUDIO granted in Robolectric sandbox, start() returns false cleanly instead of throwing
+        val startedWithoutPerm = AquaWakeWordService.start(context, wakePhrase = "hey aqua")
+        assertFalse(startedWithoutPerm)
+        assertNotNull(AquaWakeWordService.serviceError.value)
+        AquaWakeWordService.clearServiceError()
+
+        AquaWakeWordService.saveBackgroundConfig(context, enabled = false)
+        assertFalse(AquaWakeWordService.isSavedBackgroundEnabled(context))
+
+        val bootReceivers = context.packageManager.queryBroadcastReceivers(
+            Intent(Intent.ACTION_BOOT_COMPLETED),
+            0
+        )
+        assertTrue(
+            "AquaBootReceiver must be registered for BOOT_COMPLETED",
+            bootReceivers.any { it.activityInfo.packageName == context.packageName }
+        )
     }
 }

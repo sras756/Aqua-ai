@@ -18,7 +18,8 @@ object ContextManager {
         telemetry: DeviceTelemetry,
         browserUrl: String,
         browserTitle: String,
-        nativeWalletOverview: String? = null
+        nativeWalletOverview: String? = null,
+        launcherOverview: String? = null
     ): String = buildString {
         appendLine("You are AQUA AI, an intelligent, futuristic, voice-enabled autonomous personal AI assistant built exclusively for Android.")
         appendLine("Current Local Time: ${DateFormat.getDateTimeInstance().format(Date())}")
@@ -34,8 +35,8 @@ object ContextManager {
                 "Live internet tools are currently paused in Settings; rely on device/local data or inform the user they can re-enable Full Internet Access in Settings."
             }
         )
-        appendLine("4. For reversible read-only tasks (web search, fetching public webpages, HTTP GET/HEAD APIs, checking battery/connectivity, spot prices, wallet portfolio/addresses/tx/fees/risk/telemetry/allowances/ENS/charts/URI-parse/sig-verify, setting alarms, opening apps, reading Google Contacts/Calendar/Gmail/Sheets/Forms/Chat), execute the declared tool directly.")
-        appendLine("5. For wallet mutations & sensitive actions (HTTP POST/PUT/PATCH/DELETE mutations, creating wallets or deriving accounts, adding custom tokens/networks, saving/deleting contacts, signing off-chain messages, crypto transfer signing, ERC-20 allowance revocation, initiating calls, drafting SMS, sending Gmail or Google Chat messages, filling web forms, uploading files), invoke the appropriate tool which enforces explicit user authorization.")
+        appendLine("4. For reversible read-only tasks (web search, fetching public webpages, HTTP GET/HEAD APIs, checking battery/connectivity, launcher app search/overview, spot prices, wallet portfolio/addresses/tx/fees/risk/telemetry/allowances/ENS/charts/URI-parse/sig-verify, setting alarms, opening apps, reading Google Contacts/Calendar/Gmail/Sheets/Forms/Chat), execute the declared tool directly.")
+        appendLine("5. For launcher customization & sensitive actions (HTTP POST/PUT/PATCH/DELETE mutations, theme/wallpaper/layout changes, launcher natural-language commands, creating wallets or deriving accounts, adding custom tokens/networks, saving/deleting contacts, signing off-chain messages, crypto transfer signing, ERC-20 allowance revocation, initiating calls, drafting SMS, sending Gmail or Google Chat messages, filling web forms, uploading files), invoke the appropriate tool which enforces explicit user authorization where required.")
         appendLine("6. STRICT CRYPTO WALLET BOUNDARY (${if (!settings.aiWalletAccessEnabled) "PAUSED" else if (settings.aiWalletTransferPrepareEnabled) "READ + WRITE ENABLED" else "READ-ONLY"}): Never ask for, read, log, or transmit wallet recovery phrases, private keys, or PINs. You cannot alter spending limits, unlock Emergency Lock, or bypass confirmation. Never report a newly broadcast transaction as confirmed until on-chain status is CONFIRMED.")
         appendLine()
         appendLine("## Live Android Device Telemetry")
@@ -47,6 +48,12 @@ object ContextManager {
         appendLine("- Notification Access: ${if (telemetry.notificationAccessGranted) "Granted" else "Not granted"}")
         appendLine("- Active Aqua Browser Tab: $browserTitle ($browserUrl)")
         appendLine()
+
+        if (!launcherOverview.isNullOrBlank()) {
+            appendLine("## Aqua Launcher Ecosystem")
+            appendLine(launcherOverview.trimEnd())
+            appendLine()
+        }
 
         if (settings.aiWalletAccessEnabled) {
             if (!nativeWalletOverview.isNullOrBlank()) {

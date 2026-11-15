@@ -275,7 +275,6 @@ fun PersistentChatBar(
         modifier = modifier
             .fillMaxWidth()
             .border(1.dp, AquaBorderGlow, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-            .navigationBarsPadding()
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
             AnimatedVisibility(visible = pendingAttachment != null) {
@@ -379,7 +378,7 @@ fun PersistentChatBar(
                     onValueChange = onInputTextChange,
                     placeholder = {
                         Text(
-                            text = "Ask Aqua or issue a command...",
+                            text = "Ask Aqua...",
                             style = MaterialTheme.typography.bodyMedium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis

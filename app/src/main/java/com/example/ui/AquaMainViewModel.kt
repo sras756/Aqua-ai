@@ -60,6 +60,8 @@ import com.example.wallet.WalletIntegrationDiscovery
 import com.example.wallet.core.AquaWalletCoordinator
 import com.example.wallet.core.AquaWalletEngine
 import com.example.wallet.security.WalletSecurityVault
+import com.example.launcher.engine.AquaLauncherEngine
+import com.example.launcher.engine.LauncherAiController
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -103,6 +105,9 @@ class AquaMainViewModel(
         onBanner = { msg -> _bannerMessage.value = msg }
     )
 
+    val launcherEngine: AquaLauncherEngine = AquaLauncherEngine.getInstance(appContext)
+    val launcherAiController: LauncherAiController = LauncherAiController(launcherEngine)
+
     private val toolCallingEngine = ToolCallingEngine(
         deviceController = deviceController,
         browserController = browserController,
@@ -111,7 +116,8 @@ class AquaMainViewModel(
         driveHistoryRepo = driveHistoryRepo,
         workspaceRepo = workspaceRepo,
         aiWalletBridge = walletCoordinator.aiBridge,
-        onWalletMutated = { viewModelScope.launch { walletCoordinator.reloadAll() } }
+        onWalletMutated = { viewModelScope.launch { walletCoordinator.reloadAll() } },
+        launcherEngine = launcherEngine
     )
 
     private val geminiProvider = GeminiProvider(
@@ -176,6 +182,8 @@ class AquaMainViewModel(
     val partialTranscript: StateFlow<String> = voiceManager.partialTranscript
     val waveformBars: StateFlow<FloatArray> = voiceManager.waveformBars
     val wakeWordRunning: StateFlow<Boolean> = AquaWakeWordService.isRunning
+    val wakeWordPaused: StateFlow<Boolean> = AquaWakeWordService.isPaused
+    val backgroundMicError: StateFlow<String?> = AquaWakeWordService.serviceError
 
     private val _coreState = MutableStateFlow(AquaCoreState.IDLE)
     val coreState: StateFlow<AquaCoreState> = _coreState.asStateFlow()
@@ -287,8 +295,14 @@ class AquaMainViewModel(
     init {
         viewModelScope.launch {
             voiceManager.isListening.collect { listening ->
-                if (listening) _coreState.value = AquaCoreState.LISTENING
-                else if (_coreState.value == AquaCoreState.LISTENING) _coreState.value = AquaCoreState.IDLE
+                if (listening) {
+                    _coreState.value = AquaCoreState.LISTENING
+                } else {
+                    if (_coreState.value == AquaCoreState.LISTENING) _coreState.value = AquaCoreState.IDLE
+                    if (!voiceManager.isLiveSessionActive.value && AquaWakeWordService.isRunning.value) {
+                        AquaWakeWordService.setExternalMicActive(appContext, false)
+                    }
+                }
             }
         }
         viewModelScope.launch {
@@ -300,9 +314,36 @@ class AquaMainViewModel(
         viewModelScope.launch {
             AquaWakeWordService.wakeEvents.collect { cmd ->
                 if (cmd.isNotBlank()) {
-                    sendMessage(cmd, speakReply = true)
+                    sendMessage(cmd, speakReply = true) { replySummary ->
+                        AquaWakeWordService.updateStatusNotification(
+                            appContext,
+                            "Aqua: ${replySummary.take(110)}"
+                        )
+                    }
                 } else {
                     startVoiceCapture(autoSendAndSpeak = true)
+                }
+            }
+        }
+        viewModelScope.launch {
+            AquaWakeWordService.serviceError.collect { err ->
+                if (!err.isNullOrBlank()) {
+                    _bannerMessage.value = err
+                    AquaWakeWordService.clearServiceError()
+                }
+            }
+        }
+        viewModelScope.launch {
+            settings.collect { s ->
+                if (s.wakeWordEnabled &&
+                    AquaWakeWordService.hasMicPermission(appContext) &&
+                    !AquaWakeWordService.isRunning.value
+                ) {
+                    AquaWakeWordService.start(
+                        context = appContext,
+                        wakePhrase = s.wakeWordPhrase,
+                        languageTag = s.voiceLanguage
+                    )
                 }
             }
         }
@@ -314,11 +355,61 @@ class AquaMainViewModel(
                     .onSuccess { _driveBackups.value = it }
             }
         }
+        launcherEngine.attachCloudPushCallback { json ->
+            firestoreRepo.saveLauncherSync(json)
+        }
+        viewModelScope.launch {
+            firestoreRepo.observeLauncherSync()
+                .catch { /* Non-fatal if offline or uninitialized */ }
+                .collect { record ->
+                    if (record != null && launcherEngine.state.value.cloudSyncEnabled) {
+                        val remoteTs = record.updatedAt?.toDate()?.time ?: 0L
+                        val localTs = launcherEngine.state.value.lastCloudSyncMs
+                        if (remoteTs > localTs && record.configJson.isNotBlank()) {
+                            launcherEngine.applySyncedCloudPreferences(record.configJson, remoteTs)
+                        }
+                    }
+                }
+        }
     }
 
     fun refreshTelemetry() {
         _telemetry.value = deviceController.getTelemetry()
         _storageAndMemory.value = deviceController.getStorageAndMemoryStats()
+    }
+
+    fun openStandaloneLauncher() {
+        runCatching {
+            val intent = Intent(appContext, AquaLauncherActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            appContext.startActivity(intent)
+        }.onFailure { err ->
+            _bannerMessage.value = "Could not open standalone launcher: ${err.localizedMessage}"
+        }
+    }
+
+    fun pushLauncherCloudSyncNow() {
+        viewModelScope.launch {
+            val json = launcherEngine.state.value.toCloudSyncJson()
+            firestoreRepo.saveLauncherSync(json)
+                .onSuccess {
+                    launcherEngine.postBanner("Synced Aqua Launcher theme, wallpaper & gesture preferences to cloud.")
+                }
+                .onFailure { err ->
+                    launcherEngine.postBanner("Cloud sync failed: ${err.localizedMessage}")
+                }
+        }
+    }
+
+    private fun buildLauncherOverviewText(): String {
+        val st = launcherEngine.state.value
+        val appCount = launcherEngine.installedApps.value.size
+        val defaultHome = launcherEngine.isDefaultLauncher.value
+        return "- Discovered Installed Apps: $appCount | Default System Home Active: $defaultHome\n" +
+            "- Theme Preset: ${st.theme.presetId} | Grid: ${st.theme.gridColumns}x${st.theme.gridRows} | Pages: ${st.pageCount}\n" +
+            "- Wallpaper: ${st.wallpaper.label} (${st.wallpaper.typeId}) | Gaming Mode: ${st.gamingModeActive}\n" +
+            "- Tools: launcher_get_overview, launcher_search_apps, launcher_set_theme_or_wallpaper, launcher_manage_layout, launcher_execute_command"
     }
 
     fun clearBanner() {
@@ -448,7 +539,8 @@ class AquaMainViewModel(
                 telemetry = _telemetry.value,
                 browserUrl = browserPageState.value.currentUrl,
                 browserTitle = browserPageState.value.currentTitle,
-                nativeWalletOverview = nativeWalletOverview
+                nativeWalletOverview = nativeWalletOverview,
+                launcherOverview = buildLauncherOverviewText()
             )
 
             val result = geminiProvider.executeAgentTurn(
@@ -531,6 +623,9 @@ class AquaMainViewModel(
     // --- VOICE & LIVE API ---
 
     fun startVoiceCapture(autoSendAndSpeak: Boolean = true) {
+        if (AquaWakeWordService.isRunning.value) {
+            AquaWakeWordService.setExternalMicActive(appContext, true)
+        }
         voiceManager.startSpeechRecognition(settings.value.voiceLanguage) { spokenText ->
             if (autoSendAndSpeak) {
                 sendMessage(spokenText, speakReply = true)
@@ -538,7 +633,12 @@ class AquaMainViewModel(
         }
     }
 
-    fun stopVoiceCapture() = voiceManager.stopListening()
+    fun stopVoiceCapture() {
+        voiceManager.stopListening()
+        if (AquaWakeWordService.isRunning.value && !voiceManager.isLiveSessionActive.value) {
+            AquaWakeWordService.setExternalMicActive(appContext, false)
+        }
+    }
 
     fun speakMessage(text: String) = voiceManager.speak(text, settings.value, viewModelScope)
 
@@ -548,7 +648,23 @@ class AquaMainViewModel(
         if (voiceManager.isLiveSessionActive.value) {
             voiceManager.stopLiveConversation()
             _liveStatus.value = "Live voice session disconnected"
+            if (settings.value.wakeWordEnabled) {
+                AquaWakeWordService.setExternalMicActive(appContext, false)
+            } else {
+                AquaWakeWordService.stop(appContext)
+            }
             return
+        }
+        // Keep foreground microphone service active so Live audio continues even if user minimizes the app or locks screen
+        if (AquaWakeWordService.isRunning.value) {
+            AquaWakeWordService.setExternalMicActive(appContext, true)
+        } else if (AquaWakeWordService.hasMicPermission(appContext)) {
+            AquaWakeWordService.start(
+                context = appContext,
+                wakePhrase = settings.value.wakeWordPhrase,
+                languageTag = settings.value.voiceLanguage,
+                keepAliveOnly = true
+            )
         }
         refreshTelemetry()
         val currentSettings = settings.value
@@ -562,7 +678,8 @@ class AquaMainViewModel(
                 telemetry = _telemetry.value,
                 browserUrl = browserPageState.value.currentUrl,
                 browserTitle = browserPageState.value.currentTitle,
-                nativeWalletOverview = nativeWalletOverview
+                nativeWalletOverview = nativeWalletOverview,
+                launcherOverview = buildLauncherOverviewText()
             )
             voiceManager.startLiveConversation(
                 scope = viewModelScope,
@@ -576,29 +693,57 @@ class AquaMainViewModel(
                 },
                 onStatusChanged = { status ->
                     _liveStatus.value = status
+                    if (status.startsWith("Live session ended")) {
+                        if (settings.value.wakeWordEnabled) {
+                            AquaWakeWordService.setExternalMicActive(appContext, false)
+                        } else {
+                            AquaWakeWordService.stop(appContext)
+                        }
+                    }
                 }
             )
         }
     }
 
     fun setWakeWordServiceEnabled(enabled: Boolean) {
-        updateSettings(settings.value.copy(wakeWordEnabled = enabled))
-        val serviceIntent = Intent(appContext, AquaWakeWordService::class.java).apply {
-            if (enabled) {
-                putExtra(AquaWakeWordService.EXTRA_WAKE_PHRASE, settings.value.wakeWordPhrase)
-            } else {
-                action = AquaWakeWordService.ACTION_STOP
-            }
-        }
         if (enabled) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                appContext.startForegroundService(serviceIntent)
+            val started = AquaWakeWordService.start(
+                context = appContext,
+                wakePhrase = settings.value.wakeWordPhrase,
+                languageTag = settings.value.voiceLanguage,
+                keepAliveOnly = false
+            )
+            if (started) {
+                updateSettings(settings.value.copy(wakeWordEnabled = true))
+                _bannerMessage.value = "Background App & Mic active — listening for '${settings.value.wakeWordPhrase}'."
             } else {
-                appContext.startService(serviceIntent)
+                updateSettings(settings.value.copy(wakeWordEnabled = false))
             }
         } else {
-            appContext.startService(serviceIntent)
+            updateSettings(settings.value.copy(wakeWordEnabled = false))
+            AquaWakeWordService.stop(appContext)
+            _bannerMessage.value = "Background App & Mic stopped."
         }
+    }
+
+    fun toggleBackgroundMicPaused() {
+        val nextPaused = !AquaWakeWordService.isPaused.value
+        AquaWakeWordService.setPaused(appContext, nextPaused)
+    }
+
+    fun updateWakePhrase(phrase: String) {
+        val clean = phrase.lowercase().trim().ifBlank { "hey aqua" }.take(40)
+        val updated = settings.value.copy(wakeWordPhrase = clean)
+        updateSettings(updated)
+        if (updated.wakeWordEnabled && AquaWakeWordService.hasMicPermission(appContext)) {
+            AquaWakeWordService.start(
+                context = appContext,
+                wakePhrase = clean,
+                languageTag = updated.voiceLanguage,
+                keepAliveOnly = false
+            )
+        }
+        _bannerMessage.value = "Wake phrase updated to '$clean'."
     }
 
     // --- FILE IMPORT ---
@@ -1392,6 +1537,7 @@ class AquaMainViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        launcherEngine.attachCloudPushCallback(null)
         voiceManager.release()
     }
 }

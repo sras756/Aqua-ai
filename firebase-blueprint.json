@@ -205,6 +205,18 @@
         "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." }
       },
       "required": ["userId", "title", "prompt", "category", "speakResult", "runCount", "lastRunSummary", "createdAt", "updatedAt"]
+    },
+    "LauncherCloudSync": {
+      "title": "LauncherCloudSync",
+      "description": "Synchronized non-sensitive Aqua Launcher theme, grid, wallpaper preset, and gesture preferences.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID." },
+        "configJson": { "type": "string", "description": "Serialized launcher appearance, grid, and gesture preferences JSON." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp via FieldValue.serverTimestamp()." }
+      },
+      "required": ["userId", "configJson", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -239,6 +251,10 @@
     "/users/{userId}/routines/{routineId}": {
       "schema": { "$ref": "#/entities/AquaRoutine" },
       "description": "User-authored reusable autonomous workflows."
+    },
+    "/users/{userId}/launcher_configs/{configId}": {
+      "schema": { "$ref": "#/entities/LauncherCloudSync" },
+      "description": "Synchronized non-sensitive Aqua Launcher configuration preferences."
     }
   }
 }

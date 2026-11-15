@@ -18,6 +18,7 @@ class MainActivity : FragmentActivity() {
 
     private var sharedUris by mutableStateOf<List<Uri>>(emptyList())
     private var wakeCommand by mutableStateOf<String?>(null)
+    private var browserQuery by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,7 +32,9 @@ class MainActivity : FragmentActivity() {
                 sharedUris = sharedUris,
                 onConsumeSharedUris = { sharedUris = emptyList() },
                 wakeCommand = wakeCommand,
-                onConsumeWakeCommand = { wakeCommand = null }
+                onConsumeWakeCommand = { wakeCommand = null },
+                browserQuery = browserQuery,
+                onConsumeBrowserQuery = { browserQuery = null }
             )
         }
     }
@@ -60,6 +63,14 @@ class MainActivity : FragmentActivity() {
         }
         if (intent.hasExtra(AquaWakeWordService.EXTRA_WAKE_COMMAND)) {
             wakeCommand = intent.getStringExtra(AquaWakeWordService.EXTRA_WAKE_COMMAND) ?: ""
+        } else if (intent.hasExtra("aqua_launcher_prompt")) {
+            wakeCommand = intent.getStringExtra("aqua_launcher_prompt") ?: ""
+        }
+        if (intent.hasExtra("aqua_browser_query")) {
+            val q = intent.getStringExtra("aqua_browser_query")
+            if (!q.isNullOrBlank()) {
+                browserQuery = q
+            }
         }
     }
 

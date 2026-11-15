@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Settings
@@ -40,7 +41,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -65,6 +68,7 @@ import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.SkillsScreen
 import com.example.ui.screens.WalletScreen
 import com.example.ui.screens.WorkspaceScreen
+import com.example.ui.screens.launcher.LauncherDashboardScreen
 import com.example.ui.theme.AquaAbyss
 import com.example.ui.theme.AquaAiTheme
 import com.example.ui.theme.AquaCardSurface
@@ -96,6 +100,7 @@ private val AQUA_TABS = listOf(
 
 private val AQUA_RAIL_TABS = listOf(
     AquaTab("home", "Core", Icons.Filled.GraphicEq),
+    AquaTab("launcher", "Launcher", Icons.Filled.Home),
     AquaTab("routines", "Routines", Icons.Filled.AutoMode),
     AquaTab("workspace", "Workspace", Icons.Filled.Apps),
     AquaTab("skills", "Skills", Icons.Filled.Extension),
@@ -110,7 +115,9 @@ fun AquaRootApp(
     sharedUris: List<Uri>,
     onConsumeSharedUris: () -> Unit,
     wakeCommand: String?,
-    onConsumeWakeCommand: () -> Unit
+    onConsumeWakeCommand: () -> Unit,
+    browserQuery: String? = null,
+    onConsumeBrowserQuery: () -> Unit = {}
 ) {
     val currentUser by produceState<FirebaseUser?>(initialValue = Firebase.auth.currentUser) {
         val listener = FirebaseAuth.AuthStateListener { auth ->
@@ -132,7 +139,9 @@ fun AquaRootApp(
                 sharedUris = sharedUris,
                 onConsumeSharedUris = onConsumeSharedUris,
                 wakeCommand = wakeCommand,
-                onConsumeWakeCommand = onConsumeWakeCommand
+                onConsumeWakeCommand = onConsumeWakeCommand,
+                browserQuery = browserQuery,
+                onConsumeBrowserQuery = onConsumeBrowserQuery
             )
         }
     }
@@ -144,7 +153,9 @@ private fun AuthenticatedAquaShell(
     sharedUris: List<Uri>,
     onConsumeSharedUris: () -> Unit,
     wakeCommand: String?,
-    onConsumeWakeCommand: () -> Unit
+    onConsumeWakeCommand: () -> Unit,
+    browserQuery: String? = null,
+    onConsumeBrowserQuery: () -> Unit = {}
 ) {
     val context = LocalContext.current.applicationContext
     val viewModel: AquaMainViewModel = viewModel(
@@ -225,6 +236,14 @@ private fun AuthenticatedAquaShell(
         }
     }
 
+    LaunchedEffect(browserQuery) {
+        if (!browserQuery.isNullOrBlank()) {
+            currentTab = "browser"
+            viewModel.navigateBrowser(browserQuery)
+            onConsumeBrowserQuery()
+        }
+    }
+
     if (currentTab != "home") {
         BackHandler { currentTab = "home" }
     }
@@ -244,7 +263,15 @@ private fun AuthenticatedAquaShell(
                                     selected = currentTab == tab.route,
                                     onClick = { currentTab = tab.route },
                                     icon = { Icon(tab.icon, contentDescription = tab.label) },
-                                    label = { Text(tab.label) },
+                                    label = {
+                                        Text(
+                                            text = tab.label,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            overflow = TextOverflow.Ellipsis,
+                                            fontSize = 11.sp
+                                        )
+                                    },
                                     colors = NavigationBarItemDefaults.colors(
                                         selectedIconColor = AquaCyan,
                                         selectedTextColor = AquaCyan,
@@ -288,6 +315,7 @@ private fun AuthenticatedAquaShell(
                     Box(modifier = Modifier.weight(1f).fillMaxSize()) {
                         when (currentTab) {
                             "home" -> HomeScreen(viewModel = viewModel, onOpenTab = { currentTab = it })
+                            "launcher" -> LauncherDashboardScreen(viewModel = viewModel, onOpenTab = { currentTab = it })
                             "routines" -> RoutinesScreen(viewModel = viewModel)
                             "workspace" -> WorkspaceScreen(viewModel = viewModel)
                             "skills" -> SkillsScreen(viewModel = viewModel)

@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -41,8 +42,12 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
@@ -52,6 +57,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
@@ -114,6 +121,8 @@ fun HomeScreen(
     val liveStatus by viewModel.liveStatus.collectAsStateWithLifecycle()
     val partialTranscript by viewModel.partialTranscript.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val wakeWordRunning by viewModel.wakeWordRunning.collectAsStateWithLifecycle()
+    val wakeWordPaused by viewModel.wakeWordPaused.collectAsStateWithLifecycle()
 
     var chatInput by rememberSaveable { mutableStateOf("") }
     var conversationExpanded by rememberSaveable { mutableStateOf(false) }
@@ -144,6 +153,35 @@ fun HomeScreen(
             pendingVoiceAction?.invoke()
         }
         pendingVoiceAction = null
+    }
+
+    val bgMicPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        val micGranted = results[Manifest.permission.RECORD_AUDIO] == true ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        if (micGranted) {
+            viewModel.setWakeWordServiceEnabled(true)
+        }
+    }
+
+    fun toggleBackgroundAppAndMic(enable: Boolean) {
+        if (!enable) {
+            viewModel.setWakeWordServiceEnabled(false)
+            return
+        }
+        val perms = mutableListOf(Manifest.permission.RECORD_AUDIO)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            perms.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        val allGranted = perms.all {
+            ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+        }
+        if (allGranted) {
+            viewModel.setWakeWordServiceEnabled(true)
+        } else {
+            bgMicPermissionLauncher.launch(perms.toTypedArray())
+        }
     }
 
     fun withMicPermission(action: () -> Unit) {
@@ -210,11 +248,11 @@ fun HomeScreen(
                         text = when {
                             !telemetry.isOnline -> "OFFLINE"
                             else -> {
-                                val webLabel = if (settings.fullInternetAccessEnabled) "FULL WEB" else "WEB PAUSED"
+                                val webLabel = if (settings.fullInternetAccessEnabled) "WEB" else "NO WEB"
                                 val walletLabel = when {
-                                    !settings.aiWalletAccessEnabled -> "WALLET PAUSED"
-                                    settings.aiWalletTransferPrepareEnabled -> "WALLET R/W"
-                                    else -> "WALLET READ"
+                                    !settings.aiWalletAccessEnabled -> "W:OFF"
+                                    settings.aiWalletTransferPrepareEnabled -> "W:R/W"
+                                    else -> "W:READ"
                                 }
                                 "ONLINE • ${telemetry.connectionType} • $webLabel • $walletLabel"
                             }
@@ -255,6 +293,21 @@ fun HomeScreen(
                             color = AquaIceText
                         )
                     }
+                }
+
+                IconButton(
+                    onClick = { onOpenTab("launcher") },
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .clip(CircleShape)
+                        .background(AquaCardSurface)
+                        .testTag("home_launcher_shortcut")
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Home,
+                        contentDescription = "Open Aqua Launcher",
+                        tint = AquaCyan
+                    )
                 }
 
                 IconButton(
@@ -391,6 +444,94 @@ fun HomeScreen(
                         }
                     }
 
+                    // Background App & Mic Keep-Alive Card
+                    item {
+                        val bgActive = wakeWordRunning || settings.wakeWordEnabled
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (wakeWordRunning && !wakeWordPaused) {
+                                    AquaTeal.copy(alpha = 0.14f)
+                                } else {
+                                    AquaCardSurface
+                                }
+                            ),
+                            shape = RoundedCornerShape(18.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(
+                                    1.dp,
+                                    if (wakeWordRunning && !wakeWordPaused) AquaTeal else AquaBorderGlow,
+                                    RoundedCornerShape(18.dp)
+                                )
+                                .testTag("background_mic_card")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    color = if (wakeWordRunning && !wakeWordPaused) AquaTeal else AquaAzure.copy(alpha = 0.22f),
+                                    shape = CircleShape,
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Mic,
+                                            contentDescription = "Background App and Mic",
+                                            tint = if (wakeWordRunning && !wakeWordPaused) AquaAbyss else AquaTeal
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = when {
+                                            wakeWordRunning && wakeWordPaused -> "Background Mic Paused"
+                                            wakeWordRunning -> "App & Mic Active in Background"
+                                            else -> "Run App & Mic in Background"
+                                        },
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = AquaIceText
+                                    )
+                                    Text(
+                                        text = when {
+                                            wakeWordRunning && wakeWordPaused -> "Foreground service active • Tap play to resume '${settings.wakeWordPhrase}'"
+                                            wakeWordRunning -> "Listening for '${settings.wakeWordPhrase}' even when minimized"
+                                            else -> "Keep Aqua AI & microphone running when minimized"
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = AquaMutedText,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                if (wakeWordRunning) {
+                                    IconButton(
+                                        onClick = { viewModel.toggleBackgroundMicPaused() },
+                                        modifier = Modifier
+                                            .minimumInteractiveComponentSize()
+                                            .testTag("background_mic_pause_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = if (wakeWordPaused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+                                            contentDescription = if (wakeWordPaused) "Resume background mic" else "Pause background mic",
+                                            tint = AquaCyan
+                                        )
+                                    }
+                                }
+                                Switch(
+                                    checked = bgActive,
+                                    onCheckedChange = { toggleBackgroundAppAndMic(it) },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = AquaAbyss,
+                                        checkedTrackColor = AquaTeal
+                                    ),
+                                    modifier = Modifier.testTag("background_mic_switch")
+                                )
+                            }
+                        }
+                    }
+
                     // Quick-Access Shortcuts Row
                     item {
                         Text(
@@ -404,6 +545,15 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
+                            item {
+                                QuickShortcutTile(
+                                    icon = Icons.Filled.Home,
+                                    label = "Launcher",
+                                    accent = AquaCyan,
+                                    tag = "shortcut_launcher",
+                                    onClick = { onOpenTab("launcher") }
+                                )
+                            }
                             item {
                                 QuickShortcutTile(
                                     icon = Icons.Filled.AutoMode,

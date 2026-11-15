@@ -132,6 +132,11 @@ service cloud.firestore {
              data.lastRunSummary is string && data.lastRunSummary.size() <= 1000;
     }
 
+    function isValidLauncherSync(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.configJson is string && data.configJson.size() >= 2 && data.configJson.size() <= 8000;
+    }
+
     match /users/{userId} {
       // Settings
       match /settings/{settingId} {
@@ -268,6 +273,23 @@ service cloud.firestore {
                          isValidTimestampsOnUpdate(incoming()) &&
                          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'prompt', 'category', 'speakResult', 'runCount', 'lastRunSummary', 'updatedAt']);
         allow delete: if isOwner(userId) && isValidId(routineId);
+      }
+
+      // Launcher Sync Configurations (non-sensitive theme/grid/gesture/wallpaper preferences only)
+      match /launcher_configs/{configId} {
+        allow get: if isOwner(userId) && isValidId(configId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(configId) &&
+                         incoming().keys().hasAll(['userId', 'configJson', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'configJson', 'createdAt', 'updatedAt']) &&
+                         isValidTimestampsOnCreate(incoming()) &&
+                         isValidLauncherSync(incoming(), userId);
+        allow update: if isOwner(userId) && isValidId(configId) &&
+                         isValidLauncherSync(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         isValidTimestampsOnUpdate(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['configJson', 'updatedAt']);
+        allow delete: if isOwner(userId) && isValidId(configId);
       }
     }
   }

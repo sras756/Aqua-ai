@@ -7,6 +7,7 @@ import com.example.data.model.AquaSkill
 import com.example.data.model.BrowsingTab
 import com.example.data.model.ChatMessage
 import com.example.data.model.Conversation
+import com.example.data.model.LauncherCloudSyncRecord
 import com.example.data.model.MemoryItem
 import com.example.data.model.UserSettings
 import com.example.data.model.WalletConfig
@@ -757,4 +758,52 @@ class AquaFirestoreRepository(
 
             restoredConvs to restoredMemories
         }
+
+    // --- AQUA LAUNCHER PREFERENCE SYNC (NON-SENSITIVE PREFERENCES ONLY) ---
+
+    fun observeLauncherSync(configId: String = "default"): Flow<LauncherCloudSyncRecord?> = flow {
+        val uid = requireUserId()
+        val docRef = userRoot(uid).collection("launcher_configs").document(configId)
+        emitAll(
+            docRef.snapshots()
+                .map { snap ->
+                    if (snap.exists()) {
+                        snap.toObject(
+                            LauncherCloudSyncRecord::class.java,
+                            DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                        )
+                    } else null
+                }
+                .withFirestoreErrorLogging(uid, OperationType.GET, docRef.path)
+        )
+    }
+
+    suspend fun saveLauncherSync(configJson: String, configId: String = "default"): Result<Unit> = runCatching {
+        val uid = requireUserId()
+        val safeJson = configJson.ifBlank { "{}" }.take(8000)
+        val docRef = userRoot(uid).collection("launcher_configs").document(configId)
+        val exists = docRef.get().await().exists()
+        if (exists) {
+            docRef.update(
+                mapOf(
+                    "configJson" to safeJson,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+        } else {
+            docRef.set(
+                mapOf(
+                    "userId" to uid,
+                    "configJson" to safeJson,
+                    "createdAt" to FieldValue.serverTimestamp(),
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+        }
+        Unit
+    }.onFailure { e ->
+        if (e is CancellationException) throw e
+        val uid = auth.currentUser?.uid ?: "unauthenticated"
+        handleFirestoreError(e, OperationType.WRITE, "users/$uid/launcher_configs/$configId")
+    }
 }

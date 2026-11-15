@@ -11,6 +11,10 @@ import com.example.data.repository.GoogleDriveHistoryRepository
 import com.example.data.repository.GoogleWorkspaceRepository
 import com.example.data.repository.WorkspaceService
 import com.example.device.AndroidDeviceController
+import com.example.launcher.engine.AquaLauncherEngine
+import com.example.launcher.engine.LauncherAiController
+import com.example.launcher.model.LauncherThemePreset
+import com.example.launcher.model.WallpaperType
 import com.example.network.AquaWebClient
 import com.example.wallet.FlashWalletConnector
 import com.example.wallet.ai.AquaAiWalletBridge
@@ -37,549 +41,632 @@ class ToolCallingEngine(
     private val workspaceRepo: GoogleWorkspaceRepository? = null,
     private val aiWalletBridge: AquaAiWalletBridge? = null,
     private val webClient: AquaWebClient = AquaWebClient(),
-    private val onWalletMutated: () -> Unit = {}
+    private val onWalletMutated: () -> Unit = {},
+    private val launcherEngine: AquaLauncherEngine? = null
 ) {
 
-    fun buildToolDeclarations(): Tool {
-        return Tool.functionDeclarations(
+    fun buildToolDeclarations(
+        settings: UserSettings? = null,
+        promptHint: String = ""
+    ): Tool {
+        val includeAll = settings == null || promptHint.isBlank()
+        val lower = promptHint.lowercase()
+
+        val coreDeviceTools = listOf(
+            FunctionDeclaration(
+                name = "check_device_status",
+                description = "Returns live Android battery, charging, Wi-Fi/cellular, media volume, flashlight, and notification access status.",
+                parameters = emptyMap()
+            ),
+            FunctionDeclaration(
+                name = "toggle_flashlight",
+                description = "Turns the device camera flashlight torch ON or OFF.",
+                parameters = mapOf("enable" to Schema.boolean(description = "True for ON, false for OFF."))
+            ),
+            FunctionDeclaration(
+                name = "set_media_volume",
+                description = "Adjusts Android media volume percentage (0-100).",
+                parameters = mapOf("percent" to Schema.integer(description = "Target media volume 0..100."))
+            ),
+            FunctionDeclaration(
+                name = "launch_app",
+                description = "Launches an installed Android application by display name or package name.",
+                parameters = mapOf("appName" to Schema.string(description = "App name or package ID."))
+            ),
+            FunctionDeclaration(
+                name = "open_android_settings",
+                description = "Opens an Android Settings section (wifi, bluetooth, display, sound, notifications, battery, location, apps, or general).",
+                parameters = mapOf("section" to Schema.string(description = "Settings section name."))
+            ),
+            FunctionDeclaration(
+                name = "set_alarm",
+                description = "Opens the Android Alarm clock composer to set an alarm.",
+                parameters = mapOf(
+                    "hour" to Schema.integer(description = "24h hour (0-23)."),
+                    "minute" to Schema.integer(description = "Minute (0-59)."),
+                    "label" to Schema.string(description = "Alarm label.")
+                )
+            ),
+            FunctionDeclaration(
+                name = "create_reminder",
+                description = "Creates a persistent reminder in Aqua Memory and optionally opens Calendar.",
+                parameters = mapOf(
+                    "title" to Schema.string(description = "Reminder title."),
+                    "details" to Schema.string(description = "Reminder details or time note."),
+                    "openCalendar" to Schema.boolean(description = "True to launch Calendar UI.")
+                )
+            ),
+            FunctionDeclaration(
+                name = "read_notifications",
+                description = "Reads recent active Android notifications if permitted.",
+                parameters = emptyMap()
+            ),
+            FunctionDeclaration(
+                name = "get_device_storage_and_memory",
+                description = "Returns real live Android storage free/total space and RAM availability.",
+                parameters = emptyMap()
+            ),
+            FunctionDeclaration(
+                name = "save_memory_note",
+                description = "Stores a user preference, fact, or instruction in persistent Aqua Memory.",
+                parameters = mapOf(
+                    "category" to Schema.string(description = "instruction, preference, fact, or reminder."),
+                    "title" to Schema.string(description = "Short memory title."),
+                    "content" to Schema.string(description = "Memory content.")
+                )
+            )
+        )
+
+        val coreWebTools = if (settings?.fullInternetAccessEnabled != false) {
             listOf(
                 FunctionDeclaration(
-                    name = "check_device_status",
-                    description = "Returns live Android battery percentage, charging state, Wi-Fi/cellular connectivity, media volume, flashlight state, and notification access status.",
-                    parameters = emptyMap()
-                ),
-                FunctionDeclaration(
-                    name = "toggle_flashlight",
-                    description = "Turns the device camera flashlight torch ON or OFF.",
-                    parameters = mapOf(
-                        "enable" to Schema.boolean(description = "True to turn ON, false to turn OFF.")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "set_media_volume",
-                    description = "Adjusts the Android media volume percentage between 0 and 100.",
-                    parameters = mapOf(
-                        "percent" to Schema.integer(description = "Target media volume percentage from 0 to 100.")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "launch_app",
-                    description = "Launches an installed Android application by display name or package name.",
-                    parameters = mapOf(
-                        "appName" to Schema.string(description = "Application name or Android package identifier.")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "open_android_settings",
-                    description = "Opens a specific Android Settings screen such as wifi, bluetooth, display, sound, notifications, battery, location, apps, or general.",
-                    parameters = mapOf(
-                        "section" to Schema.string(description = "Settings section name.")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "set_alarm",
-                    description = "Opens the Android Alarm clock composer to set an alarm.",
-                    parameters = mapOf(
-                        "hour" to Schema.integer(description = "24-hour clock hour (0-23)."),
-                        "minute" to Schema.integer(description = "Minute (0-59)."),
-                        "label" to Schema.string(description = "Alarm label.")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "create_reminder",
-                    description = "Creates a persistent reminder in Aqua Memory and opens Calendar composer if requested.",
-                    parameters = mapOf(
-                        "title" to Schema.string(description = "Reminder title."),
-                        "details" to Schema.string(description = "Reminder details or time note."),
-                        "openCalendar" to Schema.boolean(description = "True to also launch Calendar event UI.")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "read_notifications",
-                    description = "Reads recent active Android notifications if Notification Listener permission is granted.",
-                    parameters = emptyMap()
-                ),
-                FunctionDeclaration(
-                    name = "initiate_phone_call",
-                    description = "Opens the phone dialer for a number. Always requires explicit user confirmation.",
-                    parameters = mapOf(
-                        "phoneNumber" to Schema.string(description = "Phone number to dial.")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "prepare_sms_message",
-                    description = "Prepares an SMS message in the Android messaging app. Always requires explicit user confirmation.",
-                    parameters = mapOf(
-                        "recipient" to Schema.string(description = "Recipient phone number or contact address."),
-                        "body" to Schema.string(description = "SMS message body text.")
-                    )
-                ),
-                FunctionDeclaration(
                     name = "web_search",
-                    description = "Searches the live internet via DuckDuckGo & Wikipedia for real-time news, facts, documentation, URLs, and current events. Read-only.",
+                    description = "Searches the live internet via DuckDuckGo & Wikipedia for real-time news, facts, docs, and URLs.",
                     parameters = mapOf(
-                        "query" to Schema.string(description = "Search query string."),
-                        "maxResults" to Schema.integer(description = "Number of results (1-12, default 8).")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "web_fetch_page",
-                    description = "Fetches and extracts the live readable text, title, and links from any public http:// or https:// webpage, article, documentation page, or feed directly in the background.",
-                    parameters = mapOf(
-                        "url" to Schema.string(description = "Full public http:// or https:// URL to fetch.")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "web_http_request",
-                    description = "Makes a live HTTP/REST request to a public internet URL/API. GET and HEAD execute directly; POST/PUT/PATCH/DELETE require explicit user approval.",
-                    parameters = mapOf(
-                        "method" to Schema.string(description = "HTTP method: GET, HEAD, POST, PUT, PATCH, or DELETE."),
-                        "url" to Schema.string(description = "Full public http:// or https:// API endpoint URL."),
-                        "headersJson" to Schema.string(description = "Optional JSON object of HTTP headers."),
-                        "body" to Schema.string(description = "Optional request body string for POST/PUT/PATCH.")
+                        "query" to Schema.string(description = "Search query."),
+                        "maxResults" to Schema.integer(description = "Number of results (1-12).")
                     )
                 ),
                 FunctionDeclaration(
                     name = "browser_open_url",
-                    description = "Opens a website URL or web search query visibly in the integrated Aqua Browser UI.",
-                    parameters = mapOf(
-                        "urlOrQuery" to Schema.string(description = "Full https URL or search query.")
+                    description = "Opens a website URL or search query visibly in Aqua Browser.",
+                    parameters = mapOf("urlOrQuery" to Schema.string(description = "Full https URL or search query."))
+                )
+            )
+        } else emptyList()
+
+        val extendedWebAndCommsNeeded = includeAll || listOf(
+            "http", "www.", ".com", ".org", ".io", ".ai", ".dev", "url", "link", "page", "article", "read",
+            "api", "fetch", "scrape", "form", "fill", "browser", "tab", "call", "dial", "phone", "sms", "text",
+            "clipboard", "copy", "paste", "share", "play store", "youtube", "search"
+        ).any { lower.contains(it) }
+
+        val extendedWebAndCommsTools = if (extendedWebAndCommsNeeded) {
+            buildList {
+                add(
+                    FunctionDeclaration(
+                        name = "initiate_phone_call",
+                        description = "Opens phone dialer for a number. Requires explicit user confirmation.",
+                        parameters = mapOf("phoneNumber" to Schema.string(description = "Phone number to dial."))
                     )
-                ),
+                )
+                add(
+                    FunctionDeclaration(
+                        name = "prepare_sms_message",
+                        description = "Prepares an SMS message in the messaging app. Requires explicit user confirmation.",
+                        parameters = mapOf(
+                            "recipient" to Schema.string(description = "Recipient number or contact."),
+                            "body" to Schema.string(description = "SMS message body.")
+                        )
+                    )
+                )
+                add(
+                    FunctionDeclaration(
+                        name = "read_clipboard",
+                        description = "Reads plain text from the Android clipboard.",
+                        parameters = emptyMap()
+                    )
+                )
+                add(
+                    FunctionDeclaration(
+                        name = "copy_to_clipboard",
+                        description = "Copies text onto the Android clipboard.",
+                        parameters = mapOf(
+                            "label" to Schema.string(description = "Short label."),
+                            "text" to Schema.string(description = "Plain text to copy.")
+                        )
+                    )
+                )
+                add(
+                    FunctionDeclaration(
+                        name = "share_text_externally",
+                        description = "Opens Android Sharesheet to share text to external apps.",
+                        parameters = mapOf(
+                            "title" to Schema.string(description = "Share subject."),
+                            "text" to Schema.string(description = "Text body.")
+                        )
+                    )
+                )
+                if (settings?.fullInternetAccessEnabled != false) {
+                    add(
+                        FunctionDeclaration(
+                            name = "web_fetch_page",
+                            description = "Fetches and extracts readable text, title, and links from a public URL.",
+                            parameters = mapOf("url" to Schema.string(description = "Public http/https URL."))
+                        )
+                    )
+                    add(
+                        FunctionDeclaration(
+                            name = "web_http_request",
+                            description = "Makes an HTTP/REST request to a public URL (GET/HEAD direct; mutations require approval).",
+                            parameters = mapOf(
+                                "method" to Schema.string(description = "GET, HEAD, POST, PUT, PATCH, or DELETE."),
+                                "url" to Schema.string(description = "Public http/https endpoint URL."),
+                                "headersJson" to Schema.string(description = "Optional JSON object of headers."),
+                                "body" to Schema.string(description = "Optional request body.")
+                            )
+                        )
+                    )
+                    add(
+                        FunctionDeclaration(
+                            name = "browser_read_current_page",
+                            description = "Reads title, URL, and text from the active Aqua Browser tab.",
+                            parameters = emptyMap()
+                        )
+                    )
+                    add(
+                        FunctionDeclaration(
+                            name = "browser_fill_form",
+                            description = "Fills a non-password form input on the active webpage. Requires confirmation.",
+                            parameters = mapOf(
+                                "selector" to Schema.string(description = "CSS selector, name, or ID."),
+                                "value" to Schema.string(description = "Text value to enter.")
+                            )
+                        )
+                    )
+                    add(
+                        FunctionDeclaration(
+                            name = "browser_extract_links",
+                            description = "Extracts clickable http/https links from the active Aqua Browser tab.",
+                            parameters = emptyMap()
+                        )
+                    )
+                }
+            }
+        } else emptyList()
+
+        val launcherCoreTools = listOf(
+            FunctionDeclaration(
+                name = "launcher_search_apps",
+                description = "Searches real installed applications on Android by name, package, category, recent usage, or game filter.",
+                parameters = mapOf(
+                    "query" to Schema.string(description = "Optional app search query or category filter."),
+                    "gamesOnly" to Schema.boolean(description = "True to list only discovered games.")
+                )
+            ),
+            FunctionDeclaration(
+                name = "launcher_execute_command",
+                description = "Executes a natural-language Aqua Launcher command (opening apps/camera/downloads, checking recent apps, or requesting uninstall/default-home changes with confirmation).",
+                parameters = mapOf("command" to Schema.string(description = "Natural language launcher command."))
+            )
+        )
+
+        val launcherExtendedNeeded = includeAll || listOf(
+            "launcher", "home screen", "homescreen", "wallpaper", "theme", "dark mode", "icon",
+            "folder", "dock", "widget", "grid", "game", "gaming", "drawer", "hide", "uninstall",
+            "default home", "recent"
+        ).any { lower.contains(it) }
+
+        val launcherExtendedTools = if (launcherExtendedNeeded) {
+            listOf(
                 FunctionDeclaration(
-                    name = "browser_read_current_page",
-                    description = "Extracts the current webpage title, URL, and visible text from the active Aqua Browser tab or its current URL.",
+                    name = "launcher_get_overview",
+                    description = "Reads real Aqua Launcher status: default Home state, installed apps count, recent apps, games count, theme, and wallpaper mode.",
                     parameters = emptyMap()
                 ),
                 FunctionDeclaration(
-                    name = "browser_fill_form",
-                    description = "Fills a standard non-password form input on the active webpage. Requires explicit user confirmation.",
+                    name = "launcher_set_theme_or_wallpaper",
+                    description = "Changes Aqua Launcher visual theme preset or wallpaper mode, synced across standalone and integrated launcher.",
                     parameters = mapOf(
-                        "selector" to Schema.string(description = "CSS selector, input name, or element ID."),
-                        "value" to Schema.string(description = "Text value to enter.")
+                        "themePresetId" to Schema.string(description = "aqua_blue, midnight_dark, glassmorphism, minimal, gaming, or premium."),
+                        "wallpaperTypeId" to Schema.string(description = "animated_aurora, live_map, dynamic_gradient, gaming_cyber, or ai_generative."),
+                        "gamingMode" to Schema.boolean(description = "True/false for Aqua Gaming Mode.")
                     )
                 ),
                 FunctionDeclaration(
+                    name = "launcher_manage_layout",
+                    description = "Pins an installed app to Home/Dock, creates a home folder, or hides/unhides an app.",
+                    parameters = mapOf(
+                        "action" to Schema.string(description = "pin_home, toggle_dock, create_folder, or hide_app."),
+                        "packageNameOrLabel" to Schema.string(description = "App name/package or folder name."),
+                        "pageIndex" to Schema.integer(description = "Optional 0-based page index.")
+                    )
+                )
+            )
+        } else emptyList()
+
+        val walletDomainNeeded = includeAll || listOf(
+            "wallet", "crypto", "balance", "portfolio", "tx", "transaction", "transfer", "send",
+            "receive", "address", "bitcoin", "btc", "ethereum", "eth", "solana", "sol", "bnb",
+            "polygon", "pol", "matic", "arbitrum", "base", "sepolia", "usdt", "usdc", "token", "coin",
+            "price", "market", "chart", "contact", "ens", ".eth", "gas", "gwei", "nonce", "block",
+            "allowance", "revoke", "approve", "network", "account", "vault", "watch", "sign",
+            "verify", "payment", "uri", "bip", "eip", "testnet", "currency", "fee", "risk", "swap"
+        ).any { lower.contains(it) }
+
+        val walletTools = if ((settings?.aiWalletAccessEnabled != false) && walletDomainNeeded) {
+            val readTools = listOf(
+                FunctionDeclaration(
                     name = "wallet_check_balance",
-                    description = "Queries live on-chain native and token balances across networks for the active Aqua Wallet (read-only public addresses only).",
+                    description = "Queries live on-chain balances for the active Aqua Wallet (read-only).",
                     parameters = emptyMap()
                 ),
                 FunctionDeclaration(
                     name = "wallet_get_portfolio",
-                    description = "Fetches live multi-chain balances, USD valuation, 24h change, and chain allocation from the native Aqua Crypto Wallet.",
-                    parameters = mapOf(
-                        "includeTestnets" to Schema.boolean(description = "Optional true to include Sepolia/Devnet/Testnet4.")
-                    )
+                    description = "Fetches live multi-chain balances, USD valuation, 24h change, and chain allocation.",
+                    parameters = mapOf("includeTestnets" to Schema.boolean(description = "True to include testnets."))
                 ),
                 FunctionDeclaration(
                     name = "wallet_get_transactions",
-                    description = "Inspects Aqua Wallet transaction history across EVM, Solana, and Bitcoin with live status filtering.",
-                    parameters = mapOf(
-                        "statusFilter" to Schema.string(description = "One of: ALL, PENDING, CONFIRMED, FAILED.")
-                    )
+                    description = "Inspects Aqua Wallet transaction history across EVM, Solana, and Bitcoin.",
+                    parameters = mapOf("statusFilter" to Schema.string(description = "ALL, PENDING, CONFIRMED, or FAILED."))
                 ),
                 FunctionDeclaration(
                     name = "wallet_analyze_portfolio",
-                    description = "Analyzes portfolio concentration, stablecoin buffer, 24h performance, pending/failed tx health, and security posture (read-only).",
+                    description = "Analyzes portfolio concentration, stablecoin buffer, and security posture.",
                     parameters = emptyMap()
                 ),
                 FunctionDeclaration(
                     name = "wallet_research_network",
-                    description = "Retrieves blockchain network metadata, chainId, RPC host, explorer URL, supported tokens, and live gas/fee tier.",
-                    parameters = mapOf(
-                        "network" to Schema.string(description = "Network name or ID such as Ethereum, BSC, Polygon, Base, Arbitrum, Solana, Bitcoin.")
-                    )
+                    description = "Retrieves blockchain network metadata, chainId, RPC host, explorer URL, tokens, and fee tier.",
+                    parameters = mapOf("network" to Schema.string(description = "Network name or ID."))
                 ),
                 FunctionDeclaration(
                     name = "wallet_get_token_info",
-                    description = "Fetches token contract/mint metadata and live USD spot price from CoinGecko.",
+                    description = "Fetches token contract/mint metadata and live USD price.",
                     parameters = mapOf(
-                        "token" to Schema.string(description = "Token ticker symbol or contract/mint address."),
+                        "token" to Schema.string(description = "Ticker or contract/mint address."),
                         "network" to Schema.string(description = "Optional network scope.")
                     )
                 ),
                 FunctionDeclaration(
                     name = "wallet_estimate_fees",
-                    description = "Estimates real-time on-chain network fees (slow/standard/fast) for a transfer on EVM, Solana, or Bitcoin.",
+                    description = "Estimates real-time network fees (slow/standard/fast) for EVM, Solana, or Bitcoin.",
                     parameters = mapOf(
                         "network" to Schema.string(description = "Network name or ID."),
                         "destinationAddress" to Schema.string(description = "Optional recipient address."),
-                        "assetSymbol" to Schema.string(description = "Asset symbol such as ETH, SOL, BTC, USDT, USDC."),
-                        "amount" to Schema.string(description = "Transfer amount as decimal string.")
+                        "assetSymbol" to Schema.string(description = "Asset symbol."),
+                        "amount" to Schema.string(description = "Transfer amount string.")
                     )
                 ),
                 FunctionDeclaration(
                     name = "wallet_analyze_address_risk",
-                    description = "Audits a blockchain address for format validity, EIP-55 checksum, smart-contract/program code presence, burn addresses, and self-transfer risk.",
+                    description = "Audits a blockchain address for validity, checksum, contract code, and burn/self risk.",
                     parameters = mapOf(
-                        "address" to Schema.string(description = "Blockchain recipient address to inspect."),
+                        "address" to Schema.string(description = "Blockchain address."),
                         "network" to Schema.string(description = "Network name or ID.")
                     )
                 ),
                 FunctionDeclaration(
-                    name = "wallet_prepare_transaction",
-                    description = "Prepares and simulates an unsigned transfer in Aqua Wallet within spending limits, then requires explicit user authorization & unlocked vault before signing and broadcasting. Supports raw addresses, .eth ENS names, or saved Address Book labels.",
-                    parameters = mapOf(
-                        "network" to Schema.string(description = "Network name or ID."),
-                        "destinationAddress" to Schema.string(description = "Recipient blockchain address, .eth ENS name, or saved contact label."),
-                        "assetSymbol" to Schema.string(description = "Asset ticker symbol such as ETH, BNB, POL, SOL, BTC, USDC, USDT."),
-                        "amount" to Schema.string(description = "Transfer amount as decimal string.")
-                    )
-                ),
-                FunctionDeclaration(
                     name = "wallet_lookup_contact",
-                    description = "Reads saved trusted recipient contacts from the Aqua Wallet multi-chain Address Book (read-only public addresses only).",
-                    parameters = mapOf(
-                        "query" to Schema.string(description = "Optional contact name or address filter; leave blank to list all saved contacts.")
-                    )
+                    description = "Reads saved trusted contacts from the Aqua Wallet Address Book.",
+                    parameters = mapOf("query" to Schema.string(description = "Optional contact filter."))
                 ),
                 FunctionDeclaration(
                     name = "wallet_get_receive_addresses",
-                    description = "Returns the user's public multi-chain receiving addresses (EVM, Solana, Bitcoin Mainnet/Testnet4), active wallet/account/network, and enabled networks (public metadata only).",
+                    description = "Returns public multi-chain receiving addresses, active wallet/account/network.",
                     parameters = emptyMap()
                 ),
                 FunctionDeclaration(
                     name = "wallet_get_evm_telemetry",
-                    description = "Fetches live EVM chain telemetry including latest block height, gas price in Gwei, and confirmed/pending account nonces.",
-                    parameters = mapOf(
-                        "network" to Schema.string(description = "Optional EVM network name or ID (Ethereum, BSC, Polygon, Base, Arbitrum, Sepolia).")
-                    )
+                    description = "Fetches live EVM block height, gas price in Gwei, and account nonces.",
+                    parameters = mapOf("network" to Schema.string(description = "Optional EVM network name/ID."))
                 ),
                 FunctionDeclaration(
                     name = "wallet_resolve_ens",
-                    description = "Resolves an Ethereum Name Service (.eth) domain to a checksummed 0x address using live Ethereum Mainnet RPC.",
-                    parameters = mapOf(
-                        "ensName" to Schema.string(description = "ENS domain such as vitalik.eth.")
-                    )
+                    description = "Resolves an .eth ENS domain to a checksummed 0x address.",
+                    parameters = mapOf("ensName" to Schema.string(description = "ENS domain."))
                 ),
                 FunctionDeclaration(
                     name = "wallet_check_allowance",
-                    description = "Inspects live ERC-20 token spender allowance and flags unlimited approval risk on EVM networks.",
+                    description = "Inspects ERC-20 token spender allowance and flags unlimited approvals.",
                     parameters = mapOf(
-                        "token" to Schema.string(description = "ERC-20 token symbol or contract address (e.g. USDT, USDC)."),
-                        "spenderAddress" to Schema.string(description = "Spender contract address, .eth ENS name, or saved contact label."),
-                        "network" to Schema.string(description = "Optional EVM network name or ID.")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "wallet_prepare_revoke_allowance",
-                    description = "Prepares an ERC-20 approve(spender, 0) transaction to revoke token spending approval, gated behind explicit user authorization and PIN/biometric unlock.",
-                    parameters = mapOf(
-                        "token" to Schema.string(description = "ERC-20 token symbol or contract address."),
-                        "spenderAddress" to Schema.string(description = "Spender contract address to revoke."),
-                        "network" to Schema.string(description = "Optional EVM network name or ID.")
+                        "token" to Schema.string(description = "ERC-20 token symbol or address."),
+                        "spenderAddress" to Schema.string(description = "Spender address, ENS, or contact."),
+                        "network" to Schema.string(description = "Optional EVM network.")
                     )
                 ),
                 FunctionDeclaration(
                     name = "wallet_check_tx_status",
-                    description = "Checks live on-chain confirmation status (PENDING, CONFIRMED, FAILED) and confirmation count for a transaction hash.",
+                    description = "Checks live on-chain confirmation status for a tx hash or signature.",
                     parameters = mapOf(
-                        "txHash" to Schema.string(description = "Transaction hash or Solana signature."),
-                        "network" to Schema.string(description = "Optional network name or ID.")
+                        "txHash" to Schema.string(description = "Transaction hash or signature."),
+                        "network" to Schema.string(description = "Optional network.")
                     )
                 ),
                 FunctionDeclaration(
                     name = "wallet_get_market_chart",
-                    description = "Fetches live CoinGecko historical price sparkline stats (spot, period change %, low, high) with optional fiat currency conversion (USD, EUR, GBP, JPY, AED, PKR).",
+                    description = "Fetches live CoinGecko historical price stats (spot, change %, low, high).",
                     parameters = mapOf(
-                        "coin" to Schema.string(description = "Coin name or symbol (e.g. bitcoin, ethereum, solana)."),
-                        "days" to Schema.integer(description = "History window in days (1, 7, 30, 90, 365)."),
-                        "currency" to Schema.string(description = "Optional fiat code: USD, EUR, GBP, JPY, AED, PKR.")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "wallet_switch_network",
-                    description = "Switches the active display/default blockchain network in Aqua Wallet (requires Write permission).",
-                    parameters = mapOf(
-                        "network" to Schema.string(description = "Target network name or ID (e.g. Ethereum, Base, Arbitrum, Polygon, BSC, Solana, Bitcoin, Sepolia).")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "wallet_switch_account",
-                    description = "Switches the active derived account in the active Aqua Wallet by label or index (requires Write permission).",
-                    parameters = mapOf(
-                        "account" to Schema.string(description = "Account label or index (e.g. 'Account 1', 'Trading', or '0').")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "wallet_switch_wallet",
-                    description = "Switches the active wallet in Aqua Vault by wallet label or ID (requires Write permission).",
-                    parameters = mapOf(
-                        "wallet" to Schema.string(description = "Wallet label or ID.")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "wallet_save_contact",
-                    description = "Saves a trusted recipient address to the Aqua Wallet multi-chain Address Book after explicit user authorization.",
-                    parameters = mapOf(
-                        "label" to Schema.string(description = "Human-readable contact label."),
-                        "chainFamily" to Schema.string(description = "One of: EVM, SOLANA, BITCOIN."),
-                        "address" to Schema.string(description = "Valid blockchain address."),
-                        "note" to Schema.string(description = "Optional memo or label note.")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "wallet_delete_contact",
-                    description = "Deletes a saved contact from the Aqua Wallet Address Book after explicit user authorization.",
-                    parameters = mapOf(
-                        "queryOrId" to Schema.string(description = "Contact label, address, or ID to delete.")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "wallet_create_wallet",
-                    description = "Creates a new self-custodial 12 or 24 word multi-chain wallet in Aqua Vault after explicit user confirmation. Mnemonic stays encrypted on-device and is never shared with AI.",
-                    parameters = mapOf(
-                        "label" to Schema.string(description = "Wallet label, e.g. 'Savings Vault'."),
-                        "wordCount" to Schema.integer(description = "Mnemonic length: 12 or 24.")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "wallet_add_account",
-                    description = "Derives a new HD multi-chain account inside the active self-custodial Aqua Wallet after user confirmation.",
-                    parameters = mapOf(
-                        "label" to Schema.string(description = "Optional account label, e.g. 'Trading' or 'DeFi'.")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "wallet_add_watch_wallet",
-                    description = "Adds a read-only watch portfolio wallet for public EVM, Solana, or Bitcoin addresses after user confirmation.",
-                    parameters = mapOf(
-                        "label" to Schema.string(description = "Watch-only wallet label."),
-                        "evmAddress" to Schema.string(description = "Optional 0x... EVM public address."),
-                        "solanaAddress" to Schema.string(description = "Optional Solana public address."),
-                        "bitcoinAddress" to Schema.string(description = "Optional Bitcoin SegWit bc1.../tb1... address.")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "wallet_add_custom_token",
-                    description = "Adds a custom ERC-20 or SPL token contract to an Aqua Wallet network after user confirmation.",
-                    parameters = mapOf(
-                        "network" to Schema.string(description = "Target network name or ID (e.g. Ethereum, Base, Arbitrum, Solana)."),
-                        "symbol" to Schema.string(description = "Token ticker symbol, e.g. UNI."),
-                        "name" to Schema.string(description = "Token display name, e.g. Uniswap."),
-                        "contractOrMint" to Schema.string(description = "ERC-20 contract address or Solana SPL mint address."),
-                        "decimals" to Schema.integer(description = "Token decimals (default 18, e.g. 6 for USDC/USDT)."),
-                        "coingeckoId" to Schema.string(description = "Optional CoinGecko ID for USD pricing.")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "wallet_add_custom_network",
-                    description = "Adds a custom HTTPS EVM RPC network to Aqua Wallet after explicit user confirmation.",
-                    parameters = mapOf(
-                        "name" to Schema.string(description = "Network name, e.g. Optimism."),
-                        "nativeSymbol" to Schema.string(description = "Native gas symbol, e.g. ETH."),
-                        "chainId" to Schema.integer(description = "Positive EVM chain ID, e.g. 10."),
-                        "rpcUrl" to Schema.string(description = "HTTPS JSON-RPC endpoint URL."),
-                        "explorerUrl" to Schema.string(description = "Optional block explorer base URL."),
-                        "isTestnet" to Schema.boolean(description = "True if this is a testnet.")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "wallet_sign_message",
-                    description = "Signs an off-chain ownership proof message using EIP-191 (EVM) or Ed25519 (Solana), gated behind explicit user authorization and PIN/biometric unlock.",
-                    parameters = mapOf(
-                        "chainFamily" to Schema.string(description = "EVM or SOLANA."),
-                        "message" to Schema.string(description = "Plain-text message to sign.")
+                        "coin" to Schema.string(description = "Coin name or symbol."),
+                        "days" to Schema.integer(description = "1, 7, 30, 90, or 365."),
+                        "currency" to Schema.string(description = "Optional fiat code (USD, EUR, GBP, JPY, AED, PKR).")
                     )
                 ),
                 FunctionDeclaration(
                     name = "wallet_verify_message",
-                    description = "Cryptographically verifies an off-chain EIP-191 (EVM) or Ed25519 (Solana) message signature (Read permission).",
+                    description = "Cryptographically verifies an EIP-191 or Ed25519 signature.",
                     parameters = mapOf(
                         "chainFamily" to Schema.string(description = "EVM or SOLANA."),
-                        "signerAddress" to Schema.string(description = "Expected signer public address."),
-                        "message" to Schema.string(description = "Original plain-text message."),
-                        "signature" to Schema.string(description = "Hex (0x...) or Base58 signature string.")
+                        "signerAddress" to Schema.string(description = "Signer public address."),
+                        "message" to Schema.string(description = "Original message."),
+                        "signature" to Schema.string(description = "Hex or Base58 signature.")
                     )
                 ),
                 FunctionDeclaration(
                     name = "wallet_parse_payment_uri",
-                    description = "Parses an EIP-681 ethereum:, BIP-21 bitcoin:, or solana: payment URI into address, network, asset, and amount (Read permission).",
-                    parameters = mapOf(
-                        "uri" to Schema.string(description = "Payment URI or raw address.")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "wallet_update_preferences",
-                    description = "Updates non-secret Aqua Wallet display currency (USD, EUR, GBP, INR, JPY, AUD, CAD, CHF, SGD, AED) or testnet visibility (requires Write permission).",
-                    parameters = mapOf(
-                        "displayCurrencyCode" to Schema.string(description = "Optional fiat currency code, e.g. USD, EUR, GBP, AED."),
-                        "testnetModeEnabled" to Schema.boolean(description = "Optional boolean to enable/disable testnet networks.")
-                    )
+                    description = "Parses EIP-681, BIP-21, or Solana Pay URIs.",
+                    parameters = mapOf("uri" to Schema.string(description = "Payment URI or address."))
                 ),
                 FunctionDeclaration(
                     name = "fetch_crypto_price",
-                    description = "Fetches real-time spot price in USD for a cryptocurrency (e.g., bitcoin, ethereum, tether, solana, bnb) from CoinGecko.",
-                    parameters = mapOf(
-                        "coin" to Schema.string(description = "Coin name or ticker symbol.")
+                    description = "Fetches live USD spot price for a cryptocurrency from CoinGecko.",
+                    parameters = mapOf("coin" to Schema.string(description = "Coin name or symbol."))
+                )
+            )
+            val writeTools = if (settings?.aiWalletTransferPrepareEnabled != false) {
+                listOf(
+                    FunctionDeclaration(
+                        name = "wallet_prepare_transaction",
+                        description = "Prepares and simulates a transfer, requiring explicit user authorization & vault unlock before broadcast.",
+                        parameters = mapOf(
+                            "network" to Schema.string(description = "Network name or ID."),
+                            "destinationAddress" to Schema.string(description = "Recipient address, ENS, or contact label."),
+                            "assetSymbol" to Schema.string(description = "Asset ticker symbol."),
+                            "amount" to Schema.string(description = "Decimal amount.")
+                        )
+                    ),
+                    FunctionDeclaration(
+                        name = "wallet_prepare_revoke_allowance",
+                        description = "Prepares an ERC-20 approve(spender, 0) revocation gated behind user authorization & unlock.",
+                        parameters = mapOf(
+                            "token" to Schema.string(description = "Token symbol or contract."),
+                            "spenderAddress" to Schema.string(description = "Spender address."),
+                            "network" to Schema.string(description = "Optional EVM network.")
+                        )
+                    ),
+                    FunctionDeclaration(
+                        name = "wallet_switch_network",
+                        description = "Switches active blockchain network in Aqua Wallet.",
+                        parameters = mapOf("network" to Schema.string(description = "Target network."))
+                    ),
+                    FunctionDeclaration(
+                        name = "wallet_switch_account",
+                        description = "Switches active derived account in Aqua Wallet.",
+                        parameters = mapOf("account" to Schema.string(description = "Account label or index."))
+                    ),
+                    FunctionDeclaration(
+                        name = "wallet_switch_wallet",
+                        description = "Switches active wallet in Aqua Vault.",
+                        parameters = mapOf("wallet" to Schema.string(description = "Wallet label or ID."))
+                    ),
+                    FunctionDeclaration(
+                        name = "wallet_save_contact",
+                        description = "Saves a trusted recipient address to Address Book after confirmation.",
+                        parameters = mapOf(
+                            "label" to Schema.string(description = "Contact label."),
+                            "chainFamily" to Schema.string(description = "EVM, SOLANA, or BITCOIN."),
+                            "address" to Schema.string(description = "Blockchain address."),
+                            "note" to Schema.string(description = "Optional note.")
+                        )
+                    ),
+                    FunctionDeclaration(
+                        name = "wallet_delete_contact",
+                        description = "Deletes a saved contact from Address Book after confirmation.",
+                        parameters = mapOf("queryOrId" to Schema.string(description = "Contact label, address, or ID."))
+                    ),
+                    FunctionDeclaration(
+                        name = "wallet_create_wallet",
+                        description = "Creates a new 12 or 24 word self-custodial wallet in Aqua Vault after confirmation.",
+                        parameters = mapOf(
+                            "label" to Schema.string(description = "Wallet label."),
+                            "wordCount" to Schema.integer(description = "12 or 24.")
+                        )
+                    ),
+                    FunctionDeclaration(
+                        name = "wallet_add_account",
+                        description = "Derives a new multi-chain HD account inside active wallet after confirmation.",
+                        parameters = mapOf("label" to Schema.string(description = "Optional account label."))
+                    ),
+                    FunctionDeclaration(
+                        name = "wallet_add_watch_wallet",
+                        description = "Adds a read-only watch wallet after confirmation.",
+                        parameters = mapOf(
+                            "label" to Schema.string(description = "Wallet label."),
+                            "evmAddress" to Schema.string(description = "Optional 0x address."),
+                            "solanaAddress" to Schema.string(description = "Optional Solana address."),
+                            "bitcoinAddress" to Schema.string(description = "Optional Bitcoin address.")
+                        )
+                    ),
+                    FunctionDeclaration(
+                        name = "wallet_add_custom_token",
+                        description = "Adds a custom ERC-20 or SPL token after confirmation.",
+                        parameters = mapOf(
+                            "network" to Schema.string(description = "Target network."),
+                            "symbol" to Schema.string(description = "Ticker symbol."),
+                            "name" to Schema.string(description = "Token name."),
+                            "contractOrMint" to Schema.string(description = "Contract or mint address."),
+                            "decimals" to Schema.integer(description = "Decimals (default 18)."),
+                            "coingeckoId" to Schema.string(description = "Optional CoinGecko ID.")
+                        )
+                    ),
+                    FunctionDeclaration(
+                        name = "wallet_add_custom_network",
+                        description = "Adds a custom HTTPS EVM RPC network after confirmation.",
+                        parameters = mapOf(
+                            "name" to Schema.string(description = "Network name."),
+                            "nativeSymbol" to Schema.string(description = "Native symbol."),
+                            "chainId" to Schema.integer(description = "EVM chain ID."),
+                            "rpcUrl" to Schema.string(description = "HTTPS RPC URL."),
+                            "explorerUrl" to Schema.string(description = "Optional explorer URL."),
+                            "isTestnet" to Schema.boolean(description = "True if testnet.")
+                        )
+                    ),
+                    FunctionDeclaration(
+                        name = "wallet_sign_message",
+                        description = "Signs an off-chain ownership proof message (EIP-191 or Ed25519) after authorization & unlock.",
+                        parameters = mapOf(
+                            "chainFamily" to Schema.string(description = "EVM or SOLANA."),
+                            "message" to Schema.string(description = "Message to sign.")
+                        )
+                    ),
+                    FunctionDeclaration(
+                        name = "wallet_update_preferences",
+                        description = "Updates display fiat currency or testnet visibility.",
+                        parameters = mapOf(
+                            "displayCurrencyCode" to Schema.string(description = "USD, EUR, GBP, INR, JPY, AUD, CAD, CHF, SGD, AED."),
+                            "testnetModeEnabled" to Schema.boolean(description = "Enable/disable testnets.")
+                        )
+                    ),
+                    FunctionDeclaration(
+                        name = "wallet_prepare_transfer",
+                        description = "Prepares an unsigned transfer request for explicit user authorization.",
+                        parameters = mapOf(
+                            "destinationAddress" to Schema.string(description = "Recipient address."),
+                            "assetSymbol" to Schema.string(description = "Asset ticker."),
+                            "amount" to Schema.string(description = "Amount string."),
+                            "network" to Schema.string(description = "Optional network.")
+                        )
                     )
-                ),
-                FunctionDeclaration(
-                    name = "wallet_prepare_transfer",
-                    description = "Prepares an unsigned cryptocurrency transfer request for explicit user authorization. Never claims transaction success before blockchain confirmation.",
-                    parameters = mapOf(
-                        "destinationAddress" to Schema.string(description = "Recipient blockchain address."),
-                        "assetSymbol" to Schema.string(description = "Asset ticker such as ETH, BTC, SOL, or USDT."),
-                        "amount" to Schema.string(description = "Transfer amount as decimal string."),
-                        "network" to Schema.string(description = "Optional target network name.")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "save_memory_note",
-                    description = "Stores a user preference, fact, or instruction in persistent Aqua Memory.",
-                    parameters = mapOf(
-                        "category" to Schema.string(description = "One of: instruction, preference, fact, reminder."),
-                        "title" to Schema.string(description = "Short memory title."),
-                        "content" to Schema.string(description = "Memory content.")
-                    )
-                ),
+                )
+            } else emptyList()
+            readTools + writeTools
+        } else emptyList()
+
+        val workspaceNeeded = includeAll || listOf(
+            "gmail", "email", "mail", "inbox", "calendar", "event", "meeting", "schedule",
+            "contact", "sheet", "spreadsheet", "csv", "form", "survey", "response",
+            "google chat", "space", "drive", "backup", "workspace"
+        ).any { lower.contains(it) }
+
+        val workspaceTools = if (workspaceNeeded) {
+            listOf(
                 FunctionDeclaration(
                     name = "backup_history_to_drive",
-                    description = "Backs up the user's conversation history and memories to their authorized Google Drive account.",
+                    description = "Backs up conversation history and memories to Google Drive.",
                     parameters = emptyMap()
                 ),
                 FunctionDeclaration(
                     name = "workspace_contacts_list",
-                    description = "Lists or searches the user's Google Contacts.",
-                    parameters = mapOf(
-                        "query" to Schema.string(description = "Optional contact name, email, or phone query. Empty to list top connections.")
-                    )
+                    description = "Lists or searches Google Contacts.",
+                    parameters = mapOf("query" to Schema.string(description = "Optional filter."))
                 ),
                 FunctionDeclaration(
                     name = "workspace_contacts_create",
-                    description = "Creates a new contact in Google Contacts.",
+                    description = "Creates a new Google Contact.",
                     parameters = mapOf(
-                        "fullName" to Schema.string(description = "Full name of the contact."),
-                        "email" to Schema.string(description = "Email address (optional if phone provided)."),
-                        "phone" to Schema.string(description = "Phone number (optional if email provided).")
+                        "fullName" to Schema.string(description = "Full name."),
+                        "email" to Schema.string(description = "Email."),
+                        "phone" to Schema.string(description = "Phone.")
                     )
                 ),
                 FunctionDeclaration(
                     name = "workspace_calendar_list",
-                    description = "Lists upcoming events from the user's primary Google Calendar.",
-                    parameters = mapOf(
-                        "maxResults" to Schema.integer(description = "Maximum number of events (1-50, default 15).")
-                    )
+                    description = "Lists upcoming Google Calendar events.",
+                    parameters = mapOf("maxResults" to Schema.integer(description = "1-50 (default 15)."))
                 ),
                 FunctionDeclaration(
                     name = "workspace_calendar_create",
-                    description = "Creates a new event on the user's primary Google Calendar.",
+                    description = "Creates a Google Calendar event.",
                     parameters = mapOf(
-                        "summary" to Schema.string(description = "Event title."),
-                        "startIso" to Schema.string(description = "Start time in ISO-8601 format, e.g. 2026-11-15T10:00:00Z."),
-                        "endIso" to Schema.string(description = "End time in ISO-8601 format, e.g. 2026-11-15T11:00:00Z."),
-                        "description" to Schema.string(description = "Optional event description."),
-                        "location" to Schema.string(description = "Optional event location.")
+                        "summary" to Schema.string(description = "Title."),
+                        "startIso" to Schema.string(description = "ISO-8601 start time."),
+                        "endIso" to Schema.string(description = "ISO-8601 end time."),
+                        "description" to Schema.string(description = "Optional description."),
+                        "location" to Schema.string(description = "Optional location.")
                     )
                 ),
                 FunctionDeclaration(
                     name = "workspace_gmail_list",
-                    description = "Searches or lists recent messages from the user's Gmail inbox.",
+                    description = "Searches or lists recent Gmail messages.",
                     parameters = mapOf(
-                        "query" to Schema.string(description = "Optional Gmail search filter such as 'is:unread' or sender name."),
-                        "maxResults" to Schema.integer(description = "Maximum emails to fetch (1-20, default 10).")
+                        "query" to Schema.string(description = "Optional Gmail query."),
+                        "maxResults" to Schema.integer(description = "1-20 (default 10).")
                     )
                 ),
                 FunctionDeclaration(
                     name = "workspace_gmail_send",
-                    description = "Sends an email via Gmail. Always requires explicit user confirmation before sending.",
+                    description = "Sends an email via Gmail. Requires explicit confirmation.",
                     parameters = mapOf(
-                        "to" to Schema.string(description = "Recipient email address."),
-                        "subject" to Schema.string(description = "Email subject line."),
-                        "body" to Schema.string(description = "Plain-text email body.")
+                        "to" to Schema.string(description = "Recipient email."),
+                        "subject" to Schema.string(description = "Subject."),
+                        "body" to Schema.string(description = "Plain-text body.")
                     )
                 ),
                 FunctionDeclaration(
                     name = "workspace_sheets_create",
                     description = "Creates a new Google Sheets spreadsheet.",
-                    parameters = mapOf(
-                        "title" to Schema.string(description = "Spreadsheet title.")
-                    )
+                    parameters = mapOf("title" to Schema.string(description = "Spreadsheet title."))
                 ),
                 FunctionDeclaration(
                     name = "workspace_sheets_read",
-                    description = "Reads cell values from a Google Sheets spreadsheet.",
+                    description = "Reads cells from a Google Sheets spreadsheet.",
                     parameters = mapOf(
-                        "spreadsheetId" to Schema.string(description = "Google Spreadsheet ID."),
-                        "range" to Schema.string(description = "A1 notation range, e.g. Sheet1!A1:J25.")
+                        "spreadsheetId" to Schema.string(description = "Spreadsheet ID."),
+                        "range" to Schema.string(description = "A1 range.")
                     )
                 ),
                 FunctionDeclaration(
                     name = "workspace_sheets_append",
-                    description = "Appends a row of comma-separated values to a Google Sheets spreadsheet.",
+                    description = "Appends a comma-separated row to a Google Sheet.",
                     parameters = mapOf(
-                        "spreadsheetId" to Schema.string(description = "Google Spreadsheet ID."),
-                        "range" to Schema.string(description = "Target sheet/range, e.g. Sheet1!A1."),
-                        "valuesCsv" to Schema.string(description = "Comma-separated values for the row columns.")
+                        "spreadsheetId" to Schema.string(description = "Spreadsheet ID."),
+                        "range" to Schema.string(description = "Target range."),
+                        "valuesCsv" to Schema.string(description = "Comma-separated row values.")
                     )
                 ),
                 FunctionDeclaration(
                     name = "workspace_forms_create",
-                    description = "Creates a new Google Form and optionally adds an initial question.",
+                    description = "Creates a new Google Form and optional initial question.",
                     parameters = mapOf(
-                        "title" to Schema.string(description = "Title of the Google Form."),
-                        "firstQuestion" to Schema.string(description = "Optional first question prompt to add.")
+                        "title" to Schema.string(description = "Form title."),
+                        "firstQuestion" to Schema.string(description = "Optional first question.")
                     )
                 ),
                 FunctionDeclaration(
                     name = "workspace_forms_get_responses",
-                    description = "Reads a Google Form's metadata, questions, and submitted responses.",
-                    parameters = mapOf(
-                        "formId" to Schema.string(description = "Google Form ID.")
-                    )
+                    description = "Reads Google Form metadata, questions, and responses.",
+                    parameters = mapOf("formId" to Schema.string(description = "Google Form ID."))
                 ),
                 FunctionDeclaration(
                     name = "workspace_chat_list_spaces",
-                    description = "Lists Google Chat spaces and rooms accessible to the user.",
+                    description = "Lists Google Chat spaces.",
                     parameters = emptyMap()
                 ),
                 FunctionDeclaration(
                     name = "workspace_chat_list_messages",
-                    description = "Lists recent messages inside a Google Chat space.",
-                    parameters = mapOf(
-                        "spaceName" to Schema.string(description = "Space resource name, e.g. spaces/AAAA1234.")
-                    )
+                    description = "Lists recent messages in a Google Chat space.",
+                    parameters = mapOf("spaceName" to Schema.string(description = "Space resource name."))
                 ),
                 FunctionDeclaration(
                     name = "workspace_chat_send_message",
-                    description = "Sends a message into a Google Chat space. Always requires explicit user confirmation.",
+                    description = "Sends a message to a Google Chat space. Requires confirmation.",
                     parameters = mapOf(
-                        "spaceName" to Schema.string(description = "Space resource name, e.g. spaces/AAAA1234."),
-                        "text" to Schema.string(description = "Message text to post.")
+                        "spaceName" to Schema.string(description = "Space resource name."),
+                        "text" to Schema.string(description = "Message body.")
                     )
-                ),
-                FunctionDeclaration(
-                    name = "get_device_storage_and_memory",
-                    description = "Returns real live Android internal storage free/total space and device RAM availability.",
-                    parameters = emptyMap()
-                ),
-                FunctionDeclaration(
-                    name = "read_clipboard",
-                    description = "Reads the current plain-text content from the Android system clipboard.",
-                    parameters = emptyMap()
-                ),
-                FunctionDeclaration(
-                    name = "copy_to_clipboard",
-                    description = "Copies useful generated text or notes directly onto the Android clipboard.",
-                    parameters = mapOf(
-                        "label" to Schema.string(description = "Short label for the clipboard item."),
-                        "text" to Schema.string(description = "Plain text to copy.")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "share_text_externally",
-                    description = "Opens the Android Sharesheet chooser to share text or summaries to external apps.",
-                    parameters = mapOf(
-                        "title" to Schema.string(description = "Share subject or title."),
-                        "text" to Schema.string(description = "Text body to share.")
-                    )
-                ),
-                FunctionDeclaration(
-                    name = "browser_extract_links",
-                    description = "Extracts clickable http/https links from the active Aqua Browser webpage.",
-                    parameters = emptyMap()
                 )
             )
+        } else emptyList()
+
+        return Tool.functionDeclarations(
+            coreDeviceTools +
+                coreWebTools +
+                extendedWebAndCommsTools +
+                launcherCoreTools +
+                launcherExtendedTools +
+                walletTools +
+                workspaceTools
         )
     }
 
@@ -2041,6 +2128,153 @@ class ToolCallingEngine(
                     }
                     onTrace(AgentStepTrace("Extract Links", name, "completed", "Found ${links.size} links"))
                     jsonResult(true, summary)
+                }
+
+                "launcher_get_overview" -> {
+                    val le = launcherEngine
+                        ?: return jsonResult(false, "Aqua Launcher engine is not initialized.")
+                    le.refreshDefaultLauncherStatus()
+                    val st = le.state.value
+                    val apps = le.installedApps.value
+                    val games = le.getGameApps(st, apps)
+                    val recent = le.getRecentApps(5)
+                    val msg = buildString {
+                        appendLine("Default Home Active: ${le.isDefaultLauncher.value} (System default: ${le.currentDefaultHomePackage.value ?: "Unknown"})")
+                        appendLine("Discovered Launchable Apps: ${apps.size} | Games: ${games.size} | Hidden: ${st.hiddenPackages.size}")
+                        appendLine("Active Theme: ${st.theme.presetId} (Grid ${st.theme.gridColumns}x${st.theme.gridRows}, Pages ${st.pageCount})")
+                        appendLine("Wallpaper: ${st.wallpaper.typeId} (${st.wallpaper.label})")
+                        if (recent.isNotEmpty()) {
+                            appendLine("Recent Apps: ${recent.joinToString { it.label }}")
+                        }
+                    }.trim()
+                    onTrace(AgentStepTrace("Launcher Overview", name, "completed", "${apps.size} apps"))
+                    jsonResult(true, msg)
+                }
+
+                "launcher_search_apps" -> {
+                    val le = launcherEngine
+                        ?: return jsonResult(false, "Aqua Launcher engine is not initialized.")
+                    val query = argStr("query").trim().lowercase()
+                    val gamesOnly = argBool("gamesOnly", false)
+                    val pool = if (gamesOnly) le.getGameApps() else le.installedApps.value
+                    val matched = pool.filter {
+                        query.isBlank() ||
+                            it.label.lowercase().contains(query) ||
+                            it.packageName.lowercase().contains(query) ||
+                            it.category.label.lowercase().contains(query)
+                    }
+                    val msg = if (matched.isEmpty()) {
+                        "No installed applications matched '$query'."
+                    } else {
+                        "Found ${matched.size} app(s):\n" + matched.take(15).joinToString("\n") {
+                            "- ${it.label} (${it.packageName}, ${it.category.label})"
+                        }
+                    }
+                    onTrace(AgentStepTrace("Search Apps", name, "completed", "${matched.size} found"))
+                    jsonResult(true, msg)
+                }
+
+                "launcher_set_theme_or_wallpaper" -> {
+                    val le = launcherEngine
+                        ?: return jsonResult(false, "Aqua Launcher engine is not initialized.")
+                    val themeId = argStr("themePresetId").trim()
+                    val wallId = argStr("wallpaperTypeId").trim()
+                    val notes = mutableListOf<String>()
+                    if (args.containsKey("gamingMode")) {
+                        val gm = argBool("gamingMode", false)
+                        le.toggleGamingMode(gm)
+                        notes.add("Gaming Mode -> ${if (gm) "ON" else "OFF"}")
+                    }
+                    if (themeId.isNotBlank()) {
+                        val preset = LauncherThemePreset.fromId(themeId)
+                        le.applyThemePreset(preset)
+                        notes.add("Theme -> ${preset.displayName}")
+                    }
+                    if (wallId.isNotBlank()) {
+                        val wt = WallpaperType.fromId(wallId)
+                        le.updateWallpaperConfig { it.copy(typeId = wt.id, label = wt.label) }
+                        notes.add("Wallpaper -> ${wt.label}")
+                    }
+                    val summary = if (notes.isEmpty()) "No launcher theme/wallpaper changes specified." else notes.joinToString(" • ")
+                    onTrace(AgentStepTrace("Customize Launcher", name, "completed", summary))
+                    jsonResult(true, summary)
+                }
+
+                "launcher_manage_layout" -> {
+                    val le = launcherEngine
+                        ?: return jsonResult(false, "Aqua Launcher engine is not initialized.")
+                    val action = argStr("action").trim().lowercase()
+                    val target = argStr("packageNameOrLabel").trim()
+                    val page = argInt("pageIndex", 0)
+                    val matchedApp = le.installedApps.value.firstOrNull {
+                        it.packageName.equals(target, ignoreCase = true) ||
+                            it.label.equals(target, ignoreCase = true) ||
+                            it.label.lowercase().contains(target.lowercase())
+                    }
+                    val msg = when (action) {
+                        "pin_home" -> {
+                            val app = matchedApp ?: return jsonResult(false, "No installed app matching '$target'.")
+                            le.addAppToHome(app, page)
+                            "Pinned ${app.label} to Aqua Launcher Home page ${page + 1}."
+                        }
+                        "toggle_dock" -> {
+                            val app = matchedApp ?: return jsonResult(false, "No installed app matching '$target'.")
+                            le.toggleDockApp(app.packageName)
+                            "Updated Aqua Launcher Dock for ${app.label}."
+                        }
+                        "create_folder" -> {
+                            require(target.isNotBlank()) { "Folder name is required." }
+                            le.createHomeFolder(target, emptyList(), page)
+                            "Created folder '$target' on Home page ${page + 1}."
+                        }
+                        "hide_app" -> {
+                            val app = matchedApp ?: return jsonResult(false, "No installed app matching '$target'.")
+                            le.toggleHiddenApp(app.packageName)
+                            "Toggled drawer visibility for ${app.label}."
+                        }
+                        else -> return jsonResult(false, "Unknown layout action '$action'.")
+                    }
+                    onTrace(AgentStepTrace("Launcher Layout", name, "completed", msg))
+                    jsonResult(true, msg)
+                }
+
+                "launcher_execute_command" -> {
+                    val le = launcherEngine
+                        ?: return jsonResult(false, "Aqua Launcher engine is not initialized.")
+                    val cmd = argStr("command")
+                    val aiCtrl = LauncherAiController(le)
+                    val outcome = aiCtrl.executeCommand(cmd)
+                    val proposal = outcome.pendingPermissionProposal
+                    val finalMsg = if (proposal != null) {
+                        val approved = requestAuthorization(
+                            PendingAuthorization(
+                                id = UUID.randomUUID().toString(),
+                                actionTitle = proposal.title,
+                                actionType = "Launcher System Action",
+                                description = proposal.description,
+                                parametersSummary = listOfNotNull(
+                                    "Action" to proposal.actionKind,
+                                    proposal.packageName?.let { "Package" to it }
+                                ),
+                                isFinancialOrSecurity = true,
+                                onApprove = {
+                                    aiCtrl.executeApprovedProposal(proposal)
+                                        .getOrElse { "Action failed: ${it.localizedMessage}" }
+                                },
+                                onDeny = { "Launcher system action cancelled by user." }
+                            )
+                        )
+                        if (approved) {
+                            aiCtrl.executeApprovedProposal(proposal)
+                                .getOrElse { "Action failed: ${it.localizedMessage}" }
+                        } else {
+                            "User declined '${proposal.title}'."
+                        }
+                    } else {
+                        outcome.message
+                    }
+                    onTrace(AgentStepTrace("Launcher AI Control", name, if (outcome.executed || proposal != null) "completed" else "info", finalMsg.take(120)))
+                    jsonResult(true, finalMsg)
                 }
 
                 else -> {
