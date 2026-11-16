@@ -45,6 +45,21 @@ class AquaFirestoreRepository(
 
     private fun userRoot(uid: String) = db.collection("users").document(uid)
 
+    private fun resolveSafeDocRef(
+        colRef: com.google.firebase.firestore.CollectionReference,
+        rawId: String?
+    ): Pair<com.google.firebase.firestore.DocumentReference, Boolean> {
+        val candidate = rawId?.trim().orEmpty()
+        if (candidate.isEmpty()) return colRef.document() to false
+        if (VALID_ID_REGEX.matches(candidate)) return colRef.document(candidate) to true
+        val sanitized = candidate.replace(Regex("[^a-zA-Z0-9_\\-]"), "_").take(128)
+        return if (sanitized.isNotEmpty() && VALID_ID_REGEX.matches(sanitized)) {
+            colRef.document(sanitized) to true
+        } else {
+            colRef.document() to false
+        }
+    }
+
     private fun <T> Flow<T>.withFirestoreErrorLogging(
         uid: String,
         op: OperationType,
@@ -158,17 +173,29 @@ class AquaFirestoreRepository(
     ): Result<String> = runCatching {
         val uid = requireUserId()
         val colRef = userRoot(uid).collection("conversations")
-        val docRef = if (!customId.isNullOrBlank()) colRef.document(customId) else colRef.document()
-        val payload = mapOf(
-            "userId" to uid,
-            "title" to title.ifBlank { "New Conversation" }.take(120),
-            "summary" to "",
-            "modelUsed" to modelUsed.ifBlank { UserSettings.MODEL_HYDROGEN }.take(100),
-            "messageCount" to 0L,
-            "createdAt" to FieldValue.serverTimestamp(),
-            "updatedAt" to FieldValue.serverTimestamp()
-        )
-        docRef.set(payload).await()
+        val (docRef, hasExplicitId) = resolveSafeDocRef(colRef, customId)
+        val safeTitle = title.ifBlank { "New Conversation" }.take(120)
+        val safeModel = modelUsed.ifBlank { UserSettings.MODEL_HYDROGEN }.take(100)
+        if (hasExplicitId && docRef.get().await().exists()) {
+            docRef.update(
+                mapOf(
+                    "title" to safeTitle,
+                    "modelUsed" to safeModel,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+        } else {
+            val payload = mapOf(
+                "userId" to uid,
+                "title" to safeTitle,
+                "summary" to "",
+                "modelUsed" to safeModel,
+                "messageCount" to 0L,
+                "createdAt" to FieldValue.serverTimestamp(),
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            docRef.set(payload).await()
+        }
         docRef.id
     }.onFailure { e ->
         if (e is CancellationException) throw e
@@ -238,27 +265,42 @@ class AquaFirestoreRepository(
 
     suspend fun addMessage(message: ChatMessage): Result<String> = runCatching {
         val uid = requireUserId()
-        require(message.conversationId.isNotBlank())
-        val convRef = userRoot(uid).collection("conversations").document(message.conversationId)
-        val msgRef = if (message.id.isNotBlank()) {
-            convRef.collection("messages").document(message.id)
-        } else {
-            convRef.collection("messages").document()
+        require(message.conversationId.isNotBlank() && VALID_ID_REGEX.matches(message.conversationId)) {
+            "Valid conversationId is required."
         }
-        val payload = mapOf(
-            "userId" to uid,
-            "conversationId" to message.conversationId,
-            "role" to message.role.take(16),
-            "content" to message.content.take(32000),
-            "modelUsed" to message.modelUsed.take(100),
-            "attachmentName" to message.attachmentName.take(255),
-            "attachmentMime" to message.attachmentMime.take(128),
-            "toolActionsJson" to message.toolActionsJson.take(16000),
-            "groundingSourcesJson" to message.groundingSourcesJson.take(16000),
-            "createdAt" to FieldValue.serverTimestamp(),
-            "updatedAt" to FieldValue.serverTimestamp()
-        )
-        msgRef.set(payload).await()
+        val convRef = userRoot(uid).collection("conversations").document(message.conversationId)
+        val (msgRef, hasExplicitId) = resolveSafeDocRef(convRef.collection("messages"), message.id)
+        val safeRole = message.role.lowercase().takeIf { it in VALID_MESSAGE_ROLES } ?: "user"
+        val safeContent = message.content.take(32000)
+        val safeModel = message.modelUsed.take(100)
+        val safeToolActions = message.toolActionsJson.take(16000)
+        val safeGrounding = message.groundingSourcesJson.take(16000)
+        if (hasExplicitId && msgRef.get().await().exists()) {
+            msgRef.update(
+                mapOf(
+                    "content" to safeContent,
+                    "modelUsed" to safeModel,
+                    "toolActionsJson" to safeToolActions,
+                    "groundingSourcesJson" to safeGrounding,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+        } else {
+            val payload = mapOf(
+                "userId" to uid,
+                "conversationId" to message.conversationId,
+                "role" to safeRole,
+                "content" to safeContent,
+                "modelUsed" to safeModel,
+                "attachmentName" to message.attachmentName.take(255),
+                "attachmentMime" to message.attachmentMime.take(128),
+                "toolActionsJson" to safeToolActions,
+                "groundingSourcesJson" to safeGrounding,
+                "createdAt" to FieldValue.serverTimestamp(),
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            msgRef.set(payload).await()
+        }
         msgRef.id
     }.onFailure { e ->
         if (e is CancellationException) throw e
@@ -292,12 +334,15 @@ class AquaFirestoreRepository(
     suspend fun saveMemory(memory: MemoryItem): Result<String> = runCatching {
         val uid = requireUserId()
         val colRef = userRoot(uid).collection("memories")
-        val docRef = if (memory.id.isNotBlank()) colRef.document(memory.id) else colRef.document()
-        if (memory.id.isNotBlank() && memory.createdAt != null) {
+        val (docRef, hasExplicitId) = resolveSafeDocRef(colRef, memory.id)
+        val safeCategory = memory.category.lowercase().takeIf { it in VALID_MEMORY_CATEGORIES } ?: "fact"
+        val safeTitle = memory.title.ifBlank { "Memory" }.take(120)
+        val safeContent = memory.content.ifBlank { "-" }.take(4000)
+        if (hasExplicitId && docRef.get().await().exists()) {
             val updates = mapOf(
-                "category" to memory.category.take(32),
-                "title" to memory.title.ifBlank { "Memory" }.take(120),
-                "content" to memory.content.ifBlank { "-" }.take(4000),
+                "category" to safeCategory,
+                "title" to safeTitle,
+                "content" to safeContent,
                 "approvedByUser" to memory.approvedByUser,
                 "updatedAt" to FieldValue.serverTimestamp()
             )
@@ -305,9 +350,9 @@ class AquaFirestoreRepository(
         } else {
             val payload = mapOf(
                 "userId" to uid,
-                "category" to memory.category.take(32),
-                "title" to memory.title.ifBlank { "Memory" }.take(120),
-                "content" to memory.content.ifBlank { "-" }.take(4000),
+                "category" to safeCategory,
+                "title" to safeTitle,
+                "content" to safeContent,
                 "approvedByUser" to memory.approvedByUser,
                 "createdAt" to FieldValue.serverTimestamp(),
                 "updatedAt" to FieldValue.serverTimestamp()
@@ -353,39 +398,50 @@ class AquaFirestoreRepository(
     suspend fun saveSkill(skill: AquaSkill): Result<String> = runCatching {
         val uid = requireUserId()
         val colRef = userRoot(uid).collection("skills")
-        val docRef = if (skill.id.isNotBlank()) colRef.document(skill.id) else colRef.document()
-        if (skill.id.isNotBlank() && skill.createdAt != null) {
+        val (docRef, hasExplicitId) = resolveSafeDocRef(colRef, skill.id)
+        val safeName = skill.name.ifBlank { "Unnamed Skill" }.take(100)
+        val safeDesc = skill.description.take(1000)
+        val safeVersion = skill.version.ifBlank { "1.0.0" }.take(32)
+        val safeFormat = skill.format.lowercase().takeIf { it in VALID_SKILL_FORMATS } ?: "custom"
+        val safeInstructions = skill.instructions.ifBlank { "No instructions provided." }.take(16000)
+        val safePermissions = skill.requiredPermissions.take(20)
+        val safeTools = skill.tools.take(20)
+        val safeConfig = skill.configJson.take(8000)
+        val safeSecurityStatus = skill.securityStatus.lowercase().takeIf { it in VALID_SECURITY_STATUSES } ?: "warning"
+        val safeSecurityReport = skill.securityReport.take(2000)
+        val safeSource = skill.sourceLabel.take(255)
+        if (hasExplicitId && docRef.get().await().exists()) {
             val updates = mapOf(
-                "name" to skill.name.ifBlank { "Unnamed Skill" }.take(100),
-                "description" to skill.description.take(1000),
-                "version" to skill.version.ifBlank { "1.0.0" }.take(32),
-                "format" to skill.format.take(32),
-                "instructions" to skill.instructions.ifBlank { "No instructions provided." }.take(16000),
-                "requiredPermissions" to skill.requiredPermissions.take(20),
-                "tools" to skill.tools.take(20),
-                "configJson" to skill.configJson.take(8000),
-                "securityStatus" to skill.securityStatus,
-                "securityReport" to skill.securityReport.take(2000),
+                "name" to safeName,
+                "description" to safeDesc,
+                "version" to safeVersion,
+                "format" to safeFormat,
+                "instructions" to safeInstructions,
+                "requiredPermissions" to safePermissions,
+                "tools" to safeTools,
+                "configJson" to safeConfig,
+                "securityStatus" to safeSecurityStatus,
+                "securityReport" to safeSecurityReport,
                 "enabled" to skill.enabled,
-                "sourceLabel" to skill.sourceLabel.take(255),
+                "sourceLabel" to safeSource,
                 "updatedAt" to FieldValue.serverTimestamp()
             )
             docRef.update(updates).await()
         } else {
             val payload = mapOf(
                 "userId" to uid,
-                "name" to skill.name.ifBlank { "Unnamed Skill" }.take(100),
-                "description" to skill.description.take(1000),
-                "version" to skill.version.ifBlank { "1.0.0" }.take(32),
-                "format" to skill.format.take(32),
-                "instructions" to skill.instructions.ifBlank { "No instructions provided." }.take(16000),
-                "requiredPermissions" to skill.requiredPermissions.take(20),
-                "tools" to skill.tools.take(20),
-                "configJson" to skill.configJson.take(8000),
-                "securityStatus" to skill.securityStatus,
-                "securityReport" to skill.securityReport.take(2000),
+                "name" to safeName,
+                "description" to safeDesc,
+                "version" to safeVersion,
+                "format" to safeFormat,
+                "instructions" to safeInstructions,
+                "requiredPermissions" to safePermissions,
+                "tools" to safeTools,
+                "configJson" to safeConfig,
+                "securityStatus" to safeSecurityStatus,
+                "securityReport" to safeSecurityReport,
                 "enabled" to skill.enabled,
-                "sourceLabel" to skill.sourceLabel.take(255),
+                "sourceLabel" to safeSource,
                 "createdAt" to FieldValue.serverTimestamp(),
                 "updatedAt" to FieldValue.serverTimestamp()
             )
@@ -442,33 +498,43 @@ class AquaFirestoreRepository(
     suspend fun saveWalletConfig(config: WalletConfig): Result<String> = runCatching {
         val uid = requireUserId()
         val colRef = userRoot(uid).collection("wallets")
-        val docRef = if (config.id.isNotBlank()) colRef.document(config.id) else colRef.document()
-        if (config.id.isNotBlank() && config.createdAt != null) {
+        val (docRef, hasExplicitId) = resolveSafeDocRef(colRef, config.id)
+        val safeProductName = config.walletProductName.ifBlank { "Flash Wallet" }.take(100)
+        val safeDeveloperName = config.developerName.take(100)
+        val safePackageName = config.packageName.take(150)
+        val safeMethod = config.integrationMethod.lowercase().takeIf { it in VALID_WALLET_METHODS } ?: "unverified"
+        val safeNetworkName = config.networkName.ifBlank { "Ethereum Mainnet" }.take(64)
+        val safeRpcEndpoint = config.rpcEndpoint.take(300)
+        val safePublicAddress = config.publicAddress.take(128)
+        val safeStatus = config.connectionStatus.lowercase().takeIf { it in VALID_WALLET_STATUSES } ?: "disconnected"
+        val safeDocsUrl = config.docsUrl.take(300)
+
+        if (hasExplicitId && docRef.get().await().exists()) {
             val updates = mapOf(
-                "walletProductName" to config.walletProductName.ifBlank { "Flash Wallet" }.take(100),
-                "developerName" to config.developerName.take(100),
-                "packageName" to config.packageName.take(150),
-                "integrationMethod" to config.integrationMethod,
-                "networkName" to config.networkName.ifBlank { "Ethereum Mainnet" }.take(64),
-                "rpcEndpoint" to config.rpcEndpoint.take(300),
-                "publicAddress" to config.publicAddress.take(128),
-                "connectionStatus" to config.connectionStatus,
-                "docsUrl" to config.docsUrl.take(300),
+                "walletProductName" to safeProductName,
+                "developerName" to safeDeveloperName,
+                "packageName" to safePackageName,
+                "integrationMethod" to safeMethod,
+                "networkName" to safeNetworkName,
+                "rpcEndpoint" to safeRpcEndpoint,
+                "publicAddress" to safePublicAddress,
+                "connectionStatus" to safeStatus,
+                "docsUrl" to safeDocsUrl,
                 "updatedAt" to FieldValue.serverTimestamp()
             )
             docRef.update(updates).await()
         } else {
             val payload = mapOf(
                 "userId" to uid,
-                "walletProductName" to config.walletProductName.ifBlank { "Flash Wallet" }.take(100),
-                "developerName" to config.developerName.take(100),
-                "packageName" to config.packageName.take(150),
-                "integrationMethod" to config.integrationMethod,
-                "networkName" to config.networkName.ifBlank { "Ethereum Mainnet" }.take(64),
-                "rpcEndpoint" to config.rpcEndpoint.take(300),
-                "publicAddress" to config.publicAddress.take(128),
-                "connectionStatus" to config.connectionStatus,
-                "docsUrl" to config.docsUrl.take(300),
+                "walletProductName" to safeProductName,
+                "developerName" to safeDeveloperName,
+                "packageName" to safePackageName,
+                "integrationMethod" to safeMethod,
+                "networkName" to safeNetworkName,
+                "rpcEndpoint" to safeRpcEndpoint,
+                "publicAddress" to safePublicAddress,
+                "connectionStatus" to safeStatus,
+                "docsUrl" to safeDocsUrl,
                 "createdAt" to FieldValue.serverTimestamp(),
                 "updatedAt" to FieldValue.serverTimestamp()
             )
@@ -513,12 +579,15 @@ class AquaFirestoreRepository(
     suspend fun saveBrowserTab(tab: BrowsingTab): Result<String> = runCatching {
         val uid = requireUserId()
         val colRef = userRoot(uid).collection("browser_tabs")
-        val docRef = if (tab.id.isNotBlank()) colRef.document(tab.id) else colRef.document()
-        if (tab.id.isNotBlank() && tab.createdAt != null) {
+        val (docRef, hasExplicitId) = resolveSafeDocRef(colRef, tab.id)
+        val safeTitle = tab.title.take(200)
+        val safeUrl = tab.url.ifBlank { "https://duckduckgo.com" }.take(2048)
+        val safeSummary = tab.lastSummary.take(4000)
+        if (hasExplicitId && docRef.get().await().exists()) {
             val updates = mapOf(
-                "title" to tab.title.take(200),
-                "url" to tab.url.ifBlank { "https://duckduckgo.com" }.take(2048),
-                "lastSummary" to tab.lastSummary.take(4000),
+                "title" to safeTitle,
+                "url" to safeUrl,
+                "lastSummary" to safeSummary,
                 "isActive" to tab.isActive,
                 "updatedAt" to FieldValue.serverTimestamp()
             )
@@ -526,9 +595,9 @@ class AquaFirestoreRepository(
         } else {
             val payload = mapOf(
                 "userId" to uid,
-                "title" to tab.title.take(200),
-                "url" to tab.url.ifBlank { "https://duckduckgo.com" }.take(2048),
-                "lastSummary" to tab.lastSummary.take(4000),
+                "title" to safeTitle,
+                "url" to safeUrl,
+                "lastSummary" to safeSummary,
                 "isActive" to tab.isActive,
                 "createdAt" to FieldValue.serverTimestamp(),
                 "updatedAt" to FieldValue.serverTimestamp()
@@ -574,30 +643,34 @@ class AquaFirestoreRepository(
     suspend fun saveRoutine(routine: AquaRoutine): Result<String> = runCatching {
         val uid = requireUserId()
         val colRef = userRoot(uid).collection("routines")
-        val docRef = if (routine.id.isNotBlank()) colRef.document(routine.id) else colRef.document()
+        val (docRef, hasExplicitId) = resolveSafeDocRef(colRef, routine.id)
         val validCat = routine.category.lowercase().takeIf {
             it in setOf("productivity", "workspace", "device", "browser", "crypto", "custom")
         } ?: "custom"
-        if (routine.id.isNotBlank() && routine.createdAt != null) {
+        val safeTitle = routine.title.ifBlank { "Aqua Routine" }.take(100)
+        val safePrompt = routine.prompt.ifBlank { "Check device status" }.take(4000)
+        val safeRunCount = routine.runCount.coerceIn(0L, 1_000_000L)
+        val safeLastRunSummary = routine.lastRunSummary.take(1000)
+        if (hasExplicitId && docRef.get().await().exists()) {
             val updates = mapOf(
-                "title" to routine.title.ifBlank { "Aqua Routine" }.take(100),
-                "prompt" to routine.prompt.ifBlank { "Check device status" }.take(4000),
+                "title" to safeTitle,
+                "prompt" to safePrompt,
                 "category" to validCat,
                 "speakResult" to routine.speakResult,
-                "runCount" to routine.runCount.coerceIn(0L, 1_000_000L),
-                "lastRunSummary" to routine.lastRunSummary.take(1000),
+                "runCount" to safeRunCount,
+                "lastRunSummary" to safeLastRunSummary,
                 "updatedAt" to FieldValue.serverTimestamp()
             )
             docRef.update(updates).await()
         } else {
             val payload = mapOf(
                 "userId" to uid,
-                "title" to routine.title.ifBlank { "Aqua Routine" }.take(100),
-                "prompt" to routine.prompt.ifBlank { "Check device status" }.take(4000),
+                "title" to safeTitle,
+                "prompt" to safePrompt,
                 "category" to validCat,
                 "speakResult" to routine.speakResult,
-                "runCount" to routine.runCount.coerceIn(0L, 1_000_000L),
-                "lastRunSummary" to routine.lastRunSummary.take(1000),
+                "runCount" to safeRunCount,
+                "lastRunSummary" to safeLastRunSummary,
                 "createdAt" to FieldValue.serverTimestamp(),
                 "updatedAt" to FieldValue.serverTimestamp()
             )
@@ -781,7 +854,8 @@ class AquaFirestoreRepository(
     suspend fun saveLauncherSync(configJson: String, configId: String = "default"): Result<Unit> = runCatching {
         val uid = requireUserId()
         val safeJson = configJson.ifBlank { "{}" }.take(8000)
-        val docRef = userRoot(uid).collection("launcher_configs").document(configId)
+        val safeConfigId = configId.takeIf { VALID_ID_REGEX.matches(it) } ?: "default"
+        val docRef = userRoot(uid).collection("launcher_configs").document(safeConfigId)
         val exists = docRef.get().await().exists()
         if (exists) {
             docRef.update(
@@ -805,5 +879,15 @@ class AquaFirestoreRepository(
         if (e is CancellationException) throw e
         val uid = auth.currentUser?.uid ?: "unauthenticated"
         handleFirestoreError(e, OperationType.WRITE, "users/$uid/launcher_configs/$configId")
+    }
+
+    private companion object {
+        val VALID_ID_REGEX = Regex("^[a-zA-Z0-9_\\-]{1,128}$")
+        val VALID_WALLET_METHODS = setOf("wallet_connect", "deep_link", "android_intent", "read_only_rpc", "unverified")
+        val VALID_WALLET_STATUSES = setOf("connected", "read_only", "disconnected", "unsupported")
+        val VALID_MEMORY_CATEGORIES = setOf("instruction", "preference", "fact", "reminder")
+        val VALID_SKILL_FORMATS = setOf("json", "yaml", "markdown", "zip", "custom")
+        val VALID_SECURITY_STATUSES = setOf("verified", "warning", "blocked")
+        val VALID_MESSAGE_ROLES = setOf("user", "model", "agent", "tool")
     }
 }

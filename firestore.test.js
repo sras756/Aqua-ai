@@ -176,7 +176,7 @@ test("Owner can create, list, update, and delete settings, conversations, messag
     })
   );
 
-  // 4. Wallet Config
+  // 4. Wallet Config create + valid update + immutable createdAt guard
   await assertSucceeds(
     aliceDb.doc(`users/${ALICE_UID}/wallets/wallet_1`).set({
       userId: ALICE_UID,
@@ -191,6 +191,29 @@ test("Owner can create, list, update, and delete settings, conversations, messag
       docsUrl: "",
       createdAt: ts,
       updatedAt: ts,
+    })
+  );
+  await assertSucceeds(
+    aliceDb.doc(`users/${ALICE_UID}/wallets/wallet_1`).update({
+      publicAddress: "0x1111111111111111111111111111111111111111",
+      connectionStatus: "connected",
+      updatedAt: nowTs(),
+    })
+  );
+  await assertFails(
+    aliceDb.doc(`users/${ALICE_UID}/wallets/wallet_1`).set({
+      userId: ALICE_UID,
+      walletProductName: "Flash Wallet",
+      developerName: "Flash Labs",
+      packageName: "com.flash.wallet",
+      integrationMethod: "read_only_rpc",
+      networkName: "Ethereum Mainnet",
+      rpcEndpoint: "https://ethereum-rpc.publicnode.com",
+      publicAddress: "0x1111111111111111111111111111111111111111",
+      connectionStatus: "connected",
+      docsUrl: "",
+      createdAt: new Date(ts.getTime() + 1000),
+      updatedAt: nowTs(),
     })
   );
 

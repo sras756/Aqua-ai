@@ -103,9 +103,11 @@ class AquaFirestoreRepositoryRuleTest : FirestoreEmulatorTestBase() {
         }
         assertTrue(memResult.isSuccess)
 
+        val walletId = "w_${UUID.randomUUID().toString().replace("-", "").take(12)}"
         val walletResult = withTimeout(TIMEOUT_MS) {
             repo.saveWalletConfig(
                 WalletConfig(
+                    id = walletId,
                     walletProductName = "Flash Wallet",
                     developerName = "Flash Labs",
                     packageName = "com.flash.wallet",
@@ -118,6 +120,32 @@ class AquaFirestoreRepositoryRuleTest : FirestoreEmulatorTestBase() {
             )
         }
         assertTrue(walletResult.isSuccess)
+
+        // Regression test: re-syncing existing walletId with createdAt == null (e.g. deriveNewAccount/selectAccount)
+        val walletUpdateResult = withTimeout(TIMEOUT_MS) {
+            repo.saveWalletConfig(
+                WalletConfig(
+                    id = walletId,
+                    walletProductName = "Aqua Primary Vault",
+                    developerName = "Aqua Native Self-Custody",
+                    packageName = "",
+                    integrationMethod = "read_only_rpc",
+                    networkName = "Polygon PoS",
+                    rpcEndpoint = "https://polygon-bor-rpc.publicnode.com",
+                    publicAddress = "0x1111111111111111111111111111111111111111",
+                    connectionStatus = "connected",
+                    createdAt = null
+                )
+            )
+        }
+        assertTrue("Re-saving existing walletId with null createdAt must succeed", walletUpdateResult.isSuccess)
+
+        val observedWallets = withTimeout(FLOW_TIMEOUT_MS) {
+            repo.observeWalletConfigs().first { list ->
+                list.any { it.id == walletId && it.networkName == "Polygon PoS" }
+            }
+        }
+        assertTrue(observedWallets.any { it.walletProductName == "Aqua Primary Vault" })
     }
 
     @Test
