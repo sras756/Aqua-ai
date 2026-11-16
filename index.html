@@ -330,6 +330,140 @@
       border-radius: 6px;
       border: 1px solid var(--border);
     }
+    .features-hub {
+      margin-bottom: 24px;
+    }
+    .features-head {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .features-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .filter-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .filter-tab {
+      font-family: inherit;
+      cursor: pointer;
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface-elevated);
+      color: var(--muted);
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: all 0.16s ease;
+    }
+    .filter-tab:hover { color: var(--text); border-color: var(--border-strong); }
+    .filter-tab.active {
+      color: #031320;
+      background: var(--cyan);
+      border-color: var(--cyan);
+    }
+    .feature-search {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 13px;
+      border-radius: 12px;
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      min-width: 240px;
+      flex: 0 1 320px;
+    }
+    .feature-search input {
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.88rem;
+      outline: none;
+    }
+    .feature-search input::placeholder { color: var(--muted); }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+      gap: 14px;
+    }
+    .feature-card {
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: border-color 0.18s ease, transform 0.14s ease;
+    }
+    .feature-card:hover {
+      border-color: var(--border-strong);
+      transform: translateY(-2px);
+    }
+    .feature-card.hidden { display: none; }
+    .feature-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .era-badge {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 999px;
+      letter-spacing: 0.04em;
+    }
+    .era-new {
+      color: var(--amber);
+      background: rgba(251, 191, 36, 0.14);
+      border: 1px solid rgba(251, 191, 36, 0.42);
+    }
+    .era-core {
+      color: var(--teal);
+      background: rgba(45, 212, 191, 0.12);
+      border: 1px solid rgba(45, 212, 191, 0.36);
+    }
+    .feature-cat {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.7rem;
+      color: var(--muted);
+    }
+    .feature-card h3 {
+      margin: 0;
+      font-size: 1.04rem;
+      color: var(--text);
+    }
+    .feature-card p {
+      margin: 0;
+      font-size: 0.89rem;
+      color: var(--muted);
+    }
+    .feature-bullets {
+      margin: 2px 0 0;
+      padding-left: 16px;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    .feature-bullets li { margin-bottom: 4px; }
+    .features-count {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.78rem;
+      color: var(--cyan);
+    }
     a { color: var(--cyan); }
     footer {
       margin-top: 32px;
@@ -367,6 +501,7 @@
       </a>
       <nav class="nav-links" aria-label="Primary Navigation">
         <a class="active" href="index.html">Overview</a>
+        <a href="#features">All Features</a>
         <a href="privacy.html">Privacy Policy</a>
         <a href="terms.html">Terms &amp; Conditions</a>
       </nav>
@@ -381,15 +516,16 @@
     <section class="hero">
       <div>
         <span class="badge">● EFFECTIVE NOV 16, 2026 • GOOGLE PLAY COMPLIANT</span>
-        <h1>Transparent Privacy, Zero-Key Custody &amp; Clear Terms</h1>
+        <h1>Transparent Privacy, Zero-Key Custody &amp; Full Aqua AI Capabilities</h1>
         <p class="lead">
-          Aqua AI is a native Android personal intelligence ecosystem uniting Gemini reasoning, Aqua Launcher,
-          optional Google Workspace automation, and a strictly self-custodial multi-chain cryptocurrency wallet.
-          Explore exact data boundaries and user controls below.
+          Aqua AI is a native Android personal intelligence ecosystem uniting Gemini reasoning, optional BYOK Google AI Studio &amp;
+          ElevenLabs voice engines, Aqua Launcher, Google Workspace automation, and a strictly self-custodial multi-chain crypto wallet.
+          Explore every original foundation feature alongside our latest releases below.
         </p>
         <div class="cta-row">
-          <a class="btn-primary" href="privacy.html">Read Privacy Policy →</a>
-          <a class="btn-secondary" href="terms.html">Read Terms &amp; Conditions</a>
+          <a class="btn-primary" href="#features">Explore All Features ↓</a>
+          <a class="btn-secondary" href="privacy.html">Privacy Policy</a>
+          <a class="btn-secondary" href="terms.html">Terms &amp; Conditions</a>
         </div>
       </div>
       <div class="meta-panel">
@@ -434,6 +570,203 @@
           private app storage. Keys, mnemonics, and PINs never leave your device.
         </p>
       </article>
+    </section>
+
+    <section class="card features-hub" id="features">
+      <div class="features-head">
+        <div>
+          <span class="badge">● COMPLETE PLATFORM EVOLUTION • OLD &amp; NEW CAPABILITIES</span>
+          <h2 style="margin-bottom:4px;">All Aqua AI Features — Foundation &amp; Latest Releases</h2>
+          <p style="margin:0;">
+            Filter between our newest AI Freedom, Voice &amp; Personal API Studio upgrades and Aqua AI's core Android architecture.
+          </p>
+        </div>
+        <span class="features-count" id="featuresCount">12 / 12 capabilities shown</span>
+      </div>
+
+      <div class="features-toolbar">
+        <div class="filter-tabs" role="tablist" aria-label="Filter features by release era">
+          <button class="filter-tab active" type="button" data-filter="all">All Features (12)</button>
+          <button class="filter-tab" type="button" data-filter="new">New &amp; Latest (7)</button>
+          <button class="filter-tab" type="button" data-filter="core">Core Foundation (5)</button>
+        </div>
+        <div class="feature-search">
+          <span style="color:var(--cyan);font-weight:700;">⌕</span>
+          <input id="featureSearch" type="search" placeholder="Search features (ElevenLabs, Wallet, Launcher...)" aria-label="Search Aqua AI features" />
+        </div>
+      </div>
+
+      <div class="features-grid" id="featuresGrid">
+        <!-- NEW FEATURES -->
+        <article class="feature-card" data-era="new">
+          <div class="feature-top">
+            <span class="era-badge era-new">NEW • ONBOARDING</span>
+            <span class="feature-cat">Post-Login Setup</span>
+          </div>
+          <h3>Post-Login AI Setup Studio</h3>
+          <p>Guided setup sheet launched cleanly after Google Sign-In (and always re-openable from Home or Settings) with a non-blocking <em>Skip for Now</em> flow.</p>
+          <ul class="feature-bullets">
+            <li>Optional personal <strong>Google AI Studio API Key</strong> verification &amp; live Gemini model discovery</li>
+            <li>Optional non-compulsory <strong>ElevenLabs API Key &amp; Voice ID</strong> setup</li>
+            <li>Quick autonomy &amp; voice preset selector before entering Core</li>
+          </ul>
+        </article>
+
+        <article class="feature-card" data-era="new">
+          <div class="feature-top">
+            <span class="era-badge era-new">NEW • AI FREEDOM</span>
+            <span class="feature-cat">Dependency Lab</span>
+          </div>
+          <h3>AI Dependency &amp; Freedom Lab</h3>
+          <p>Granular runtime control over how freely Aqua AI reasons, plans multi-step tool chains, and invokes Android/cloud capabilities.</p>
+          <ul class="feature-bullets">
+            <li><strong>Autonomy Modes:</strong> <code>Advisory</code> (confirm all), <code>Balanced</code>, or <code>Unrestricted Tools</code></li>
+            <li><strong>Unlock All 50+ Tools Always:</strong> Bypasses keyword filtering so Web, Wallet, Workspace &amp; Launcher stay ready simultaneously</li>
+            <li>Live sliders for Temperature (<code>0.0–2.0</code>), Top-P, Max Tokens (<code>512–8192</code>), Max Steps (<code>2–15</code>) &amp; Response Styles</li>
+          </ul>
+        </article>
+
+        <article class="feature-card" data-era="new">
+          <div class="feature-top">
+            <span class="era-badge era-new">NEW • VOICE STUDIO</span>
+            <span class="feature-cat">Optional Voice</span>
+          </div>
+          <h3>Optional ElevenLabs Voice Studio</h3>
+          <p>Expressive custom neural speech synthesis powered by your own ElevenLabs Voice ID—completely optional with automatic fallback.</p>
+          <ul class="feature-bullets">
+            <li>Hardware-encrypted API key &amp; Voice ID storage via Android Keystore</li>
+            <li>Live <code>/v1/voices</code> browser, subscription character quota meter &amp; <strong>Test Voice</strong> MP3 preview</li>
+            <li>Dedicated <code>speak_with_elevenlabs</code> AI tool plus Gemini Native TTS &amp; Android TTS fallback</li>
+          </ul>
+        </article>
+
+        <article class="feature-card" data-era="new">
+          <div class="feature-top">
+            <span class="era-badge era-new">NEW • BYOK ENGINE</span>
+            <span class="feature-cat">Direct REST</span>
+          </div>
+          <h3>Direct AI Studio REST Feature Parity</h3>
+          <p>Your personal Google AI Studio key now matches managed Firebase AI capabilities without sacrificing attachments or tool automation.</p>
+          <ul class="feature-bullets">
+            <li>Multimodal <code>inline_data</code> image and document analysis over REST</li>
+            <li>Full multi-step <code>functionCall</code> / <code>functionResponse</code> loop &amp; Google Search grounding</li>
+            <li>Custom Gemini model override picked directly from live verified models</li>
+          </ul>
+        </article>
+
+        <article class="feature-card" data-era="new">
+          <div class="feature-top">
+            <span class="era-badge era-new">NEW • SERVICE</span>
+            <span class="feature-cat">Always-Ready OS</span>
+          </div>
+          <h3>Foreground Service &amp; Background Mic</h3>
+          <p>Keep hands-free voice conversations and active agent tasks prioritized by Android with full notification transparency.</p>
+          <ul class="feature-bullets">
+            <li>Play-compliant <code>AquaWakeWordService</code> (<code>microphone|dataSync</code>) with persistent status badge</li>
+            <li>One-tap Pause Mic, Resume, and Stop controls right from the notification shade</li>
+            <li>Auto-restore on device boot (<code>AquaBootReceiver</code>) and Android 15+ <code>onTimeout</code> safety</li>
+          </ul>
+        </article>
+
+        <article class="feature-card" data-era="new">
+          <div class="feature-top">
+            <span class="era-badge era-new">NEW • WORKFLOW</span>
+            <span class="feature-cat">Personas &amp; Search</span>
+          </div>
+          <h3>AI Personas, Prompt Studio &amp; Command Palette</h3>
+          <p>Tailor Aqua AI's voice and reasoning posture in a tap while launching any screen, routine, or Android app instantly.</p>
+          <ul class="feature-bullets">
+            <li>5 built-in personas: <em>Autonomous, Voice Concise, Deep Analyst, Device Power, On-Chain Pro</em></li>
+            <li>Persistent per-user Custom System Directives &amp; reusable Prompt Studio templates</li>
+            <li>Universal Command Palette &amp; Quick Strip with Pinned Routines and Clipboard Smart Inspector</li>
+          </ul>
+        </article>
+
+        <article class="feature-card" data-era="new">
+          <div class="feature-top">
+            <span class="era-badge era-new">NEW • DIAGNOSTICS</span>
+            <span class="feature-cat">Telemetry &amp; Export</span>
+          </div>
+          <h3>Portability, Code Blocks &amp; Live Sparklines</h3>
+          <p>Own every conversation, code block, and hardware snapshot offline without vendor lock-in.</p>
+          <ul class="feature-bullets">
+            <li>Syntax-friendly fenced code blocks with one-tap copy inside chat bubbles</li>
+            <li>Export full conversations to clean Markdown (<code>.md</code>) or JSON (<code>.json</code>) via Android SAF</li>
+            <li>24-sample real Battery &amp; RAM sparkline chart plus downloadable System Diagnostic reports</li>
+          </ul>
+        </article>
+
+        <!-- CORE / FOUNDATION FEATURES -->
+        <article class="feature-card" data-era="core">
+          <div class="feature-top">
+            <span class="era-badge era-core">CORE • AGENT</span>
+            <span class="feature-cat">Foundation</span>
+          </div>
+          <h3>Streaming Gemini Agent, Live Voice &amp; Memory</h3>
+          <p>Aqua AI's original multi-modal core combining real-time responses, long-term memory, and voice interaction.</p>
+          <ul class="feature-bullets">
+            <li>Switchable Gemini models (<code>3.8 Flash</code>, <code>3.5 Flash-Lite</code>, <code>4 Argon</code>) with Deep Thinking traces</li>
+            <li><strong>Gemini Live</strong> duplex voice sessions, speech-to-text waveform orb, and Android/Gemini TTS</li>
+            <li>User-scoped Firestore chat history, cross-session Memories, Automated Routines &amp; interactive Approval Modals</li>
+          </ul>
+        </article>
+
+        <article class="feature-card" data-era="core">
+          <div class="feature-top">
+            <span class="era-badge era-core">CORE • LAUNCHER</span>
+            <span class="feature-cat">Foundation</span>
+          </div>
+          <h3>Aqua Launcher &amp; Animated Live Wallpaper</h3>
+          <p>A genuine standalone Android <code>HOME</code> replacement deeply integrated with Aqua AI natural-language control.</p>
+          <ul class="feature-bullets">
+            <li>Real installed app discovery, smart drawer search, custom docks, home folders &amp; hidden apps</li>
+            <li>6 visual themes (including Aqua Blue, Midnight OLED, Glassmorphism &amp; Gaming Mode) + interactive <code>AquaLiveWallpaperService</code></li>
+            <li>Natural-language launcher AI tools &amp; cloud layout sync (installed app lists always stay local)</li>
+          </ul>
+        </article>
+
+        <article class="feature-card" data-era="core">
+          <div class="feature-top">
+            <span class="era-badge era-core">CORE • WEB</span>
+            <span class="feature-cat">Foundation</span>
+          </div>
+          <h3>In-App Aqua Browser &amp; Live Internet Tools</h3>
+          <p>Built-in multi-tab Chromium WebView browser paired directly with Aqua AI's autonomous web research toolset.</p>
+          <ul class="feature-bullets">
+            <li>Live <code>web_search</code> via DuckDuckGo &amp; Wikipedia, plus <code>web_fetch_page</code> readable text extractor</li>
+            <li>Active tab reading, link extraction, approval-gated form filling &amp; REST <code>web_http_request</code> tool</li>
+            <li>SSRF-hardened URL validation blocking local/private network hosts</li>
+          </ul>
+        </article>
+
+        <article class="feature-card" data-era="core">
+          <div class="feature-top">
+            <span class="era-badge era-core">CORE • WORKSPACE</span>
+            <span class="feature-cat">Foundation</span>
+          </div>
+          <h3>Google Workspace &amp; Drive Backup Hub</h3>
+          <p>Connect official Google Workspace APIs under strict user-triggered OAuth 2.0 consent and Limited Use rules.</p>
+          <ul class="feature-bullets">
+            <li>Read &amp; compose Gmail, inspect/create Calendar events, search Contacts &amp; edit Google Sheets</li>
+            <li>Create Google Forms, read responses, and interact with Google Chat spaces (outbound sends always ask approval)</li>
+            <li>One-tap encrypted-transport JSON snapshot backups &amp; restores inside your Google Drive</li>
+          </ul>
+        </article>
+
+        <article class="feature-card" data-era="core">
+          <div class="feature-top">
+            <span class="era-badge era-core">CORE • CRYPTO &amp; SKILLS</span>
+            <span class="feature-cat">Foundation</span>
+          </div>
+          <h3>Self-Custodial Multi-Chain Wallet &amp; Skills</h3>
+          <p>Hardware-secured multi-chain crypto engine alongside declarative YAML/JSON/Markdown extensible agent skills.</p>
+          <ul class="feature-bullets">
+            <li>Real BIP-39 HD wallets for <strong>Ethereum/EVM</strong> (Ethereum, Arbitrum, Base, Polygon, BNB, Sepolia), <strong>Solana</strong> &amp; <strong>Bitcoin SegWit</strong></li>
+            <li>Android Keystore AES-256-GCM vault, PIN/Biometric &amp; Emergency Lock, ENS resolver, ERC-20 allowance revoke, QR payment scanner &amp; CoinGecko charts</li>
+            <li>Split AI Wallet Read vs. Write permissions plus safety-validated custom Skills &amp; Android Photo Picker / SAF media imports</li>
+          </ul>
+        </article>
+      </div>
     </section>
 
     <section class="card" id="data-safety">
@@ -510,6 +843,37 @@
           localStorage.setItem(key, next);
           syncLabel();
         });
+      }
+
+      const tabs = Array.from(document.querySelectorAll(".filter-tab"));
+      const cards = Array.from(document.querySelectorAll("#featuresGrid .feature-card"));
+      const search = document.getElementById("featureSearch");
+      const countEl = document.getElementById("featuresCount");
+      let activeEra = "all";
+
+      const applyFeatureFilter = () => {
+        const q = (search ? search.value : "").trim().toLowerCase();
+        let shown = 0;
+        cards.forEach((card) => {
+          const eraOk = activeEra === "all" || card.getAttribute("data-era") === activeEra;
+          const textOk = !q || card.textContent.toLowerCase().includes(q);
+          const visible = eraOk && textOk;
+          card.classList.toggle("hidden", !visible);
+          if (visible) shown++;
+        });
+        if (countEl) countEl.textContent = shown + " / " + cards.length + " capabilities shown";
+      };
+
+      tabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+          activeEra = tab.getAttribute("data-filter") || "all";
+          tabs.forEach((t) => t.classList.toggle("active", t === tab));
+          applyFeatureFilter();
+        });
+      });
+
+      if (search) {
+        search.addEventListener("input", applyFeatureFilter);
       }
     })();
   </script>

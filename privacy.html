@@ -293,6 +293,7 @@
       </a>
       <nav class="nav-links" aria-label="Primary Navigation">
         <a href="index.html">Overview</a>
+        <a href="index.html#features">All Features</a>
         <a class="active" href="privacy.html">Privacy Policy</a>
         <a href="terms.html">Terms &amp; Conditions</a>
       </nav>
@@ -369,10 +370,11 @@
         </article>
 
         <article class="clause-card" id="sec-2">
-          <h2>2. AI Personas, Custom Directives &amp; Gemini Processing</h2>
+          <h2>2. AI Personas, Custom Keys, ElevenLabs Voice &amp; Freedom Controls</h2>
           <ul>
-            <li><strong>AI Intelligence Provider:</strong> Assistant reasoning, summarization, and voice synthesis use Firebase AI Logic / Gemini models (or your own encrypted personal Gemini API key stored locally in Android Keystore if configured in Settings).</li>
-            <li><strong>Persona &amp; Custom Directives:</strong> Your selected AI Persona mode (Autonomous, Voice Concise, Deep Analyst, Device Power, On-Chain Pro), pinned routines, and optional custom system directive are saved locally per user in <code>AquaLocalPreferences</code> and appended only to prompts you initiate.</li>
+            <li><strong>AI Intelligence Provider (BYOK Supported):</strong> Assistant reasoning uses managed Firebase AI Logic by default, or your own optional personal <strong>Google AI Studio API key</strong> entered during Post-Login Setup or Settings and encrypted on-device via Android Keystore AES-256-GCM.</li>
+            <li><strong>Optional ElevenLabs Voice Studio (Non-Compulsory):</strong> If you choose to supply an optional <strong>ElevenLabs API key and Voice ID</strong>, both are encrypted locally in Android Keystore and only submitted text phrases you speak or preview are sent to ElevenLabs (<code>api.elevenlabs.io</code>) for synthesis. Otherwise Gemini or Android TTS handles voice locally.</li>
+            <li><strong>Personas, Directives &amp; AI Freedom Parameters:</strong> Your AI Persona, custom system directive, pinned routines, sampling temperature/Top-P/step limits, and autonomy policy stay saved locally per user in <code>AquaLocalPreferences</code> and govern only prompts you submit.</li>
           </ul>
         </article>
 

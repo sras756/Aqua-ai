@@ -1320,16 +1320,22 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                 when (activeDoc) {
                     "index" -> listOf(
                         "Aqua AI — Package: com.aistudio.aquaai.vqrzmn" to
-                            "Trust & Legal Portal (Effective Nov 16, 2026) • Autonomous Android AI Assistant, Aqua Launcher, Workspace Hub & Self-Custodial Multi-Chain Crypto Wallet.",
+                            "Trust & Legal Portal (Effective Nov 16, 2026) • Autonomous Android AI Assistant, Optional BYOK AI Studio & ElevenLabs Voice, Aqua Launcher, Workspace Hub & Self-Custodial Multi-Chain Crypto Wallet.",
+                        "New & Latest Features" to
+                            "• Post-Login AI Setup Studio: Optional Google AI Studio API Key verifier + live model discovery, optional non-compulsory ElevenLabs Voice ID setup, and Skip for Now.\n" +
+                            "• AI Dependency & Freedom Lab: Advisory / Balanced / Unrestricted modes, Unlock All 50+ Tools Always, Temperature (0.0–2.0), Top-P, Max Tokens, Max Steps (2–15) & custom model overrides.\n" +
+                            "• Optional ElevenLabs Voice Studio: Live /v1/voices & quota loader, Test Voice preview, and Gemini/Android TTS fallback.\n" +
+                            "• Foreground Service & Workflow: Persistent wake-word/automation notification, 5 AI Personas, Prompt Studio, Command Palette, Markdown/JSON exports & Battery/RAM sparklines.",
+                        "Core Foundation Features" to
+                            "• Gemini Agent & Live Voice: Streaming chat, Deep Thinking traces, Gemini Live voice, Memories & Skills validator.\n" +
+                            "• Aqua Launcher & Browser: Standalone Android HOME replacement + Live Wallpaper, multi-tab browser & live DuckDuckGo/Wikipedia search.\n" +
+                            "• Google Workspace & Drive: Limited Use Gmail, Calendar, Contacts, Sheets, Forms, Chat & Drive snapshot backups.\n" +
+                            "• Self-Custodial Multi-Chain Wallet: BIP-39 EVM/Solana/Bitcoin vault in Android Keystore AES-256-GCM, ENS, ERC-20 revokes & CoinGecko charts.",
                         "Data Safety Summary" to
                             "• Google Account Profile: Used strictly for Firebase Authentication & per-user Firestore isolation.\n" +
                             "• AI Chats & Memories: User-scoped Firestore records; exportable anytime as Markdown (.md) or JSON.\n" +
-                            "• Wallet Keys & PIN: Created locally with OS SecureRandom & stored only in Android Keystore AES-256-GCM.\n" +
+                            "• API Keys & Wallet Vault: User-supplied AI Studio / ElevenLabs keys, wallet keys & PINs stay encrypted strictly in Android Keystore.\n" +
                             "• Installed Apps & Telemetry: Launcher package lists and RAM/battery metrics remain strictly on-device.",
-                        "Core Capabilities" to
-                            "• Gemini Personas & Directives: Autonomous, Voice Concise, Deep Analyst, Device Power & On-Chain Pro.\n" +
-                            "• Aqua Launcher & Priority Service: Genuine Android HOME experience and opt-in foreground status notification.\n" +
-                            "• Google Workspace & Drive (Optional): Connects strictly on explicit user consent with Limited Use compliance.",
                         "Support" to
                             "Developer support & data deletion requests: srasmarkhor7289@gmail.com"
                     )
@@ -1338,10 +1344,10 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                             "App Package: com.aistudio.aquaai.vqrzmn | Developer Contact: srasmarkhor7289@gmail.com",
                         "1. Acceptance of Terms" to
                             "By downloading, accessing, or using Aqua AI, you agree to be bound by these Terms & Conditions and our Privacy Policy. If you do not agree, discontinue using the application.",
-                        "2. AI Assistant, Personas & Supervision" to
-                            "• Aqua AI uses generative AI, custom user directives, web search, webpage inspection, and connected tools.\n" +
-                            "• Generative outputs may occasionally contain inaccuracies; verify critical code, financial, or legal details independently.\n" +
-                            "• High-impact actions (sending emails/messages, HTTP writes, wallet contact edits, or signing blockchain transactions) require your explicit modal approval.",
+                        "2. AI Assistant, Autonomy Modes & Supervision" to
+                            "• Aqua AI uses Gemini models (managed Firebase AI or your optional personal Google AI Studio key), custom directives, live web search, and connected tools.\n" +
+                            "• Choose between Advisory, Balanced, and Unrestricted Tools modes inside the AI Freedom Lab.\n" +
+                            "• Generative outputs may occasionally contain inaccuracies; high-impact actions (outbound messages, HTTP writes, wallet contact edits, or blockchain signing) always require explicit modal confirmation.",
                         "3. Aqua Launcher & Foreground Service Operation" to
                             "Default Home selection and background voice/task prioritization are strictly optional, display a persistent Android foreground notification when active, and remain reversible anytime.",
                         "4. Self-Custodial Wallet & Financial Disclaimers" to
@@ -1350,7 +1356,7 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                             "• Irreversible Blockchain Transactions: Digital asset transfers and smart-contract interactions (including ERC-20 approvals/revocations) are irreversible once broadcast.\n" +
                             "• Not Financial Advice: Portfolio analytics and CoinGecko market data are informational only.",
                         "5. Third-Party Services" to
-                            "Integrations with Google (Firebase, Workspace, Drive), Gemini APIs, public blockchain RPC nodes, explorers, and CoinGecko depend on those third parties' uptime and terms.",
+                            "Integrations with Google (Firebase, Workspace, Drive, Google AI Studio APIs), optional ElevenLabs TTS APIs, public blockchain RPC nodes, explorers, and CoinGecko depend on those third parties' uptime, quotas, and terms.",
                         "6. Imported Skills & Acceptable Use" to
                             "Declarative YAML, JSON, and Markdown skills are checked against executable code payloads; do not import untrusted instructions or misuse Aqua AI to violate laws or rate limits.",
                         "7. Disclaimer of Warranties & Limitation of Liability" to
@@ -1366,8 +1372,8 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                             "• User Prompts & Attachments: Messages, voice transcripts, images, and SAF files selected by you are processed via Gemini when submitted.\n" +
                             "• Live Web Requests: When Full Internet Access is enabled, search queries and public URLs are fetched over HTTPS without ad trackers.\n" +
                             "• On-Device Session Telemetry: Real battery % and RAM % metrics plotted inside Core/Hub remain strictly on-device during your session.",
-                        "2. AI Personas, Directives & Gemini Processing" to
-                            "Your chosen AI Persona, pinned items, and custom system directive stay saved per user in local private storage and shape only requests you initiate.",
+                        "2. AI Personas, Custom Keys, ElevenLabs Voice & Freedom Controls" to
+                            "Personal Google AI Studio API keys and optional (non-compulsory) ElevenLabs API keys & Voice IDs remain encrypted locally in Android Keystore AES-256-GCM. AI Personas, directives, and AI Freedom parameters stay saved locally per user and govern only prompts you initiate.",
                         "3. Permissions, Aqua Launcher & Foreground Service" to
                             "• Opt-In Runtime Permissions: Microphone, Camera, Biometrics, Coarse Location, and Alarms.\n" +
                             "• Zero Broad Storage Scans: Uses Android Photo Picker & SAF rather than broad media-library storage permissions.\n" +

@@ -97,6 +97,22 @@
     th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); color: var(--muted); }
     th { color: var(--cyan); font-size: 0.75rem; text-transform: uppercase; }
     td strong { color: var(--text); }
+    .filter-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 12px; }
+    .filter-tab {
+      cursor: pointer; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border);
+      background: var(--surface-elevated); color: var(--muted); font-size: 0.8rem; font-weight: 600;
+    }
+    .filter-tab.active { color: #031320; background: var(--cyan); border-color: var(--cyan); }
+    .f-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+    .f-card {
+      background: var(--surface-elevated); border: 1px solid var(--border); border-radius: 14px; padding: 14px;
+    }
+    .f-card.hidden { display: none; }
+    .f-card h3 { margin: 6px 0; font-size: 0.96rem; color: var(--text); }
+    .f-card p { margin: 0; font-size: 0.84rem; color: var(--muted); }
+    .era { display: inline-block; font-size: 0.68rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+    .era-new { color: #fbbf24; background: rgba(251, 191, 36, 0.14); border: 1px solid rgba(251, 191, 36, 0.4); }
+    .era-core { color: var(--teal); background: rgba(45, 212, 191, 0.12); border: 1px solid rgba(45, 212, 191, 0.35); }
     a { color: var(--cyan); }
   </style>
 </head>
@@ -114,6 +130,7 @@
       </a>
       <nav class="nav-links" aria-label="Primary Navigation">
         <a class="active" href="index.html">Overview</a>
+        <a href="#features">All Features</a>
         <a href="privacy.html">Privacy Policy</a>
         <a href="terms.html">Terms &amp; Conditions</a>
       </nav>
@@ -124,13 +141,14 @@
   <main class="wrap">
     <section class="hero">
       <span class="badge">EFFECTIVE NOV 16, 2026 • GOOGLE PLAY COMPLIANT</span>
-      <h1>Transparent Privacy &amp; Clear Terms</h1>
+      <h1>Transparent Privacy, Clear Terms &amp; All Aqua AI Features</h1>
       <p>
-        Aqua AI (<code>com.aistudio.aquaai.vqrzmn</code>) unites Gemini personas, Aqua Launcher, optional Google Workspace
-        automation, and a strictly self-custodial multi-chain crypto wallet.
+        Aqua AI (<code>com.aistudio.aquaai.vqrzmn</code>) unites Gemini reasoning, optional Google AI Studio &amp; ElevenLabs voice setup,
+        AI Freedom controls, Aqua Launcher, optional Google Workspace automation, and a strictly self-custodial multi-chain crypto wallet.
       </p>
       <div class="cta-row">
-        <a class="btn-primary" href="privacy.html">Privacy Policy →</a>
+        <a class="btn-primary" href="#features">All Old &amp; New Features ↓</a>
+        <a class="btn-secondary" href="privacy.html">Privacy Policy</a>
         <a class="btn-secondary" href="terms.html">Terms &amp; Conditions</a>
       </div>
     </section>
@@ -152,6 +170,78 @@
         <h2>On-Device Wallet Vault</h2>
         <p>BIP-39 seeds and PINs remain encrypted inside Android Keystore AES-256-GCM storage.</p>
       </article>
+    </section>
+
+    <section class="card" id="features">
+      <h2>All Aqua AI Features — Foundation &amp; Latest Releases</h2>
+      <p style="margin-bottom:6px;">Browse our newest AI Freedom, Voice &amp; Personal API Studio upgrades alongside Aqua AI's core capabilities.</p>
+      <div class="filter-tabs">
+        <button class="filter-tab active" type="button" data-filter="all">All (12)</button>
+        <button class="filter-tab" type="button" data-filter="new">New Releases (7)</button>
+        <button class="filter-tab" type="button" data-filter="core">Core Foundation (5)</button>
+      </div>
+      <div class="f-grid" id="featuresGrid">
+        <article class="f-card" data-era="new">
+          <span class="era era-new">NEW • ONBOARDING</span>
+          <h3>Post-Login AI Setup Studio</h3>
+          <p>Optional Google AI Studio API Key verifier with live model discovery, optional ElevenLabs Voice setup, and non-blocking Skip for Now.</p>
+        </article>
+        <article class="f-card" data-era="new">
+          <span class="era era-new">NEW • AI FREEDOM</span>
+          <h3>AI Dependency &amp; Freedom Lab</h3>
+          <p>Advisory / Balanced / Unrestricted modes, Unlock All 50+ Tools Always, Temperature (0.0–2.0), Top-P, Max Tokens &amp; Max Steps (2–15).</p>
+        </article>
+        <article class="f-card" data-era="new">
+          <span class="era era-new">NEW • VOICE STUDIO</span>
+          <h3>Optional ElevenLabs Voice Studio</h3>
+          <p>Non-compulsory custom Voice ID &amp; API key in Keystore, live voice &amp; quota loader, Test Voice preview, and Gemini/Android TTS fallback.</p>
+        </article>
+        <article class="f-card" data-era="new">
+          <span class="era era-new">NEW • BYOK ENGINE</span>
+          <h3>Direct AI Studio REST Parity</h3>
+          <p>Multimodal image/doc attachments, custom verified Gemini models, Google Search grounding &amp; full multi-step tool calling on personal keys.</p>
+        </article>
+        <article class="f-card" data-era="new">
+          <span class="era era-new">NEW • SERVICE</span>
+          <h3>Foreground Service &amp; Background Mic</h3>
+          <p>Transparent persistent notification with active task status, Pause/Resume/Stop controls, boot restore, and Android 15+ timeout safety.</p>
+        </article>
+        <article class="f-card" data-era="new">
+          <span class="era era-new">NEW • WORKFLOW</span>
+          <h3>Personas, Prompt Studio &amp; Palette</h3>
+          <p>5 switchable AI personas, persistent custom directives, Prompt Studio templates, Pinned Routines strip, and Command Palette search.</p>
+        </article>
+        <article class="f-card" data-era="new">
+          <span class="era era-new">NEW • DIAGNOSTICS</span>
+          <h3>Exports, Code Blocks &amp; Sparklines</h3>
+          <p>Fenced code blocks with 1-tap copy, Markdown/JSON SAF exports, Clipboard Smart Inspector, and 24-sample Battery/RAM sparklines.</p>
+        </article>
+        <article class="f-card" data-era="core">
+          <span class="era era-core">CORE • AGENT</span>
+          <h3>Gemini Agent, Live Voice &amp; Memory</h3>
+          <p>Streaming responses, Deep Thinking traces, Gemini Live duplex voice, Firestore history, long-term Memories &amp; approval modals.</p>
+        </article>
+        <article class="f-card" data-era="core">
+          <span class="era era-core">CORE • LAUNCHER</span>
+          <h3>Aqua Launcher &amp; Live Wallpaper</h3>
+          <p>Standalone Android HOME replacement with real installed app discovery, docks, folders, 6 themes, Gaming Mode &amp; live Aurora wallpaper.</p>
+        </article>
+        <article class="f-card" data-era="core">
+          <span class="era era-core">CORE • WEB</span>
+          <h3>Aqua Browser &amp; Live Internet Tools</h3>
+          <p>Multi-tab browser paired with live DuckDuckGo/Wikipedia search, reader extraction, REST HTTP requests &amp; SSRF-safe URL validation.</p>
+        </article>
+        <article class="f-card" data-era="core">
+          <span class="era era-core">CORE • WORKSPACE</span>
+          <h3>Google Workspace &amp; Drive Backup</h3>
+          <p>OAuth Limited Use tools for Gmail, Calendar, Contacts, Sheets, Forms &amp; Google Chat plus personal Drive JSON snapshot backups.</p>
+        </article>
+        <article class="f-card" data-era="core">
+          <span class="era era-core">CORE • CRYPTO &amp; SKILLS</span>
+          <h3>Multi-Chain Wallet &amp; Skills</h3>
+          <p>Self-custodial BIP-39 EVM/Solana/Bitcoin vault in Keystore AES-256-GCM, ENS, ERC-20 revokes, QR scanner &amp; YAML/JSON Skills.</p>
+        </article>
+      </div>
     </section>
 
     <section class="card">
@@ -181,6 +271,15 @@
           btn.textContent = next === "light" ? "☾ Dark" : "☀ Light";
         });
       }
+      const tabs = Array.from(document.querySelectorAll(".filter-tab"));
+      const cards = Array.from(document.querySelectorAll("#featuresGrid .f-card"));
+      tabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+          const era = tab.getAttribute("data-filter") || "all";
+          tabs.forEach((t) => t.classList.toggle("active", t === tab));
+          cards.forEach((c) => c.classList.toggle("hidden", era !== "all" && c.getAttribute("data-era") !== era));
+        });
+      });
     })();
   </script>
 </body>
