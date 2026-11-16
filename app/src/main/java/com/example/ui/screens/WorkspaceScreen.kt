@@ -39,8 +39,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -48,7 +46,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
@@ -59,7 +56,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -69,16 +65,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.repository.WorkspaceService
 import com.example.ui.AquaMainViewModel
-import com.example.ui.theme.AquaAbyss
-import com.example.ui.theme.AquaAzure
-import com.example.ui.theme.AquaBorderGlow
-import com.example.ui.theme.AquaCardSurface
-import com.example.ui.theme.AquaCyan
-import com.example.ui.theme.AquaDeepSurface
-import com.example.ui.theme.AquaIceText
-import com.example.ui.theme.AquaMintSuccess
-import com.example.ui.theme.AquaMutedText
-import com.example.ui.theme.AquaTeal
+import com.example.ui.components.AquaBackdropBox
+import com.example.ui.components.AquaGlassCard
+import com.example.ui.theme.AquaTheme
 
 @Composable
 fun WorkspaceScreen(viewModel: AquaMainViewModel) {
@@ -116,10 +105,11 @@ fun WorkspaceScreen(viewModel: AquaMainViewModel) {
         consentLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
     }
 
+    val c = AquaTheme.colors
+    AquaBackdropBox(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(AquaAbyss, AquaDeepSurface)))
             .statusBarsPadding()
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
@@ -132,13 +122,13 @@ fun WorkspaceScreen(viewModel: AquaMainViewModel) {
                 Text(
                     text = "GOOGLE WORKSPACE HUB",
                     style = MaterialTheme.typography.titleLarge,
-                    color = AquaCyan,
+                    color = c.accentCyan,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
                     text = status ?: "Contacts • Forms • Calendar • Gmail • Sheets • Chat",
                     style = MaterialTheme.typography.bodySmall,
-                    color = AquaMutedText,
+                    color = c.textMuted,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -147,7 +137,7 @@ fun WorkspaceScreen(viewModel: AquaMainViewModel) {
             Button(
                 onClick = { viewModel.connectAllWorkspace(activity) },
                 enabled = !busy,
-                colors = ButtonDefaults.buttonColors(containerColor = AquaCyan, contentColor = AquaAbyss),
+                colors = ButtonDefaults.buttonColors(containerColor = c.accentCyan, contentColor = c.canvas),
                 modifier = Modifier
                     .minimumInteractiveComponentSize()
                     .testTag("workspace_connect_all_button")
@@ -161,20 +151,17 @@ fun WorkspaceScreen(viewModel: AquaMainViewModel) {
         if (busy) {
             Spacer(Modifier.height(8.dp))
             LinearProgressIndicator(
-                color = AquaCyan,
-                trackColor = AquaCardSurface,
+                color = c.accentCyan,
+                trackColor = c.cardSurface,
                 modifier = Modifier.fillMaxWidth()
             )
         }
 
         if (consentHelpAccount != null) {
             Spacer(Modifier.height(10.dp))
-            Card(
-                colors = CardDefaults.cardColors(containerColor = AquaCardSurface),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, com.example.ui.theme.AquaAmber, RoundedCornerShape(14.dp))
+            AquaGlassCard(
+                borderColor = c.amber,
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
                     modifier = Modifier.padding(14.dp),
@@ -183,13 +170,13 @@ fun WorkspaceScreen(viewModel: AquaMainViewModel) {
                     Text(
                         text = "Access Blocked (Error 403: access_denied)?",
                         style = MaterialTheme.typography.titleSmall,
-                        color = com.example.ui.theme.AquaAmber,
+                        color = c.amber,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
                         text = "Your OAuth consent screen in Google Cloud is in Testing mode, so only the developer account or approved Test Users can authorize Workspace scopes. Add '$consentHelpAccount' under Google Auth Platform → Audience → Test users (project gen-lang-client-0405170912), or choose your developer Google account when consenting.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = AquaIceText
+                        color = c.textPrimary
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -201,7 +188,7 @@ fun WorkspaceScreen(viewModel: AquaMainViewModel) {
                                     "https://console.cloud.google.com/auth/audience?project=gen-lang-client-0405170912"
                                 )
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = AquaCyan, contentColor = AquaAbyss),
+                            colors = ButtonDefaults.buttonColors(containerColor = c.accentCyan, contentColor = c.canvas),
                             modifier = Modifier.weight(1f)
                         ) {
                             Text("Add Test User", fontWeight = FontWeight.Bold)
@@ -209,7 +196,7 @@ fun WorkspaceScreen(viewModel: AquaMainViewModel) {
                         OutlinedButton(
                             onClick = { viewModel.dismissWorkspaceConsentHelp() }
                         ) {
-                            Text("Dismiss", color = AquaMutedText)
+                            Text("Dismiss", color = c.textMuted)
                         }
                     }
                 }
@@ -236,12 +223,12 @@ fun WorkspaceScreen(viewModel: AquaMainViewModel) {
                         )
                     },
                     colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = AquaAzure.copy(alpha = 0.35f),
-                        selectedLabelColor = AquaCyan,
-                        selectedLeadingIconColor = AquaCyan,
-                        containerColor = AquaCardSurface,
-                        labelColor = AquaIceText,
-                        iconColor = AquaMutedText
+                        selectedContainerColor = c.accentAzure.copy(alpha = 0.28f),
+                        selectedLabelColor = c.accentCyan,
+                        selectedLeadingIconColor = c.accentCyan,
+                        containerColor = c.cardSurface,
+                        labelColor = c.textPrimary,
+                        iconColor = c.textMuted
                     ),
                     modifier = Modifier
                         .minimumInteractiveComponentSize()
@@ -304,6 +291,7 @@ fun WorkspaceScreen(viewModel: AquaMainViewModel) {
                 )
             }
         }
+    }
     }
 }
 
@@ -378,7 +366,7 @@ private fun GmailPanel(
                 Button(
                     onClick = { onSend(toEmail, subject, bodyText) },
                     enabled = !busy,
-                    colors = ButtonDefaults.buttonColors(containerColor = AquaTeal, contentColor = AquaAbyss),
+                    colors = ButtonDefaults.buttonColors(containerColor = AquaTheme.colors.accentTeal, contentColor = AquaTheme.colors.canvas),
                     modifier = Modifier
                         .fillMaxWidth()
                         .minimumInteractiveComponentSize()
@@ -485,7 +473,7 @@ private fun CalendarPanel(
                 Button(
                     onClick = { onCreate(summary, startIso, endIso, description, location) },
                     enabled = !busy,
-                    colors = ButtonDefaults.buttonColors(containerColor = AquaTeal, contentColor = AquaAbyss),
+                    colors = ButtonDefaults.buttonColors(containerColor = AquaTheme.colors.accentTeal, contentColor = AquaTheme.colors.canvas),
                     modifier = Modifier
                         .fillMaxWidth()
                         .minimumInteractiveComponentSize()
@@ -584,7 +572,7 @@ private fun ContactsPanel(
                 Button(
                     onClick = { onCreate(fullName, email, phone) },
                     enabled = !busy,
-                    colors = ButtonDefaults.buttonColors(containerColor = AquaTeal, contentColor = AquaAbyss),
+                    colors = ButtonDefaults.buttonColors(containerColor = AquaTheme.colors.accentTeal, contentColor = AquaTheme.colors.canvas),
                     modifier = Modifier
                         .fillMaxWidth()
                         .minimumInteractiveComponentSize()
@@ -654,7 +642,7 @@ private fun SheetsPanel(
                 Button(
                     onClick = { onCreateSheet(newTitle) },
                     enabled = !busy,
-                    colors = ButtonDefaults.buttonColors(containerColor = AquaTeal, contentColor = AquaAbyss),
+                    colors = ButtonDefaults.buttonColors(containerColor = AquaTheme.colors.accentTeal, contentColor = AquaTheme.colors.canvas),
                     modifier = Modifier
                         .fillMaxWidth()
                         .minimumInteractiveComponentSize()
@@ -669,7 +657,7 @@ private fun SheetsPanel(
                     Text(
                         text = "Active ID: ${created.spreadsheetId}",
                         style = MaterialTheme.typography.labelMedium,
-                        color = AquaMintSuccess
+                        color = AquaTheme.colors.success
                     )
                 }
             }
@@ -790,7 +778,7 @@ private fun FormsPanel(
                 Button(
                     onClick = { onCreateForm(formTitle, firstQuestion) },
                     enabled = !busy,
-                    colors = ButtonDefaults.buttonColors(containerColor = AquaTeal, contentColor = AquaAbyss),
+                    colors = ButtonDefaults.buttonColors(containerColor = AquaTheme.colors.accentTeal, contentColor = AquaTheme.colors.canvas),
                     modifier = Modifier
                         .fillMaxWidth()
                         .minimumInteractiveComponentSize()
@@ -898,21 +886,20 @@ private fun ChatPanel(
 
         if (spaces.isNotEmpty()) {
             items(spaces, key = { it.name }) { space ->
+                val c = AquaTheme.colors
                 val isSelected = selectedSpaceName == space.name
-                Surface(
-                    color = if (isSelected) AquaAzure.copy(alpha = 0.28f) else AquaCardSurface,
-                    shape = RoundedCornerShape(14.dp),
+                AquaGlassCard(
+                    borderColor = if (isSelected) c.accentCyan else c.borderGlow.copy(alpha = 0.8f),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, if (isSelected) AquaCyan else AquaBorderGlow, RoundedCornerShape(14.dp))
                         .clickable {
                             selectedSpaceName = space.name
                             onLoadMessages(space.name)
                         }
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
-                        Text(space.displayName, style = MaterialTheme.typography.titleSmall, color = AquaIceText)
-                        Text("${space.name} • ${space.spaceType}", style = MaterialTheme.typography.labelSmall, color = AquaMutedText)
+                        Text(space.displayName, style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
+                        Text("${space.name} • ${space.spaceType}", style = MaterialTheme.typography.labelSmall, color = c.textMuted)
                     }
                 }
             }
@@ -949,7 +936,7 @@ private fun ChatPanel(
                     Button(
                         onClick = { onSendMessage(selectedSpaceName, messageText) },
                         enabled = !busy,
-                        colors = ButtonDefaults.buttonColors(containerColor = AquaTeal, contentColor = AquaAbyss),
+                        colors = ButtonDefaults.buttonColors(containerColor = AquaTheme.colors.accentTeal, contentColor = AquaTheme.colors.canvas),
                         modifier = Modifier
                             .weight(1f)
                             .minimumInteractiveComponentSize()
@@ -983,18 +970,13 @@ private fun WorkspaceCard(
     title: String,
     content: @Composable () -> Unit
 ) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = AquaCardSurface),
-        shape = RoundedCornerShape(18.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, AquaBorderGlow, RoundedCornerShape(18.dp))
-    ) {
+    val c = AquaTheme.colors
+    AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                color = AquaCyan,
+                color = c.accentCyan,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(Modifier.height(10.dp))
@@ -1010,23 +992,18 @@ private fun WorkspaceDataCard(
     body: String,
     footer: String
 ) {
-    Surface(
-        color = AquaCardSurface,
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, AquaBorderGlow, RoundedCornerShape(16.dp))
-    ) {
+    val c = AquaTheme.colors
+    AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(text = heading, style = MaterialTheme.typography.titleSmall, color = AquaIceText)
+            Text(text = heading, style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
             if (subheading.isNotBlank()) {
-                Text(text = subheading, style = MaterialTheme.typography.labelSmall, color = AquaTeal)
+                Text(text = subheading, style = MaterialTheme.typography.labelSmall, color = c.accentTeal)
             }
             if (body.isNotBlank()) {
-                Text(text = body, style = MaterialTheme.typography.bodyMedium, color = AquaIceText)
+                Text(text = body, style = MaterialTheme.typography.bodyMedium, color = c.textPrimary)
             }
             if (footer.isNotBlank()) {
-                Text(text = footer, style = MaterialTheme.typography.labelSmall, color = AquaMutedText)
+                Text(text = footer, style = MaterialTheme.typography.labelSmall, color = c.textMuted)
             }
         }
     }
@@ -1034,15 +1011,12 @@ private fun WorkspaceDataCard(
 
 @Composable
 private fun EmptyWorkspaceHint(text: String) {
-    Surface(
-        color = AquaCardSurface.copy(alpha = 0.6f),
-        shape = RoundedCornerShape(14.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    val c = AquaTheme.colors
+    AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = text,
             style = MaterialTheme.typography.bodyMedium,
-            color = AquaMutedText,
+            color = c.textMuted,
             modifier = Modifier.padding(16.dp)
         )
     }

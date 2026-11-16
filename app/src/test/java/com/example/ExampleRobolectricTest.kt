@@ -7,8 +7,13 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import androidx.test.core.app.ApplicationProvider
 import com.example.ai.ContextManager
+import com.example.ai.ConversationMarkdownExporter
+import com.example.ai.MessageSegment
 import com.example.browser.AquaBrowserController
 import com.example.browser.BrowserLink
+import com.example.data.local.AquaLocalPreferences
+import com.example.data.local.AquaPersona
+import com.example.data.local.TelemetrySample
 import com.example.data.model.AquaRoutine
 import com.example.data.model.AquaSkill
 import com.example.data.model.ChatMessage
@@ -342,5 +347,99 @@ class ExampleRobolectricTest {
         AquaWakeWordService.endAutomationTask(context, taskId)
         assertTrue(AquaWakeWordService.activeAutomationTasks.value.isEmpty())
         AquaWakeWordService.clearServiceError()
+    }
+
+    @Test
+    fun `aqua local preferences persist persona custom directive and pinned routines per user`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val userA = "user_alpha"
+        val userB = "user_beta"
+        val prefsA = AquaLocalPreferences(context, userA)
+        val prefsB = AquaLocalPreferences(context, userB)
+
+        assertEquals(AquaPersona.AUTONOMOUS.id, prefsA.personaId.value)
+        prefsA.setPersonaId(AquaPersona.DEEP_ANALYST.id)
+        assertEquals(AquaPersona.DEEP_ANALYST.id, prefsA.personaId.value)
+        assertEquals(AquaPersona.AUTONOMOUS.id, prefsB.personaId.value)
+
+        // Unknown persona falls back safely
+        assertEquals(AquaPersona.AUTONOMOUS, AquaPersona.fromId("unknown_mode"))
+
+        prefsA.setCustomDirective("Respond with concise numbered tables.")
+        assertEquals("Respond with concise numbered tables.", prefsA.customDirective.value)
+
+        assertTrue(prefsA.togglePinnedRoutine("routine_1"))
+        assertEquals(setOf("routine_1"), prefsA.pinnedRoutineIds.value)
+        assertTrue(prefsA.togglePinnedRoutine("routine_2"))
+        assertEquals(setOf("routine_1", "routine_2"), prefsA.pinnedRoutineIds.value)
+        assertFalse(prefsA.togglePinnedRoutine("routine_1"))
+        assertEquals(setOf("routine_2"), prefsA.pinnedRoutineIds.value)
+    }
+
+    @Test
+    fun `context manager injects active persona and custom user directive into system prompt`() {
+        val prompt = ContextManager.buildSystemInstruction(
+            settings = UserSettings(),
+            memories = emptyList(),
+            enabledSkills = emptyList(),
+            activeWallet = null,
+            telemetry = DeviceTelemetry(76, false, true, "Wi-Fi", 64, true, false, false),
+            browserUrl = "",
+            browserTitle = "",
+            personaId = AquaPersona.WEB3_STRATEGIST.id,
+            customDirective = "Always display gas in Gwei first."
+        )
+        assertTrue(prompt.contains(AquaPersona.WEB3_STRATEGIST.label))
+        assertTrue(prompt.contains("Always display gas in Gwei first."))
+    }
+
+    @Test
+    fun `markdown exporter parses fenced code blocks and formats full conversation transcript`() {
+        val sampleText = """
+            Here is the Kotlin snippet:
+            ```kotlin
+            fun greet() = println("Aqua")
+            ```
+            Run that directly.
+        """.trimIndent()
+
+        val segments = ConversationMarkdownExporter.parseMessageSegments(sampleText)
+        assertEquals(3, segments.size)
+        assertTrue(segments[0] is MessageSegment.Prose)
+        assertTrue(segments[1] is MessageSegment.CodeBlock)
+        val codeBlock = segments[1] as MessageSegment.CodeBlock
+        assertEquals("kotlin", codeBlock.language)
+        assertTrue(codeBlock.code.contains("fun greet()"))
+        assertTrue(segments[2] is MessageSegment.Prose)
+
+        val msgs = listOf(
+            ChatMessage(id = "1", conversationId = "c1", role = "user", content = "Show code"),
+            ChatMessage(
+                id = "2",
+                conversationId = "c1",
+                role = "model",
+                content = sampleText,
+                modelUsed = "gemini-3.8-flash",
+                toolActionsJson = """[{"tool":"device_get_telemetry","status":"completed","detail":"80%"}]""",
+                groundingSourcesJson = """["https://kotlinlang.org"]"""
+            )
+        )
+        val md = ConversationMarkdownExporter.formatConversationAsMarkdown("Kotlin Session", msgs)
+        assertTrue(md.contains("# Kotlin Session"))
+        assertTrue(md.contains("### You"))
+        assertTrue(md.contains("### Aqua AI (gemini-3.8-flash)"))
+        assertTrue(md.contains("device_get_telemetry"))
+        assertTrue(md.contains("80%"))
+        assertTrue(md.contains("https://kotlinlang.org"))
+
+        val sample = TelemetrySample(
+            timestampMs = 1000L,
+            batteryPercent = 85,
+            ramUsedPercent = 48,
+            isCharging = false,
+            isOnline = true
+        )
+        assertEquals(85, sample.batteryPercent)
+        assertEquals(48, sample.ramUsedPercent)
     }
 }

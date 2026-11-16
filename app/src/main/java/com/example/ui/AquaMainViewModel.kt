@@ -10,14 +10,18 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ai.ContextManager
+import com.example.ai.ConversationMarkdownExporter
 import com.example.ai.GeminiProvider
 import com.example.ai.ToolCallingEngine
 import com.example.browser.AquaBrowserController
 import com.example.browser.BrowserLink
 import com.example.browser.BrowserPageState
 import com.example.data.local.AquaCacheDatabase
+import com.example.data.local.AquaLocalPreferences
+import com.example.data.local.AquaPersona
 import com.example.data.local.DeviceActionLogEntity
 import com.example.data.local.SecureConfigStore
+import com.example.data.local.TelemetrySample
 import com.example.data.model.AgentStepTrace
 import com.example.data.model.AquaCoreState
 import com.example.data.model.AquaRoutine
@@ -104,6 +108,11 @@ class AquaMainViewModel(
         scope = viewModelScope,
         onBanner = { msg -> _bannerMessage.value = msg }
     )
+
+    val localPrefs = AquaLocalPreferences(appContext, currentUserId)
+    val personaId: StateFlow<String> = localPrefs.personaId
+    val customDirective: StateFlow<String> = localPrefs.customDirective
+    val pinnedRoutineIds: StateFlow<Set<String>> = localPrefs.pinnedRoutineIds
 
     val launcherEngine: AquaLauncherEngine = AquaLauncherEngine.getInstance(appContext)
     val launcherAiController: LauncherAiController = LauncherAiController(launcherEngine)
@@ -196,6 +205,11 @@ class AquaMainViewModel(
 
     private val _storageAndMemory = MutableStateFlow(deviceController.getStorageAndMemoryStats())
     val storageAndMemory: StateFlow<StorageAndMemoryStats> = _storageAndMemory.asStateFlow()
+
+    private val _telemetryHistory = MutableStateFlow(
+        listOf(buildTelemetrySample(_telemetry.value, _storageAndMemory.value))
+    )
+    val telemetryHistory: StateFlow<List<TelemetrySample>> = _telemetryHistory.asStateFlow()
 
     private val _browserReaderData = MutableStateFlow<Pair<String, List<BrowserLink>>?>(null)
     val browserReaderData: StateFlow<Pair<String, List<BrowserLink>>?> = _browserReaderData.asStateFlow()
@@ -380,8 +394,68 @@ class AquaMainViewModel(
     }
 
     fun refreshTelemetry() {
-        _telemetry.value = deviceController.getTelemetry()
-        _storageAndMemory.value = deviceController.getStorageAndMemoryStats()
+        val t = deviceController.getTelemetry()
+        val s = deviceController.getStorageAndMemoryStats()
+        _telemetry.value = t
+        _storageAndMemory.value = s
+        val sample = buildTelemetrySample(t, s)
+        val updated = (_telemetryHistory.value + sample).takeLast(24)
+        _telemetryHistory.value = updated
+    }
+
+    private fun buildTelemetrySample(
+        t: DeviceTelemetry,
+        s: StorageAndMemoryStats
+    ): TelemetrySample {
+        val ramUsedPct = if (s.ramTotalMb > 0L) {
+            (((s.ramTotalMb - s.ramAvailableMb).coerceAtLeast(0L) * 100L) / s.ramTotalMb).toInt().coerceIn(0, 100)
+        } else {
+            0
+        }
+        return TelemetrySample(
+            timestampMs = System.currentTimeMillis(),
+            batteryPercent = t.batteryPercent.coerceIn(0, 100),
+            ramUsedPercent = ramUsedPct,
+            isCharging = t.isCharging,
+            isOnline = t.isOnline
+        )
+    }
+
+    fun setAiPersona(id: String) {
+        localPrefs.setPersonaId(id)
+        val persona = AquaPersona.fromId(id)
+        _bannerMessage.value = "Switched Aqua AI Persona to ${persona.label}."
+    }
+
+    fun updateCustomDirective(directive: String) {
+        localPrefs.setCustomDirective(directive)
+        _bannerMessage.value = if (directive.isBlank()) {
+            "Cleared custom AI directive."
+        } else {
+            "Saved persistent custom AI directive."
+        }
+    }
+
+    fun togglePinRoutine(routineId: String) {
+        val pinned = localPrefs.togglePinnedRoutine(routineId)
+        _bannerMessage.value = if (pinned) {
+            "Pinned routine to Aqua Core Quick Strip."
+        } else {
+            "Unpinned routine from Quick Strip."
+        }
+    }
+
+    fun activeConversationTitle(): String {
+        val id = _activeConversationId.value
+        return conversations.value.firstOrNull { it.id == id }?.title
+            ?: "Aqua AI Session"
+    }
+
+    fun buildActiveConversationMarkdown(): String {
+        return ConversationMarkdownExporter.formatConversationAsMarkdown(
+            title = activeConversationTitle(),
+            messages = messages.value
+        )
     }
 
     fun openStandaloneLauncher() {
@@ -553,7 +627,9 @@ class AquaMainViewModel(
                     browserUrl = browserPageState.value.currentUrl,
                     browserTitle = browserPageState.value.currentTitle,
                     nativeWalletOverview = nativeWalletOverview,
-                    launcherOverview = buildLauncherOverviewText()
+                    launcherOverview = buildLauncherOverviewText(),
+                    personaId = localPrefs.personaId.value,
+                    customDirective = localPrefs.customDirective.value
                 )
 
                 val result = geminiProvider.executeAgentTurn(
@@ -697,7 +773,9 @@ class AquaMainViewModel(
                 browserUrl = browserPageState.value.currentUrl,
                 browserTitle = browserPageState.value.currentTitle,
                 nativeWalletOverview = nativeWalletOverview,
-                launcherOverview = buildLauncherOverviewText()
+                launcherOverview = buildLauncherOverviewText(),
+                personaId = localPrefs.personaId.value,
+                customDirective = localPrefs.customDirective.value
             )
             voiceManager.startLiveConversation(
                 scope = viewModelScope,

@@ -47,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.AquaMainViewModel
+import com.example.ui.components.AquaBackdropBox
 import com.example.ui.screens.wallet.QrScannerSheet
 import com.example.ui.screens.wallet.WalletAiAssistantSection
 import com.example.ui.screens.wallet.WalletDashboardAndAnalyticsSection
@@ -58,13 +59,7 @@ import com.example.ui.screens.wallet.WalletSecurityRecoveryAndExtensionsSection
 import com.example.ui.screens.wallet.WalletSendSection
 import com.example.ui.screens.wallet.WalletToolsAndAddressBookSection
 import com.example.ui.screens.wallet.WalletTransactionsSection
-import com.example.ui.theme.AquaAbyss
-import com.example.ui.theme.AquaCoralError
-import com.example.ui.theme.AquaCyan
-import com.example.ui.theme.AquaDeepSurface
-import com.example.ui.theme.AquaIceText
-import com.example.ui.theme.AquaMutedText
-import com.example.ui.theme.AquaTeal
+import com.example.ui.theme.AquaTheme
 
 private val WALLET_SECTIONS = listOf(
     "Overview",
@@ -150,10 +145,10 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
         BackHandler { activeSection = 0 }
     }
 
-    Box(
+    val c = AquaTheme.colors
+    AquaBackdropBox(
         modifier = Modifier
             .fillMaxSize()
-            .background(AquaAbyss)
             .statusBarsPadding()
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -169,13 +164,13 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null, tint = AquaCyan)
+                    Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null, tint = c.accentCyan)
                     Spacer(Modifier.width(8.dp))
                     Column {
                         Text(
                             text = "AQUA CRYPTO WALLET",
                             style = MaterialTheme.typography.titleMedium,
-                            color = AquaIceText,
+                            color = c.textPrimary,
                             fontWeight = FontWeight.Bold
                         )
                         if (activeWallet != null && activeAccount != null) {
@@ -188,9 +183,9 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
                                         Text(
                                             text = activeWallet.label,
                                             style = MaterialTheme.typography.labelMedium,
-                                            color = AquaCyan
+                                            color = c.accentCyan
                                         )
-                                        Icon(Icons.Filled.ArrowDropDown, contentDescription = "Switch wallet", tint = AquaCyan, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Filled.ArrowDropDown, contentDescription = "Switch wallet", tint = c.accentCyan, modifier = Modifier.size(18.dp))
                                     }
                                     DropdownMenu(
                                         expanded = walletMenuExpanded,
@@ -207,7 +202,7 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
                                         }
                                     }
                                 }
-                                Text(" • ", color = AquaMutedText, style = MaterialTheme.typography.labelMedium)
+                                Text(" • ", color = c.textMuted, style = MaterialTheme.typography.labelMedium)
                                 Box {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
@@ -216,9 +211,9 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
                                         Text(
                                             text = activeAccount.label,
                                             style = MaterialTheme.typography.labelMedium,
-                                            color = AquaTeal
+                                            color = c.accentTeal
                                         )
-                                        Icon(Icons.Filled.ArrowDropDown, contentDescription = "Switch account", tint = AquaTeal, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Filled.ArrowDropDown, contentDescription = "Switch account", tint = c.accentTeal, modifier = Modifier.size(18.dp))
                                     }
                                     DropdownMenu(
                                         expanded = accountMenuExpanded,
@@ -237,7 +232,7 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
                                 }
                             }
                         } else {
-                            Text("Native Self-Custodial Multi-Chain Engine", style = MaterialTheme.typography.labelSmall, color = AquaMutedText)
+                            Text("Native Self-Custodial Multi-Chain Engine", style = MaterialTheme.typography.labelSmall, color = c.textMuted)
                         }
                     }
                 }
@@ -247,7 +242,7 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
                         Icon(
                             Icons.Filled.Warning,
                             contentDescription = "Emergency Lock Active",
-                            tint = AquaCoralError,
+                            tint = c.error,
                             modifier = Modifier.padding(end = 6.dp)
                         )
                     }
@@ -256,14 +251,14 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
                             onClick = { showAddWalletModal = true },
                             modifier = Modifier.size(48.dp).testTag("wallet_add_new_button")
                         ) {
-                            Icon(Icons.Filled.Add, contentDescription = "Add or import wallet", tint = AquaCyan)
+                            Icon(Icons.Filled.Add, contentDescription = "Add or import wallet", tint = c.accentCyan)
                         }
                         if (securitySettings.hasPin || securitySettings.biometricEnabled) {
                             IconButton(
                                 onClick = { coordinator.lockNow() },
                                 modifier = Modifier.size(48.dp).testTag("wallet_lock_button")
                             ) {
-                                Icon(Icons.Filled.Lock, contentDescription = "Lock wallet session", tint = AquaIceText)
+                                Icon(Icons.Filled.Lock, contentDescription = "Lock wallet session", tint = c.textPrimary)
                             }
                         }
                     }
@@ -284,7 +279,7 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(AquaDeepSurface)
+                            .background(c.deepSurface.copy(alpha = 0.85f))
                             .horizontalScroll(rememberScrollState())
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -295,9 +290,9 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
                                 onClick = { activeSection = idx },
                                 label = { Text(label) },
                                 colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = AquaCyan.copy(alpha = 0.22f),
-                                    selectedLabelColor = AquaCyan,
-                                    labelColor = AquaMutedText
+                                    selectedContainerColor = c.accentCyan.copy(alpha = 0.22f),
+                                    selectedLabelColor = c.accentCyan,
+                                    labelColor = c.textMuted
                                 ),
                                 modifier = Modifier.testTag("wallet_subtab_$idx")
                             )
@@ -444,7 +439,7 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
 
         if (showAddWalletModal) {
             Surface(
-                color = AquaAbyss,
+                color = c.canvas,
                 shape = RoundedCornerShape(0.dp),
                 modifier = Modifier.fillMaxSize()
             ) {

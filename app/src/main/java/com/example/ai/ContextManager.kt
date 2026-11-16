@@ -1,5 +1,6 @@
 package com.example.ai
 
+import com.example.data.local.AquaPersona
 import com.example.data.model.AquaSkill
 import com.example.data.model.MemoryItem
 import com.example.data.model.UserSettings
@@ -19,11 +20,20 @@ object ContextManager {
         browserUrl: String,
         browserTitle: String,
         nativeWalletOverview: String? = null,
-        launcherOverview: String? = null
+        launcherOverview: String? = null,
+        personaId: String = AquaPersona.AUTONOMOUS.id,
+        customDirective: String = ""
     ): String = buildString {
+        val persona = AquaPersona.fromId(personaId)
         appendLine("You are AQUA AI, an intelligent, futuristic, voice-enabled autonomous personal AI assistant built exclusively for Android.")
         appendLine("Current Local Time: ${DateFormat.getDateTimeInstance().format(Date())}")
-        appendLine("Wake Word: '${settings.wakeWordPhrase}' | Voice Language: ${settings.voiceLanguage}")
+        appendLine("Wake Word: '${settings.wakeWordPhrase}' | Voice Language: ${settings.voiceLanguage} | Active Persona: ${persona.label}")
+        appendLine()
+        appendLine("## Active Response Persona (${persona.label})")
+        appendLine(persona.promptGuidance)
+        if (customDirective.isNotBlank()) {
+            appendLine("User Custom Directive: ${customDirective.trim()}")
+        }
         appendLine()
         appendLine("## Core Operating Rules")
         appendLine("1. Be concise, natural, accurate, and genuinely helpful in both spoken and written responses.")

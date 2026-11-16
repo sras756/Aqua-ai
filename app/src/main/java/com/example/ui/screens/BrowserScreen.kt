@@ -89,19 +89,15 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.browser.AquaBrowserController
 import com.example.ui.AquaMainViewModel
-import com.example.ui.theme.AquaAbyss
-import com.example.ui.theme.AquaBorderGlow
-import com.example.ui.theme.AquaCardSurface
-import com.example.ui.theme.AquaCyan
-import com.example.ui.theme.AquaDeepSurface
-import com.example.ui.theme.AquaIceText
-import com.example.ui.theme.AquaMutedText
-import com.example.ui.theme.AquaTeal
+import com.example.ui.components.AquaBackdropBox
+import com.example.ui.components.AquaGlassCard
+import com.example.ui.theme.AquaTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun BrowserScreen(viewModel: AquaMainViewModel) {
+    val c = AquaTheme.colors
     val pageState by viewModel.browserPageState.collectAsStateWithLifecycle()
     val tabs by viewModel.browserTabs.collectAsStateWithLifecycle()
     val pendingUrl by viewModel.browserController.pendingUrl.collectAsStateWithLifecycle()
@@ -119,6 +115,13 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
     var initialUrlLoadedForGen by remember { mutableIntStateOf(-1) }
     var rendererUnavailable by remember { mutableStateOf(false) }
 
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = c.accentCyan,
+        unfocusedBorderColor = c.borderGlow,
+        focusedTextColor = c.textPrimary,
+        unfocusedTextColor = c.textPrimary
+    )
+
     fun navigateOrRecover(target: String) {
         viewModel.navigateBrowser(target)
         if (rendererUnavailable) {
@@ -127,10 +130,10 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
         }
     }
 
+    AquaBackdropBox(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(AquaAbyss)
             .statusBarsPadding()
     ) {
         // Primary Address Bar
@@ -148,15 +151,10 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
                 keyboardActions = KeyboardActions(onGo = { navigateOrRecover(addressText) }),
                 shape = RoundedCornerShape(16.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = AquaCyan,
-                    unfocusedBorderColor = AquaBorderGlow,
-                    focusedTextColor = AquaIceText,
-                    unfocusedTextColor = AquaIceText
-                ),
+                colors = fieldColors,
                 trailingIcon = {
                     IconButton(onClick = { navigateOrRecover(addressText) }) {
-                        Icon(Icons.Filled.Search, contentDescription = "Go", tint = AquaCyan)
+                        Icon(Icons.Filled.Search, contentDescription = "Go", tint = c.accentCyan)
                     }
                 },
                 modifier = Modifier
@@ -168,7 +166,7 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                 onClick = { viewModel.summarizeActiveWebpage() },
                 modifier = Modifier.testTag("browser_summarize_button")
             ) {
-                Icon(Icons.Filled.AutoAwesome, contentDescription = "Summarize page with Aqua", tint = AquaTeal)
+                Icon(Icons.Filled.AutoAwesome, contentDescription = "Summarize page with Aqua", tint = c.accentTeal)
             }
         }
 
@@ -187,7 +185,7 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
-                    tint = if (pageState.canGoBack) AquaCyan else AquaMutedText
+                    tint = if (pageState.canGoBack) c.accentCyan else c.textMuted
                 )
             }
             IconButton(
@@ -197,7 +195,7 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                     contentDescription = "Forward",
-                    tint = if (pageState.canGoForward) AquaCyan else AquaMutedText
+                    tint = if (pageState.canGoForward) c.accentCyan else c.textMuted
                 )
             }
             IconButton(
@@ -211,7 +209,7 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                     }
                 }
             ) {
-                Icon(Icons.Filled.Refresh, contentDescription = "Reload", tint = AquaCyan)
+                Icon(Icons.Filled.Refresh, contentDescription = "Reload", tint = c.accentCyan)
             }
             IconButton(
                 onClick = {
@@ -223,19 +221,19 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                 },
                 modifier = Modifier.testTag("browser_find_toggle")
             ) {
-                Icon(Icons.Filled.FindInPage, contentDescription = "Find in page", tint = AquaCyan)
+                Icon(Icons.Filled.FindInPage, contentDescription = "Find in page", tint = c.accentCyan)
             }
             IconButton(
                 onClick = { viewModel.openBrowserReader() },
                 modifier = Modifier.testTag("browser_reader_button")
             ) {
-                Icon(Icons.AutoMirrored.Filled.ChromeReaderMode, contentDescription = "Reader & Page Links", tint = AquaTeal)
+                Icon(Icons.AutoMirrored.Filled.ChromeReaderMode, contentDescription = "Reader & Page Links", tint = c.accentTeal)
             }
             IconButton(
                 onClick = { viewModel.openBrowserUrlExternally(pageState.currentUrl) },
                 modifier = Modifier.testTag("browser_open_external_button")
             ) {
-                Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = "Open in external browser", tint = AquaMutedText)
+                Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = "Open in external browser", tint = c.textMuted)
             }
         }
 
@@ -243,7 +241,7 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(AquaDeepSurface)
+                    .background(c.deepSurface)
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -255,21 +253,16 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                     },
                     placeholder = { Text("Find in page...") },
                     singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = AquaCyan,
-                        unfocusedBorderColor = AquaBorderGlow,
-                        focusedTextColor = AquaIceText,
-                        unfocusedTextColor = AquaIceText
-                    ),
+                    colors = fieldColors,
                     modifier = Modifier
                         .weight(1f)
                         .testTag("browser_find_input")
                 )
                 IconButton(onClick = { viewModel.browserController.findNext(false) }) {
-                    Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Previous match", tint = AquaCyan)
+                    Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Previous match", tint = c.accentCyan)
                 }
                 IconButton(onClick = { viewModel.browserController.findNext(true) }) {
-                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Next match", tint = AquaCyan)
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Next match", tint = c.accentCyan)
                 }
                 IconButton(
                     onClick = {
@@ -278,7 +271,7 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                         viewModel.browserController.clearFindMatches()
                     }
                 ) {
-                    Icon(Icons.Filled.Close, contentDescription = "Close find bar", tint = AquaMutedText)
+                    Icon(Icons.Filled.Close, contentDescription = "Close find bar", tint = c.textMuted)
                 }
             }
         }
@@ -286,8 +279,8 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
         if (pageState.isLoading) {
             LinearProgressIndicator(
                 progress = { pageState.progress / 100f },
-                color = AquaCyan,
-                trackColor = AquaCardSurface,
+                color = c.accentCyan,
+                trackColor = c.cardSurface,
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -300,10 +293,10 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
             ) {
                 items(tabs, key = { it.id }) { tab ->
                     Surface(
-                        color = AquaCardSurface,
+                        color = c.cardSurface,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
-                            .border(1.dp, AquaBorderGlow, RoundedCornerShape(12.dp))
+                            .border(1.dp, c.borderGlow, RoundedCornerShape(12.dp))
                             .clickable {
                                 viewModel.browserController.navigateTo(tab.url)
                                 if (rendererUnavailable) {
@@ -319,7 +312,7 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                             Text(
                                 text = tab.title.ifBlank { tab.url }.take(24),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = AquaIceText,
+                                color = c.textPrimary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -327,7 +320,7 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                             Icon(
                                 imageVector = Icons.Filled.Close,
                                 contentDescription = "Close tab",
-                                tint = AquaMutedText,
+                                tint = c.textMuted,
                                 modifier = Modifier
                                     .size(14.dp)
                                     .clickable { viewModel.deleteBrowserTab(tab.id) }
@@ -385,13 +378,7 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                     .padding(20.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Surface(
-                    color = AquaCardSurface,
-                    shape = RoundedCornerShape(18.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, AquaBorderGlow, RoundedCornerShape(18.dp))
-                ) {
+                AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier.padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -400,22 +387,22 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                         Icon(
                             imageVector = Icons.Filled.WarningAmber,
                             contentDescription = null,
-                            tint = AquaCyan,
+                            tint = c.accentCyan,
                             modifier = Modifier.size(36.dp)
                         )
                         Text(
                             text = "In-App Renderer Stopped",
                             style = MaterialTheme.typography.titleMedium,
-                            color = AquaIceText
+                            color = c.textPrimary
                         )
                         Text(
                             text = "Android terminated the Chromium WebView renderer due to device/emulator memory constraints. You can read the live page natively in Aqua Reader, retry WebView, or open externally.",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = AquaMutedText
+                            color = c.textMuted
                         )
                         Button(
                             onClick = { viewModel.openBrowserReader() },
-                            colors = ButtonDefaults.buttonColors(containerColor = AquaCyan, contentColor = AquaAbyss),
+                            colors = ButtonDefaults.buttonColors(containerColor = c.accentCyan, contentColor = c.canvas),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("browser_reader_fallback_button")
@@ -438,7 +425,7 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                                     .weight(1f)
                                     .testTag("browser_retry_webview_button")
                             ) {
-                                Text("Retry WebView", color = AquaCyan)
+                                Text("Retry WebView", color = c.accentCyan)
                             }
                             OutlinedButton(
                                 onClick = { viewModel.openBrowserUrlExternally(pageState.currentUrl) },
@@ -446,7 +433,7 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                                     .weight(1f)
                                     .testTag("browser_external_fallback_button")
                             ) {
-                                Text("Open External", color = AquaIceText)
+                                Text("Open External", color = c.textPrimary)
                             }
                         }
                     }
@@ -576,12 +563,13 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
             }
         }
     }
+    }
 
     readerData?.let { (extractedText, extractedLinks) ->
         ModalBottomSheet(
             onDismissRequest = { viewModel.closeBrowserReader() },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = AquaDeepSurface
+            containerColor = c.deepSurface
         ) {
             Column(
                 modifier = Modifier
@@ -592,7 +580,7 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                 Text(
                     text = pageState.currentTitle.ifBlank { "Aqua Reader" },
                     style = MaterialTheme.typography.titleLarge,
-                    color = AquaIceText,
+                    color = c.textPrimary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -605,17 +593,17 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                         onClick = { viewModel.speakMessage(extractedText.take(3500)) },
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = AquaCyan, modifier = Modifier.size(16.dp))
+                        Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Listen", color = AquaCyan)
+                        Text("Listen", color = c.accentCyan)
                     }
                     OutlinedButton(
                         onClick = { viewModel.saveActivePageToMemory() },
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Filled.BookmarkAdd, contentDescription = null, tint = AquaTeal, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Filled.BookmarkAdd, contentDescription = null, tint = c.accentTeal, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Save Note", color = AquaTeal)
+                        Text("Save Note", color = c.accentTeal)
                     }
                 }
 
@@ -629,12 +617,7 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                         onValueChange = { askQuestionText = it },
                         placeholder = { Text("Ask Aqua about this page...") },
                         singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = AquaCyan,
-                            unfocusedBorderColor = AquaBorderGlow,
-                            focusedTextColor = AquaIceText,
-                            unfocusedTextColor = AquaIceText
-                        ),
+                        colors = fieldColors,
                         modifier = Modifier.weight(1f)
                     )
                     Button(
@@ -643,7 +626,7 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                             askQuestionText = ""
                             viewModel.askAboutActiveWebpage(q)
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = AquaCyan, contentColor = AquaAbyss)
+                        colors = ButtonDefaults.buttonColors(containerColor = c.accentCyan, contentColor = c.canvas)
                     ) {
                         Text("Ask", fontWeight = FontWeight.Bold)
                     }
@@ -657,14 +640,14 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                 ) {
                     item {
                         Surface(
-                            color = AquaCardSurface,
+                            color = c.cardSurface,
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
                                 text = extractedText,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = AquaIceText,
+                                color = c.textPrimary,
                                 modifier = Modifier.padding(12.dp)
                             )
                         }
@@ -675,12 +658,12 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                             Text(
                                 text = "EXTRACTED LINKS (${extractedLinks.size})",
                                 style = MaterialTheme.typography.labelMedium,
-                                color = AquaCyan
+                                color = c.accentCyan
                             )
                         }
                         items(extractedLinks) { link ->
                             Surface(
-                                color = AquaCardSurface,
+                                color = c.cardSurface,
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -693,11 +676,11 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                                     modifier = Modifier.padding(10.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Filled.Link, contentDescription = null, tint = AquaTeal, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Filled.Link, contentDescription = null, tint = c.accentTeal, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(8.dp))
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(link.text, style = MaterialTheme.typography.labelMedium, color = AquaIceText, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text(link.href, style = MaterialTheme.typography.labelSmall, color = AquaMutedText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(link.text, style = MaterialTheme.typography.labelMedium, color = c.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(link.href, style = MaterialTheme.typography.labelSmall, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
                                 }
                             }
@@ -717,6 +700,7 @@ private fun BrowserStartHub(
     onOpenExternal: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val c = AquaTheme.colors
     val quickSites = remember {
         listOf(
             "DuckDuckGo" to "https://duckduckgo.com",
@@ -732,12 +716,9 @@ private fun BrowserStartHub(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Surface(
-                color = AquaCardSurface,
-                shape = RoundedCornerShape(18.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, AquaBorderGlow, RoundedCornerShape(18.dp))
+            AquaGlassCard(
+                borderColor = c.accentCyan.copy(alpha = 0.45f),
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
                     modifier = Modifier.padding(18.dp),
@@ -747,24 +728,24 @@ private fun BrowserStartHub(
                         Icon(
                             imageVector = Icons.Filled.Language,
                             contentDescription = null,
-                            tint = AquaCyan,
+                            tint = c.accentCyan,
                             modifier = Modifier.size(22.dp)
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
                             text = "Aqua Browser Hub",
                             style = MaterialTheme.typography.titleMedium,
-                            color = AquaIceText
+                            color = c.textPrimary
                         )
                     }
                     Text(
                         text = "Enter a URL or search query above, pick a destination below, or extract clean readable text via Aqua Reader without spinning up a full Chromium renderer.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = AquaMutedText
+                        color = c.textMuted
                     )
                     Button(
                         onClick = { onOpenUrl(currentUrl) },
-                        colors = ButtonDefaults.buttonColors(containerColor = AquaCyan, contentColor = AquaAbyss),
+                        colors = ButtonDefaults.buttonColors(containerColor = c.accentCyan, contentColor = c.canvas),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("browser_launch_webview_button")
@@ -781,9 +762,9 @@ private fun BrowserStartHub(
                                 .weight(1f)
                                 .testTag("browser_hub_reader_button")
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.ChromeReaderMode, contentDescription = null, tint = AquaTeal, modifier = Modifier.size(16.dp))
+                            Icon(Icons.AutoMirrored.Filled.ChromeReaderMode, contentDescription = null, tint = c.accentTeal, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Aqua Reader", color = AquaTeal)
+                            Text("Aqua Reader", color = c.accentTeal)
                         }
                         OutlinedButton(
                             onClick = onOpenExternal,
@@ -791,9 +772,9 @@ private fun BrowserStartHub(
                                 .weight(1f)
                                 .testTag("browser_hub_external_button")
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = AquaIceText, modifier = Modifier.size(16.dp))
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = c.textPrimary, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("External", color = AquaIceText)
+                            Text("External", color = c.textPrimary)
                         }
                     }
                 }
@@ -804,28 +785,25 @@ private fun BrowserStartHub(
             Text(
                 text = "QUICK LAUNCH",
                 style = MaterialTheme.typography.labelMedium,
-                color = AquaCyan
+                color = c.accentCyan
             )
         }
 
         items(quickSites) { (label, url) ->
-            Surface(
-                color = AquaDeepSurface,
-                shape = RoundedCornerShape(14.dp),
+            AquaGlassCard(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, AquaBorderGlow.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
                     .clickable { onOpenUrl(url) }
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Filled.Link, contentDescription = null, tint = AquaTeal, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Filled.Link, contentDescription = null, tint = c.accentTeal, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(label, style = MaterialTheme.typography.titleSmall, color = AquaIceText)
-                        Text(url, style = MaterialTheme.typography.labelSmall, color = AquaMutedText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(label, style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
+                        Text(url, style = MaterialTheme.typography.labelSmall, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }

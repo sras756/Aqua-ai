@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.AutoMode
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Home
@@ -59,9 +60,11 @@ import com.example.data.repository.GoogleWorkspaceRepository
 import com.example.device.AndroidDeviceController
 import com.example.ui.AquaMainViewModel
 import com.example.ui.components.AuthorizationModal
+import com.example.ui.components.CommandPaletteSheet
 import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.BrowserScreen
 import com.example.ui.screens.HomeScreen
+import com.example.ui.screens.HubScreen
 import com.example.ui.screens.MemoryAndHistoryScreen
 import com.example.ui.screens.RoutinesScreen
 import com.example.ui.screens.SettingsScreen
@@ -69,13 +72,8 @@ import com.example.ui.screens.SkillsScreen
 import com.example.ui.screens.WalletScreen
 import com.example.ui.screens.WorkspaceScreen
 import com.example.ui.screens.launcher.LauncherDashboardScreen
-import com.example.ui.theme.AquaAbyss
 import com.example.ui.theme.AquaAiTheme
-import com.example.ui.theme.AquaCardSurface
-import com.example.ui.theme.AquaCyan
-import com.example.ui.theme.AquaDeepSurface
-import com.example.ui.theme.AquaIceText
-import com.example.ui.theme.AquaMutedText
+import com.example.ui.theme.AquaTheme
 import com.example.wallet.FlashWalletConnector
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
@@ -91,15 +89,15 @@ private data class AquaTab(
 
 private val AQUA_TABS = listOf(
     AquaTab("home", "Core", Icons.Filled.GraphicEq),
-    AquaTab("skills", "Skills", Icons.Filled.Extension),
+    AquaTab("launcher", "Launcher", Icons.Filled.Home),
     AquaTab("browser", "Browser", Icons.Filled.Language),
     AquaTab("wallet", "Wallet", Icons.Filled.AccountBalanceWallet),
-    AquaTab("memory", "Memory", Icons.Filled.Memory),
-    AquaTab("settings", "Settings", Icons.Filled.Settings)
+    AquaTab("hub", "Hub", Icons.Filled.Dashboard)
 )
 
 private val AQUA_RAIL_TABS = listOf(
     AquaTab("home", "Core", Icons.Filled.GraphicEq),
+    AquaTab("hub", "Hub", Icons.Filled.Dashboard),
     AquaTab("launcher", "Launcher", Icons.Filled.Home),
     AquaTab("routines", "Routines", Icons.Filled.AutoMode),
     AquaTab("workspace", "Workspace", Icons.Filled.Apps),
@@ -187,8 +185,11 @@ private fun AuthenticatedAquaShell(
     val walletSecuritySettings by viewModel.walletCoordinator.securitySettings.collectAsStateWithLifecycle()
     val bannerMessage by viewModel.bannerMessage.collectAsStateWithLifecycle()
     val navEvent by viewModel.navigateToTabEvent.collectAsStateWithLifecycle()
+    val routines by viewModel.routines.collectAsStateWithLifecycle()
+    val personaId by viewModel.personaId.collectAsStateWithLifecycle()
 
     var currentTab by rememberSaveable { mutableStateOf("home") }
+    var showCommandPalette by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(navEvent) {
@@ -245,22 +246,36 @@ private fun AuthenticatedAquaShell(
     }
 
     if (currentTab != "home") {
-        BackHandler { currentTab = "home" }
+        BackHandler {
+            currentTab = if (currentTab in setOf("routines", "workspace", "skills", "memory", "settings")) {
+                "hub"
+            } else {
+                "home"
+            }
+        }
     }
 
     AquaAiTheme(darkThemeMode = settings.darkThemeMode) {
+        val c = AquaTheme.colors
+        val hubSubRoutes = setOf("routines", "workspace", "skills", "memory", "settings")
+
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val useRail = maxWidth >= 700.dp
 
             Scaffold(
-                containerColor = AquaAbyss,
+                containerColor = c.canvas,
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 bottomBar = {
                     if (!useRail) {
-                        NavigationBar(containerColor = AquaDeepSurface) {
+                        NavigationBar(
+                            containerColor = c.deepSurface,
+                            tonalElevation = 4.dp
+                        ) {
                             AQUA_TABS.forEach { tab ->
+                                val selected = currentTab == tab.route ||
+                                    (tab.route == "hub" && currentTab in hubSubRoutes)
                                 NavigationBarItem(
-                                    selected = currentTab == tab.route,
+                                    selected = selected,
                                     onClick = { currentTab = tab.route },
                                     icon = { Icon(tab.icon, contentDescription = tab.label) },
                                     label = {
@@ -269,15 +284,15 @@ private fun AuthenticatedAquaShell(
                                             maxLines = 1,
                                             softWrap = false,
                                             overflow = TextOverflow.Ellipsis,
-                                            fontSize = 11.sp
+                                            fontSize = 11.5.sp
                                         )
                                     },
                                     colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = AquaCyan,
-                                        selectedTextColor = AquaCyan,
-                                        indicatorColor = AquaCardSurface,
-                                        unselectedIconColor = AquaMutedText,
-                                        unselectedTextColor = AquaMutedText
+                                        selectedIconColor = c.accentCyan,
+                                        selectedTextColor = c.accentCyan,
+                                        indicatorColor = c.accentCyan.copy(alpha = 0.16f),
+                                        unselectedIconColor = c.textMuted,
+                                        unselectedTextColor = c.textMuted
                                     ),
                                     modifier = Modifier.testTag("nav_tab_${tab.route}")
                                 )
@@ -292,19 +307,19 @@ private fun AuthenticatedAquaShell(
                         .padding(bottom = innerPadding.calculateBottomPadding())
                 ) {
                     if (useRail) {
-                        NavigationRail(containerColor = AquaDeepSurface) {
+                        NavigationRail(containerColor = c.deepSurface) {
                             AQUA_RAIL_TABS.forEach { tab ->
                                 NavigationRailItem(
                                     selected = currentTab == tab.route,
                                     onClick = { currentTab = tab.route },
                                     icon = { Icon(tab.icon, contentDescription = tab.label) },
-                                    label = { Text(tab.label) },
+                                    label = { Text(tab.label, maxLines = 1) },
                                     colors = NavigationRailItemDefaults.colors(
-                                        selectedIconColor = AquaCyan,
-                                        selectedTextColor = AquaCyan,
-                                        indicatorColor = AquaCardSurface,
-                                        unselectedIconColor = AquaMutedText,
-                                        unselectedTextColor = AquaMutedText
+                                        selectedIconColor = c.accentCyan,
+                                        selectedTextColor = c.accentCyan,
+                                        indicatorColor = c.accentCyan.copy(alpha = 0.16f),
+                                        unselectedIconColor = c.textMuted,
+                                        unselectedTextColor = c.textMuted
                                     ),
                                     modifier = Modifier.testTag("rail_tab_${tab.route}")
                                 )
@@ -314,7 +329,16 @@ private fun AuthenticatedAquaShell(
 
                     Box(modifier = Modifier.weight(1f).fillMaxSize()) {
                         when (currentTab) {
-                            "home" -> HomeScreen(viewModel = viewModel, onOpenTab = { currentTab = it })
+                            "home" -> HomeScreen(
+                                viewModel = viewModel,
+                                onOpenTab = { currentTab = it },
+                                onOpenCommandPalette = { showCommandPalette = true }
+                            )
+                            "hub" -> HubScreen(
+                                viewModel = viewModel,
+                                onOpenTab = { currentTab = it },
+                                onOpenCommandPalette = { showCommandPalette = true }
+                            )
                             "launcher" -> LauncherDashboardScreen(viewModel = viewModel, onOpenTab = { currentTab = it })
                             "routines" -> RoutinesScreen(viewModel = viewModel)
                             "workspace" -> WorkspaceScreen(viewModel = viewModel)
@@ -323,10 +347,28 @@ private fun AuthenticatedAquaShell(
                             "wallet" -> WalletScreen(viewModel = viewModel)
                             "memory" -> MemoryAndHistoryScreen(viewModel = viewModel, onOpenHomeChat = { currentTab = "home" })
                             "settings" -> SettingsScreen(viewModel = viewModel)
-                            else -> HomeScreen(viewModel = viewModel, onOpenTab = { currentTab = it })
+                            else -> HomeScreen(
+                                viewModel = viewModel,
+                                onOpenTab = { currentTab = it },
+                                onOpenCommandPalette = { showCommandPalette = true }
+                            )
                         }
                     }
                 }
+            }
+
+            if (showCommandPalette) {
+                val installedApps = remember { viewModel.deviceController.getInstalledLaunchableApps() }
+                CommandPaletteSheet(
+                    activePersonaId = personaId,
+                    routines = routines,
+                    installedApps = installedApps,
+                    onDismiss = { showCommandPalette = false },
+                    onSelectPersona = { viewModel.setAiPersona(it) },
+                    onOpenModule = { currentTab = it },
+                    onRunRoutine = { viewModel.executeRoutine(it) },
+                    onLaunchApp = { pkg -> viewModel.deviceController.launchApp(pkg) }
+                )
             }
 
             pendingAuth?.let { auth ->

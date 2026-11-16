@@ -14,6 +14,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,16 +31,17 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Policy
 import androidx.compose.material.icons.filled.Psychology
@@ -47,13 +49,12 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SettingsApplications
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -84,19 +85,13 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.local.AquaPersona
 import com.example.data.model.UserSettings
 import com.example.ui.AquaMainViewModel
 import com.example.ui.auth.signOutUser
-import com.example.ui.theme.AquaAbyss
-import com.example.ui.theme.AquaAmber
-import com.example.ui.theme.AquaBorderGlow
-import com.example.ui.theme.AquaCardSurface
-import com.example.ui.theme.AquaCoralError
-import com.example.ui.theme.AquaCyan
-import com.example.ui.theme.AquaIceText
-import com.example.ui.theme.AquaMintSuccess
-import com.example.ui.theme.AquaMutedText
-import com.example.ui.theme.AquaTeal
+import com.example.ui.components.AquaBackdropBox
+import com.example.ui.components.AquaGlassCard
+import com.example.ui.theme.AquaTheme
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 
@@ -108,12 +103,17 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
     val scope = rememberCoroutineScope()
     val credentialManager = remember { CredentialManager.create(context) }
 
+    val c = AquaTheme.colors
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val telemetry by viewModel.telemetry.collectAsStateWithLifecycle()
     val wakeRunning by viewModel.wakeWordRunning.collectAsStateWithLifecycle()
     val wakePaused by viewModel.wakeWordPaused.collectAsStateWithLifecycle()
     val automationKeepAlive by viewModel.automationKeepAliveActive.collectAsStateWithLifecycle()
+    val activePersonaId by viewModel.personaId.collectAsStateWithLifecycle()
+    val savedDirective by viewModel.customDirective.collectAsStateWithLifecycle()
+
     var wakePhraseInput by remember(settings.wakeWordPhrase) { mutableStateOf(settings.wakeWordPhrase) }
+    var directiveInput by remember(savedDirective) { mutableStateOf(savedDirective) }
 
     var apiKeyInput by remember { mutableStateOf("") }
     var hasStoredKey by remember { mutableStateOf(viewModel.secureConfigStore.hasGeminiApiKey()) }
@@ -147,602 +147,642 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
     ) { }
 
     val currentUser = Firebase.auth.currentUser
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = c.accentCyan,
+        unfocusedBorderColor = c.borderGlow,
+        focusedTextColor = c.textPrimary,
+        unfocusedTextColor = c.textPrimary
+    )
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AquaAbyss)
-    ) {
+    AquaBackdropBox(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
         ) {
-            Text(
-                text = "AQUA SETTINGS & AI CORE",
-                style = MaterialTheme.typography.headlineSmall,
-                color = AquaIceText,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-            )
-
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            // Account & Sign Out
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = AquaCardSurface),
-                    shape = RoundedCornerShape(18.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, AquaBorderGlow, RoundedCornerShape(18.dp))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = currentUser?.displayName ?: "Authenticated Operator",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = AquaIceText
-                            )
-                            Text(
-                                text = currentUser?.email ?: (currentUser?.uid ?: ""),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = AquaMutedText
-                            )
-                        }
-                        OutlinedButton(
-                            onClick = { signOutUser(credentialManager, scope) },
-                            modifier = Modifier.testTag("sign_out_button")
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = AquaCoralError, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Sign Out", color = AquaCoralError)
-                        }
-                    }
-                }
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                Text(
+                    text = "AQUA SETTINGS & AI CORE",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = c.textPrimary
+                )
+                Text(
+                    text = "Tune intelligence, personas, background voice, theme, and privacy",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.textMuted
+                )
             }
 
-            // Gemini Model & Grounding Configuration
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = AquaCardSurface),
-                    shape = RoundedCornerShape(18.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, AquaBorderGlow, RoundedCornerShape(18.dp))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Psychology, contentDescription = null, tint = AquaCyan)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Gemini Intelligence & Tools", style = MaterialTheme.typography.titleMedium, color = AquaIceText)
-                        }
-
-                        ExposedDropdownMenuBox(
-                            expanded = modelExpanded,
-                            onExpandedChange = { modelExpanded = !modelExpanded }
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Account & Sign Out
+                item {
+                    AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            OutlinedTextField(
-                                value = models.firstOrNull { it.first == settings.preferredModel }?.second
-                                    ?: settings.preferredModel,
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text("Active Gemini Model") },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelExpanded) },
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = AquaCyan,
-                                    unfocusedBorderColor = AquaBorderGlow,
-                                    focusedTextColor = AquaIceText,
-                                    unfocusedTextColor = AquaIceText
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
-                            )
-                            ExposedDropdownMenu(
-                                expanded = modelExpanded,
-                                onDismissRequest = { modelExpanded = false }
-                            ) {
-                                models.forEach { (id, label) ->
-                                    DropdownMenuItem(
-                                        text = { Text(label) },
-                                        onClick = {
-                                            viewModel.updateSettings(settings.copy(preferredModel = id))
-                                            modelExpanded = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        SettingSwitchRow(
-                            title = "Deep Thinking (HIGH)",
-                            subtitle = "Enable structured reasoning trace for complex agent tasks.",
-                            checked = settings.thinkingEnabled,
-                            onCheckedChange = { viewModel.updateSettings(settings.copy(thinkingEnabled = it)) }
-                        )
-                        SettingSwitchRow(
-                            title = "Full Internet Access (Web, Reader & APIs)",
-                            subtitle = "Allow Aqua AI to search the live web, fetch public URLs, and query HTTP APIs anytime.",
-                            checked = settings.fullInternetAccessEnabled,
-                            onCheckedChange = { viewModel.updateSettings(settings.copy(fullInternetAccessEnabled = it)) }
-                        )
-                        SettingSwitchRow(
-                            title = "Google Search Grounding",
-                            subtitle = "Cite live web information for factual queries.",
-                            checked = settings.searchGroundingEnabled,
-                            onCheckedChange = { viewModel.updateSettings(settings.copy(searchGroundingEnabled = it)) }
-                        )
-                        SettingSwitchRow(
-                            title = "Google Maps Grounding",
-                            subtitle = "Resolve places and directions using Maps grounding.",
-                            checked = settings.mapsGroundingEnabled,
-                            onCheckedChange = { viewModel.updateSettings(settings.copy(mapsGroundingEnabled = it)) }
-                        )
-                        SettingSwitchRow(
-                            title = "Autonomous Reversible Actions",
-                            subtitle = "Allow Aqua to run reversible tools automatically. Irreversible financial/security actions always ask.",
-                            checked = settings.autonomousReversibleActions,
-                            onCheckedChange = { viewModel.updateSettings(settings.copy(autonomousReversibleActions = it)) }
-                        )
-                        SettingSwitchRow(
-                            title = "Crypto Wallet Read Permission (Aqua AI)",
-                            subtitle = "Allow Aqua AI to read multi-chain balances, receive addresses, telemetry, ENS, allowances, payment URIs, and tx history (zero-key).",
-                            checked = settings.aiWalletAccessEnabled,
-                            onCheckedChange = { enabled ->
-                                viewModel.updateSettings(
-                                    settings.copy(
-                                        aiWalletAccessEnabled = enabled,
-                                        aiWalletTransferPrepareEnabled = if (enabled) settings.aiWalletTransferPrepareEnabled else false
-                                    )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = currentUser?.displayName ?: "Authenticated Operator",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = c.textPrimary
+                                )
+                                Text(
+                                    text = currentUser?.email ?: (currentUser?.uid ?: ""),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = c.textMuted
                                 )
                             }
-                        )
-                        SettingSwitchRow(
-                            title = "Crypto Wallet Write Permission (Aqua AI)",
-                            subtitle = "Allow Aqua AI to create wallets/accounts, add tokens/networks, switch chains, edit contacts, sign messages, and prepare transfers/revokes (always gated by your approval).",
-                            checked = settings.aiWalletAccessEnabled && settings.aiWalletTransferPrepareEnabled,
-                            onCheckedChange = { enabled ->
-                                if (settings.aiWalletAccessEnabled) {
-                                    viewModel.updateSettings(settings.copy(aiWalletTransferPrepareEnabled = enabled))
-                                } else if (enabled) {
-                                    viewModel.updateSettings(settings.copy(aiWalletAccessEnabled = true, aiWalletTransferPrepareEnabled = true))
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-
-            // Personal Gemini API Key (Android Keystore Encrypted)
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = AquaCardSurface),
-                    shape = RoundedCornerShape(18.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, AquaBorderGlow, RoundedCornerShape(18.dp))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Key, contentDescription = null, tint = AquaAmber)
-                            Spacer(Modifier.width(8.dp))
-                            Text("User-Configurable Gemini API Key", style = MaterialTheme.typography.titleMedium, color = AquaIceText)
-                        }
-                        Text(
-                            text = if (hasStoredKey) "Stored securely in Android Keystore AES-GCM ($maskedKey)."
-                            else "Using managed Firebase AI Logic by default. Optionally supply your own Gemini API key below.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = AquaMutedText
-                        )
-
-                        OutlinedTextField(
-                            value = apiKeyInput,
-                            onValueChange = { apiKeyInput = it },
-                            label = { Text("Personal Gemini API Key (Optional)") },
-                            visualTransformation = PasswordVisualTransformation(),
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = AquaCyan,
-                                unfocusedBorderColor = AquaBorderGlow,
-                                focusedTextColor = AquaIceText,
-                                unfocusedTextColor = AquaIceText
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("settings_api_key_input")
-                        )
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = {
-                                    viewModel.secureConfigStore.saveGeminiApiKey(apiKeyInput)
-                                    apiKeyInput = ""
-                                    hasStoredKey = viewModel.secureConfigStore.hasGeminiApiKey()
-                                    maskedKey = viewModel.secureConfigStore.getMaskedGeminiApiKey()
-                                },
-                                enabled = apiKeyInput.isNotBlank(),
-                                colors = ButtonDefaults.buttonColors(containerColor = AquaCyan, contentColor = AquaAbyss),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("settings_save_api_key_button")
+                            OutlinedButton(
+                                onClick = { signOutUser(credentialManager, scope) },
+                                modifier = Modifier.testTag("sign_out_button")
                             ) {
-                                Text("Encrypt & Save Key", fontWeight = FontWeight.Bold)
-                            }
-                            if (hasStoredKey) {
-                                OutlinedButton(
-                                    onClick = {
-                                        viewModel.secureConfigStore.clearGeminiApiKey()
-                                        hasStoredKey = false
-                                        maskedKey = ""
-                                        viewModel.updateSettings(settings.copy(useCustomDirectApiKey = false))
-                                    }
-                                ) {
-                                    Text("Clear Key", color = AquaCoralError)
-                                }
+                                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = c.error, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Sign Out", color = c.error)
                             }
                         }
-
-                        SettingSwitchRow(
-                            title = "Prefer Personal Gemini API Key",
-                            subtitle = "Route Gemini requests through your stored personal key when present.",
-                            checked = settings.useCustomDirectApiKey && hasStoredKey,
-                            onCheckedChange = { enabled ->
-                                if (enabled && !hasStoredKey) return@SettingSwitchRow
-                                viewModel.updateSettings(settings.copy(useCustomDirectApiKey = enabled))
-                            }
-                        )
                     }
                 }
-            }
 
-            // Voice & Wake Word Controls
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = AquaCardSurface),
-                    shape = RoundedCornerShape(18.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, AquaBorderGlow, RoundedCornerShape(18.dp))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                // AI Persona & Custom System Directive
+                item {
+                    val activePersona = AquaPersona.fromId(activePersonaId)
+                    AquaGlassCard(
+                        borderColor = c.accentCyan.copy(alpha = 0.45f),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Mic, contentDescription = null, tint = AquaTeal)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Voice & 'Hey Aqua' Wake Word", style = MaterialTheme.typography.titleMedium, color = AquaIceText)
-                        }
-
-                        SettingSwitchRow(
-                            title = "Prioritize Automation & Voice Tasks",
-                            subtitle = if (automationKeepAlive || settings.backgroundAutomationEnabled) {
-                                "Persistent foreground notification active for routines & agent tasks."
-                            } else {
-                                "Uses Android dataSync foreground service without requiring mic listener."
-                            },
-                            checked = settings.backgroundAutomationEnabled || automationKeepAlive,
-                            onCheckedChange = { enable ->
-                                viewModel.setAutomationKeepAliveEnabled(enable)
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = c.accentCyan)
+                                Spacer(Modifier.width(8.dp))
+                                Text("AI Persona & Custom Directive", style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
                             }
-                        )
-
-                        SettingSwitchRow(
-                            title = "Run App & Mic in Background",
-                            subtitle = when {
-                                wakeRunning && wakePaused -> "Foreground service active (Mic paused)."
-                                wakeRunning -> "Foreground service & microphone active even when minimized."
-                                else -> "Runs Play-compliant microphone foreground service."
-                            },
-                            checked = settings.wakeWordEnabled || wakeRunning,
-                            onCheckedChange = { enable ->
-                                if (!enable) {
-                                    viewModel.setWakeWordServiceEnabled(false)
-                                } else {
-                                    val perms = mutableListOf(Manifest.permission.RECORD_AUDIO)
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                        perms.add(Manifest.permission.POST_NOTIFICATIONS)
-                                    }
-                                    val allGranted = perms.all {
-                                        ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
-                                    }
-                                    if (allGranted) {
-                                        viewModel.setWakeWordServiceEnabled(true)
-                                    } else {
-                                        micAndNotifLauncher.launch(perms.toTypedArray())
-                                    }
+                            Text(
+                                text = "${activePersona.label} (${activePersona.badge}): ${activePersona.promptGuidance}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = c.accentTeal
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                AquaPersona.entries.forEach { persona ->
+                                    val selected = persona.id == activePersonaId
+                                    FilterChip(
+                                        selected = selected,
+                                        onClick = { viewModel.setAiPersona(persona.id) },
+                                        label = { Text(persona.label) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = c.accentCyan.copy(alpha = 0.2f),
+                                            selectedLabelColor = c.accentCyan,
+                                            labelColor = c.textMuted
+                                        ),
+                                        modifier = Modifier.testTag("settings_persona_${persona.id}")
+                                    )
                                 }
                             }
-                        )
-
-                        if (wakeRunning) {
+                            OutlinedTextField(
+                                value = directiveInput,
+                                onValueChange = { directiveInput = it },
+                                label = { Text("Custom System Directive (Optional)") },
+                                placeholder = { Text("e.g. Answer in bullet points; confirm chain before gas estimates.") },
+                                minLines = 2,
+                                maxLines = 4,
+                                colors = fieldColors,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("settings_custom_directive_input")
+                            )
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                OutlinedButton(
-                                    onClick = { viewModel.toggleBackgroundMicPaused() },
-                                    modifier = Modifier.weight(1f)
+                                Button(
+                                    onClick = { viewModel.updateCustomDirective(directiveInput) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = c.accentCyan, contentColor = c.canvas),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("settings_save_directive_button")
                                 ) {
-                                    Text(
-                                        text = if (wakePaused) "Resume Mic Listener" else "Pause Mic Listener",
-                                        color = AquaCyan
+                                    Text("Save Directive", fontWeight = FontWeight.Bold)
+                                }
+                                if (savedDirective.isNotBlank()) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            directiveInput = ""
+                                            viewModel.updateCustomDirective("")
+                                        }
+                                    ) {
+                                        Text("Clear", color = c.error)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Gemini Model & Grounding Configuration
+                item {
+                    AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Psychology, contentDescription = null, tint = c.accentCyan)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Gemini Intelligence & Tools", style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
+                            }
+
+                            ExposedDropdownMenuBox(
+                                expanded = modelExpanded,
+                                onExpandedChange = { modelExpanded = !modelExpanded }
+                            ) {
+                                OutlinedTextField(
+                                    value = models.firstOrNull { it.first == settings.preferredModel }?.second
+                                        ?: settings.preferredModel,
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("Active Gemini Model") },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelExpanded) },
+                                    colors = fieldColors,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = modelExpanded,
+                                    onDismissRequest = { modelExpanded = false }
+                                ) {
+                                    models.forEach { (id, label) ->
+                                        DropdownMenuItem(
+                                            text = { Text(label) },
+                                            onClick = {
+                                                viewModel.updateSettings(settings.copy(preferredModel = id))
+                                                modelExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
+                            SettingSwitchRow(
+                                title = "Deep Thinking (HIGH)",
+                                subtitle = "Enable structured reasoning trace for complex agent tasks.",
+                                checked = settings.thinkingEnabled,
+                                onCheckedChange = { viewModel.updateSettings(settings.copy(thinkingEnabled = it)) }
+                            )
+                            SettingSwitchRow(
+                                title = "Full Internet Access (Web, Reader & APIs)",
+                                subtitle = "Allow Aqua AI to search the live web, fetch public URLs, and query HTTP APIs anytime.",
+                                checked = settings.fullInternetAccessEnabled,
+                                onCheckedChange = { viewModel.updateSettings(settings.copy(fullInternetAccessEnabled = it)) }
+                            )
+                            SettingSwitchRow(
+                                title = "Google Search Grounding",
+                                subtitle = "Cite live web information for factual queries.",
+                                checked = settings.searchGroundingEnabled,
+                                onCheckedChange = { viewModel.updateSettings(settings.copy(searchGroundingEnabled = it)) }
+                            )
+                            SettingSwitchRow(
+                                title = "Google Maps Grounding",
+                                subtitle = "Resolve places and directions using Maps grounding.",
+                                checked = settings.mapsGroundingEnabled,
+                                onCheckedChange = { viewModel.updateSettings(settings.copy(mapsGroundingEnabled = it)) }
+                            )
+                            SettingSwitchRow(
+                                title = "Autonomous Reversible Actions",
+                                subtitle = "Allow Aqua to run reversible tools automatically. Irreversible financial/security actions always ask.",
+                                checked = settings.autonomousReversibleActions,
+                                onCheckedChange = { viewModel.updateSettings(settings.copy(autonomousReversibleActions = it)) }
+                            )
+                            SettingSwitchRow(
+                                title = "Crypto Wallet Read Permission (Aqua AI)",
+                                subtitle = "Allow Aqua AI to read multi-chain balances, receive addresses, telemetry, ENS, allowances, payment URIs, and tx history (zero-key).",
+                                checked = settings.aiWalletAccessEnabled,
+                                onCheckedChange = { enabled ->
+                                    viewModel.updateSettings(
+                                        settings.copy(
+                                            aiWalletAccessEnabled = enabled,
+                                            aiWalletTransferPrepareEnabled = if (enabled) settings.aiWalletTransferPrepareEnabled else false
+                                        )
                                     )
                                 }
-                                OutlinedButton(
-                                    onClick = { viewModel.setWakeWordServiceEnabled(false) },
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("Stop Service", color = AquaCoralError)
-                                }
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = wakePhraseInput,
-                                onValueChange = { wakePhraseInput = it },
-                                label = { Text("Wake Word Phrase") },
-                                singleLine = true,
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = AquaCyan,
-                                    unfocusedBorderColor = AquaBorderGlow,
-                                    focusedTextColor = AquaIceText,
-                                    unfocusedTextColor = AquaIceText
-                                ),
-                                modifier = Modifier.weight(1f)
                             )
-                            Button(
-                                onClick = { viewModel.updateWakePhrase(wakePhraseInput) },
-                                enabled = wakePhraseInput.isNotBlank(),
-                                colors = ButtonDefaults.buttonColors(containerColor = AquaCyan, contentColor = AquaAbyss)
-                            ) {
-                                Text("Save", fontWeight = FontWeight.Bold)
-                            }
-                        }
-
-                        OutlinedButton(
-                            onClick = {
-                                runCatching {
-                                    val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
-                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            SettingSwitchRow(
+                                title = "Crypto Wallet Write Permission (Aqua AI)",
+                                subtitle = "Allow Aqua AI to create wallets/accounts, add tokens/networks, switch chains, edit contacts, sign messages, and prepare transfers/revokes (always gated by your approval).",
+                                checked = settings.aiWalletAccessEnabled && settings.aiWalletTransferPrepareEnabled,
+                                onCheckedChange = { enabled ->
+                                    if (settings.aiWalletAccessEnabled) {
+                                        viewModel.updateSettings(settings.copy(aiWalletTransferPrepareEnabled = enabled))
+                                    } else if (enabled) {
+                                        viewModel.updateSettings(settings.copy(aiWalletAccessEnabled = true, aiWalletTransferPrepareEnabled = true))
                                     }
-                                    context.startActivity(intent)
                                 }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Battery Optimization Settings (Keep App Alive)", color = AquaTeal)
+                            )
                         }
+                    }
+                }
 
-                        SettingSwitchRow(
-                            title = "Use Gemini Native TTS Audio",
-                            subtitle = "Synthesize natural speech via Gemini TTS with Android TTS fallback.",
-                            checked = settings.useGeminiTts,
-                            onCheckedChange = { viewModel.updateSettings(settings.copy(useGeminiTts = it)) }
-                        )
-
-                        ExposedDropdownMenuBox(
-                            expanded = langExpanded,
-                            onExpandedChange = { langExpanded = !langExpanded }
+                // Personal Gemini API Key (Android Keystore Encrypted)
+                item {
+                    AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Key, contentDescription = null, tint = c.amber)
+                                Spacer(Modifier.width(8.dp))
+                                Text("User-Configurable Gemini API Key", style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
+                            }
+                            Text(
+                                text = if (hasStoredKey) "Stored securely in Android Keystore AES-GCM ($maskedKey)."
+                                else "Using managed Firebase AI Logic by default. Optionally supply your own Gemini API key below.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = c.textMuted
+                            )
+
                             OutlinedTextField(
-                                value = settings.voiceLanguage,
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text("Voice & Speech Language") },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = langExpanded) },
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = AquaCyan,
-                                    unfocusedBorderColor = AquaBorderGlow,
-                                    focusedTextColor = AquaIceText,
-                                    unfocusedTextColor = AquaIceText
-                                ),
+                                value = apiKeyInput,
+                                onValueChange = { apiKeyInput = it },
+                                label = { Text("Personal Gemini API Key (Optional)") },
+                                visualTransformation = PasswordVisualTransformation(),
+                                singleLine = true,
+                                colors = fieldColors,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
+                                    .testTag("settings_api_key_input")
                             )
-                            ExposedDropdownMenu(
-                                expanded = langExpanded,
-                                onDismissRequest = { langExpanded = false }
-                            ) {
-                                languages.forEach { lang ->
-                                    DropdownMenuItem(
-                                        text = { Text(lang) },
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = {
+                                        viewModel.secureConfigStore.saveGeminiApiKey(apiKeyInput)
+                                        apiKeyInput = ""
+                                        hasStoredKey = viewModel.secureConfigStore.hasGeminiApiKey()
+                                        maskedKey = viewModel.secureConfigStore.getMaskedGeminiApiKey()
+                                    },
+                                    enabled = apiKeyInput.isNotBlank(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = c.accentCyan, contentColor = c.canvas),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("settings_save_api_key_button")
+                                ) {
+                                    Text("Encrypt & Save Key", fontWeight = FontWeight.Bold)
+                                }
+                                if (hasStoredKey) {
+                                    OutlinedButton(
                                         onClick = {
-                                            viewModel.updateSettings(settings.copy(voiceLanguage = lang))
-                                            langExpanded = false
+                                            viewModel.secureConfigStore.clearGeminiApiKey()
+                                            hasStoredKey = false
+                                            maskedKey = ""
+                                            viewModel.updateSettings(settings.copy(useCustomDirectApiKey = false))
                                         }
+                                    ) {
+                                        Text("Clear Key", color = c.error)
+                                    }
+                                }
+                            }
+
+                            SettingSwitchRow(
+                                title = "Prefer Personal Gemini API Key",
+                                subtitle = "Route Gemini requests through your stored personal key when present.",
+                                checked = settings.useCustomDirectApiKey && hasStoredKey,
+                                onCheckedChange = { enabled ->
+                                    if (enabled && !hasStoredKey) return@SettingSwitchRow
+                                    viewModel.updateSettings(settings.copy(useCustomDirectApiKey = enabled))
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Voice & Wake Word Controls
+                item {
+                    AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Mic, contentDescription = null, tint = c.accentTeal)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Voice & 'Hey Aqua' Wake Word", style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
+                            }
+
+                            SettingSwitchRow(
+                                title = "Prioritize Automation & Voice Tasks",
+                                subtitle = if (automationKeepAlive || settings.backgroundAutomationEnabled) {
+                                    "Persistent foreground notification active for routines & agent tasks."
+                                } else {
+                                    "Uses Android dataSync foreground service without requiring mic listener."
+                                },
+                                checked = settings.backgroundAutomationEnabled || automationKeepAlive,
+                                onCheckedChange = { enable ->
+                                    viewModel.setAutomationKeepAliveEnabled(enable)
+                                }
+                            )
+
+                            SettingSwitchRow(
+                                title = "Run App & Mic in Background",
+                                subtitle = when {
+                                    wakeRunning && wakePaused -> "Foreground service active (Mic paused)."
+                                    wakeRunning -> "Foreground service & microphone active even when minimized."
+                                    else -> "Runs Play-compliant microphone foreground service."
+                                },
+                                checked = settings.wakeWordEnabled || wakeRunning,
+                                onCheckedChange = { enable ->
+                                    if (!enable) {
+                                        viewModel.setWakeWordServiceEnabled(false)
+                                    } else {
+                                        val perms = mutableListOf(Manifest.permission.RECORD_AUDIO)
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                            perms.add(Manifest.permission.POST_NOTIFICATIONS)
+                                        }
+                                        val allGranted = perms.all {
+                                            ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+                                        }
+                                        if (allGranted) {
+                                            viewModel.setWakeWordServiceEnabled(true)
+                                        } else {
+                                            micAndNotifLauncher.launch(perms.toTypedArray())
+                                        }
+                                    }
+                                }
+                            )
+
+                            if (wakeRunning) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = { viewModel.toggleBackgroundMicPaused() },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text(
+                                            text = if (wakePaused) "Resume Mic Listener" else "Pause Mic Listener",
+                                            color = c.accentCyan
+                                        )
+                                    }
+                                    OutlinedButton(
+                                        onClick = { viewModel.setWakeWordServiceEnabled(false) },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("Stop Service", color = c.error)
+                                    }
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = wakePhraseInput,
+                                    onValueChange = { wakePhraseInput = it },
+                                    label = { Text("Wake Word Phrase") },
+                                    singleLine = true,
+                                    colors = fieldColors,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Button(
+                                    onClick = { viewModel.updateWakePhrase(wakePhraseInput) },
+                                    enabled = wakePhraseInput.isNotBlank(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = c.accentCyan, contentColor = c.canvas)
+                                ) {
+                                    Text("Save", fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    runCatching {
+                                        val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
+                                        context.startActivity(intent)
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Battery Optimization Settings (Keep App Alive)", color = c.accentTeal)
+                            }
+
+                            SettingSwitchRow(
+                                title = "Use Gemini Native TTS Audio",
+                                subtitle = "Synthesize natural speech via Gemini TTS with Android TTS fallback.",
+                                checked = settings.useGeminiTts,
+                                onCheckedChange = { viewModel.updateSettings(settings.copy(useGeminiTts = it)) }
+                            )
+
+                            ExposedDropdownMenuBox(
+                                expanded = langExpanded,
+                                onExpandedChange = { langExpanded = !langExpanded }
+                            ) {
+                                OutlinedTextField(
+                                    value = settings.voiceLanguage,
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("Voice & Speech Language") },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = langExpanded) },
+                                    colors = fieldColors,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = langExpanded,
+                                    onDismissRequest = { langExpanded = false }
+                                ) {
+                                    languages.forEach { lang ->
+                                        DropdownMenuItem(
+                                            text = { Text(lang) },
+                                            onClick = {
+                                                viewModel.updateSettings(settings.copy(voiceLanguage = lang))
+                                                langExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
+                            Text("Speech Speed: ${String.format("%.2fx", settings.voiceSpeed)}", style = MaterialTheme.typography.labelMedium, color = c.textPrimary)
+                            Slider(
+                                value = settings.voiceSpeed.toFloat(),
+                                onValueChange = { viewModel.updateSettings(settings.copy(voiceSpeed = it.toDouble())) },
+                                valueRange = 0.5f..2.0f,
+                                colors = SliderDefaults.colors(thumbColor = c.accentCyan, activeTrackColor = c.accentCyan)
+                            )
+
+                            Text("Voice Pitch: ${String.format("%.2fx", settings.voicePitch)}", style = MaterialTheme.typography.labelMedium, color = c.textPrimary)
+                            Slider(
+                                value = settings.voicePitch.toFloat(),
+                                onValueChange = { viewModel.updateSettings(settings.copy(voicePitch = it.toDouble())) },
+                                valueRange = 0.5f..1.8f,
+                                colors = SliderDefaults.colors(thumbColor = c.accentTeal, activeTrackColor = c.accentTeal)
+                            )
+                        }
+                    }
+                }
+
+                // Display & Theme
+                item {
+                    AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Palette, contentDescription = null, tint = c.accentCyan)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Appearance & Window Brightness", style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                listOf(
+                                    "aqua_abyss" to "Aqua Abyss",
+                                    "aqua_midnight" to "Midnight OLED",
+                                    "aqua_light" to "Oceanic Light",
+                                    "system" to "System"
+                                ).forEach { (mode, label) ->
+                                    FilterChip(
+                                        selected = settings.darkThemeMode == mode,
+                                        onClick = { viewModel.updateSettings(settings.copy(darkThemeMode = mode)) },
+                                        label = { Text(label) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = c.accentCyan.copy(alpha = 0.2f),
+                                            selectedLabelColor = c.accentCyan,
+                                            labelColor = c.textMuted
+                                        ),
+                                        modifier = Modifier.testTag("settings_theme_$mode")
                                     )
                                 }
                             }
-                        }
-
-                        Text("Speech Speed: ${String.format("%.2fx", settings.voiceSpeed)}", style = MaterialTheme.typography.labelMedium, color = AquaIceText)
-                        Slider(
-                            value = settings.voiceSpeed.toFloat(),
-                            onValueChange = { viewModel.updateSettings(settings.copy(voiceSpeed = it.toDouble())) },
-                            valueRange = 0.5f..2.0f,
-                            colors = SliderDefaults.colors(thumbColor = AquaCyan, activeTrackColor = AquaCyan)
-                        )
-
-                        Text("Voice Pitch: ${String.format("%.2fx", settings.voicePitch)}", style = MaterialTheme.typography.labelMedium, color = AquaIceText)
-                        Slider(
-                            value = settings.voicePitch.toFloat(),
-                            onValueChange = { viewModel.updateSettings(settings.copy(voicePitch = it.toDouble())) },
-                            valueRange = 0.5f..1.8f,
-                            colors = SliderDefaults.colors(thumbColor = AquaTeal, activeTrackColor = AquaTeal)
-                        )
-                    }
-                }
-            }
-
-            // Display & Theme
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = AquaCardSurface),
-                    shape = RoundedCornerShape(18.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, AquaBorderGlow, RoundedCornerShape(18.dp))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Palette, contentDescription = null, tint = AquaCyan)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Appearance & Window Brightness", style = MaterialTheme.typography.titleMedium, color = AquaIceText)
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf(
-                                "aqua_abyss" to "Aqua Dark",
-                                "aqua_light" to "Aqua Light",
-                                "system" to "System"
-                            ).forEach { (mode, label) ->
-                                FilterChip(
-                                    selected = settings.darkThemeMode == mode,
-                                    onClick = { viewModel.updateSettings(settings.copy(darkThemeMode = mode)) },
-                                    label = { Text(label) }
-                                )
-                            }
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.BrightnessMedium, contentDescription = null, tint = AquaAmber, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("App Window Brightness: ${brightnessSlider.toInt()}%", style = MaterialTheme.typography.labelMedium, color = AquaIceText)
-                        }
-                        Slider(
-                            value = brightnessSlider,
-                            onValueChange = {
-                                brightnessSlider = it
-                                viewModel.setWindowBrightness(activity, it.toInt())
-                            },
-                            valueRange = 10f..100f,
-                            colors = SliderDefaults.colors(thumbColor = AquaAmber, activeTrackColor = AquaAmber)
-                        )
-                    }
-                }
-            }
-
-            // Permissions & System Access Dashboard
-            item {
-                val micGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-                val locGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = AquaCardSurface),
-                    shape = RoundedCornerShape(18.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, AquaBorderGlow, RoundedCornerShape(18.dp))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Security, contentDescription = null, tint = AquaMintSuccess)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Android Permissions Dashboard", style = MaterialTheme.typography.titleMedium, color = AquaIceText)
-                        }
-                        PermissionRow(
-                            label = "Microphone (Voice & Wake Word)",
-                            granted = micGranted,
-                            onAction = { micAndNotifLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) }
-                        )
-                        PermissionRow(
-                            label = "Notification Access (Read Summaries)",
-                            granted = telemetry.notificationAccessGranted,
-                            onAction = { viewModel.deviceController.openAndroidSettings("notifications") }
-                        )
-                        PermissionRow(
-                            label = "Coarse Location (Maps Context)",
-                            granted = locGranted,
-                            onAction = { coarseLocationLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) }
-                        )
-                        OutlinedButton(
-                            onClick = { viewModel.deviceController.openAndroidSettings("apps") },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Filled.SettingsApplications, contentDescription = null, tint = AquaCyan, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Open Android App Permissions", color = AquaCyan)
-                        }
-                    }
-                }
-            }
-
-            // Legal, Privacy Policy & Terms and Conditions
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = AquaCardSurface),
-                    shape = RoundedCornerShape(18.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, AquaBorderGlow, RoundedCornerShape(18.dp))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Policy, contentDescription = null, tint = AquaCyan)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Legal, Privacy Policy & Terms", style = MaterialTheme.typography.titleMedium, color = AquaIceText)
-                        }
-                        Text(
-                            text = "Review how Aqua AI handles Google account data, Gemini AI requests, and non-custodial wallet keys, along with our Terms & Conditions.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = AquaMutedText
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = { activeLegalDialog = "privacy" },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("settings_privacy_policy_button")
-                            ) {
-                                Icon(Icons.Filled.Policy, contentDescription = null, tint = AquaCyan, modifier = Modifier.size(18.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.BrightnessMedium, contentDescription = null, tint = c.amber, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("Privacy Policy", color = AquaCyan)
+                                Text("App Window Brightness: ${brightnessSlider.toInt()}%", style = MaterialTheme.typography.labelMedium, color = c.textPrimary)
                             }
+                            Slider(
+                                value = brightnessSlider,
+                                onValueChange = {
+                                    brightnessSlider = it
+                                    viewModel.setWindowBrightness(activity, it.toInt())
+                                },
+                                valueRange = 10f..100f,
+                                colors = SliderDefaults.colors(thumbColor = c.amber, activeTrackColor = c.amber)
+                            )
+                        }
+                    }
+                }
+
+                // Permissions & System Access Dashboard
+                item {
+                    val micGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                    val locGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+                    AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Security, contentDescription = null, tint = c.success)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Android Permissions Dashboard", style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
+                            }
+                            PermissionRow(
+                                label = "Microphone (Voice & Wake Word)",
+                                granted = micGranted,
+                                onAction = { micAndNotifLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) }
+                            )
+                            PermissionRow(
+                                label = "Notification Access (Read Summaries)",
+                                granted = telemetry.notificationAccessGranted,
+                                onAction = { viewModel.deviceController.openAndroidSettings("notifications") }
+                            )
+                            PermissionRow(
+                                label = "Coarse Location (Maps Context)",
+                                granted = locGranted,
+                                onAction = { coarseLocationLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) }
+                            )
                             OutlinedButton(
-                                onClick = { activeLegalDialog = "terms" },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("settings_terms_conditions_button")
+                                onClick = { viewModel.deviceController.openAndroidSettings("apps") },
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Icon(Icons.Filled.Description, contentDescription = null, tint = AquaCyan, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Filled.SettingsApplications, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("Terms & Conditions", color = AquaCyan)
+                                Text("Open Android App Permissions", color = c.accentCyan)
+                            }
+                        }
+                    }
+                }
+
+                // Legal, Privacy Policy & Terms and Conditions
+                item {
+                    AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Policy, contentDescription = null, tint = c.accentCyan)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Legal, Privacy Policy & Terms", style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
+                            }
+                            Text(
+                                text = "Review how Aqua AI handles Google account data, Gemini AI requests, and non-custodial wallet keys, along with our Terms & Conditions.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = c.textMuted
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = { activeLegalDialog = "privacy" },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("settings_privacy_policy_button")
+                                ) {
+                                    Icon(Icons.Filled.Policy, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Privacy Policy", color = c.accentCyan)
+                                }
+                                OutlinedButton(
+                                    onClick = { activeLegalDialog = "terms" },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("settings_terms_conditions_button")
+                                ) {
+                                    Icon(Icons.Filled.Description, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Terms & Conditions", color = c.accentCyan)
+                                }
                             }
                         }
                     }
                 }
             }
-        }
         }
 
         if (activeLegalDialog != null) {
@@ -818,7 +858,7 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
             }
 
             Surface(
-                color = AquaAbyss,
+                color = c.canvas,
                 modifier = Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
@@ -839,14 +879,14 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                                 else -> "Privacy Policy — Aqua AI"
                             },
                             style = MaterialTheme.typography.titleMedium,
-                            color = AquaIceText,
+                            color = c.textPrimary,
                             modifier = Modifier.weight(1f)
                         )
                         IconButton(
                             onClick = { activeLegalDialog = null },
                             modifier = Modifier.testTag("legal_reader_close_button")
                         ) {
-                            Icon(Icons.Filled.Close, contentDescription = "Close", tint = AquaCyan)
+                            Icon(Icons.Filled.Close, contentDescription = "Close", tint = c.accentCyan)
                         }
                     }
 
@@ -881,13 +921,7 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(sections) { (heading, body) ->
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = AquaCardSurface),
-                                shape = RoundedCornerShape(16.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .border(1.dp, AquaBorderGlow, RoundedCornerShape(16.dp))
-                            ) {
+                            AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
                                 Column(
                                     modifier = Modifier.padding(16.dp),
                                     verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -895,13 +929,13 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                                     Text(
                                         text = heading,
                                         style = MaterialTheme.typography.titleSmall,
-                                        color = AquaCyan,
+                                        color = c.accentCyan,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                     Text(
                                         text = body,
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = AquaMutedText
+                                        color = c.textMuted
                                     )
                                 }
                             }
@@ -911,14 +945,14 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(AquaCardSurface)
+                            .background(c.cardSurface)
                             .padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                            Text("Public Hosting URL (GitHub Pages)", style = MaterialTheme.typography.labelSmall, color = AquaCyan)
-                            Text(externalUrl, style = MaterialTheme.typography.bodySmall, color = AquaMutedText)
+                            Text("Public Hosting URL (GitHub Pages)", style = MaterialTheme.typography.labelSmall, color = c.accentCyan)
+                            Text(externalUrl, style = MaterialTheme.typography.bodySmall, color = c.textMuted)
                         }
                         OutlinedButton(
                             onClick = {
@@ -927,9 +961,9 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                                 copiedFeedback = true
                             }
                         ) {
-                            Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = AquaCyan, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text(if (copiedFeedback) "Copied" else "Copy URL", color = AquaCyan)
+                            Text(if (copiedFeedback) "Copied" else "Copy URL", color = c.accentCyan)
                         }
                     }
                 }
@@ -945,19 +979,20 @@ private fun SettingSwitchRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
+    val c = AquaTheme.colors
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column(modifier = Modifier.weight(1f).padding(end = 10.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = AquaIceText)
-            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = AquaMutedText)
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = c.textPrimary)
+            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = c.textMuted)
         }
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(checkedThumbColor = AquaAbyss, checkedTrackColor = AquaCyan)
+            colors = SwitchDefaults.colors(checkedThumbColor = c.canvas, checkedTrackColor = c.accentCyan)
         )
     }
 }
@@ -968,21 +1003,22 @@ private fun PermissionRow(
     granted: Boolean,
     onAction: () -> Unit
 ) {
+    val c = AquaTheme.colors
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.bodyMedium, color = AquaIceText)
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = c.textPrimary)
             Text(
                 text = if (granted) "Granted" else "Not Granted",
                 style = MaterialTheme.typography.labelSmall,
-                color = if (granted) AquaMintSuccess else AquaAmber
+                color = if (granted) c.success else c.amber
             )
         }
         OutlinedButton(onClick = onAction) {
-            Text(if (granted) "Manage" else "Configure", color = AquaCyan)
+            Text(if (granted) "Manage" else "Configure", color = c.accentCyan)
         }
     }
 }

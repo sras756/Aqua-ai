@@ -26,8 +26,6 @@ import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -56,19 +54,15 @@ import androidx.credentials.CredentialManager
 import com.example.R
 import com.example.ui.auth.attemptAutoSignIn
 import com.example.ui.auth.onGoogleSignInClicked
-import com.example.ui.theme.AquaAbyss
-import com.example.ui.theme.AquaAzure
-import com.example.ui.theme.AquaBorderGlow
-import com.example.ui.theme.AquaCardSurface
-import com.example.ui.theme.AquaCyan
-import com.example.ui.theme.AquaIceText
-import com.example.ui.theme.AquaMutedText
-import com.example.ui.theme.AquaTeal
+import com.example.ui.components.AquaBackdropBox
+import com.example.ui.components.AquaGlassCard
+import com.example.ui.theme.AquaTheme
 
 @Composable
 fun AuthScreen(
     onAuthSuccess: () -> Unit
 ) {
+    val c = AquaTheme.colors
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val credentialManager = remember { CredentialManager.create(context) }
@@ -86,184 +80,188 @@ fun AuthScreen(
         )
     }
 
-    Box(
+    AquaBackdropBox(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(AquaAbyss, Color(0xFF061B33), AquaAbyss)
-                )
-            )
             .systemBarsPadding()
-            .padding(24.dp),
-        contentAlignment = Alignment.Center
+            .padding(24.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .widthIn(max = 520.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(210.dp)
-                    .clip(RoundedCornerShape(28.dp))
-                    .border(1.dp, AquaBorderGlow, RoundedCornerShape(28.dp))
+                    .widthIn(max = 520.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.img_aqua_hero_banner_1794551098672),
-                    contentDescription = "Aqua AI Neural Core Banner",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, AquaAbyss.copy(alpha = 0.88f))
-                            )
-                        )
-                )
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(20.dp)
+                        .fillMaxWidth()
+                        .height(220.dp)
+                        .clip(RoundedCornerShape(28.dp))
+                        .border(1.dp, c.borderGlow, RoundedCornerShape(28.dp))
                 ) {
-                    Surface(
-                        color = AquaCyan.copy(alpha = 0.16f),
-                        shape = CircleShape,
-                        modifier = Modifier.border(1.dp, AquaCyan.copy(alpha = 0.5f), CircleShape)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.AutoAwesome,
-                                contentDescription = null,
-                                tint = AquaCyan,
-                                modifier = Modifier.size(14.dp)
+                    Image(
+                        painter = painterResource(id = R.drawable.img_aqua_aurora_backdrop),
+                        contentDescription = "Aqua AI Neural Core Banner",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(Color.Transparent, Color(0xFF030B16).copy(alpha = 0.90f))
+                                )
                             )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = "ANDROID AUTONOMOUS CORE",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = AquaCyan
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = "AQUA AI",
-                        style = MaterialTheme.typography.displaySmall,
-                        color = AquaIceText
                     )
-                    Text(
-                        text = "Voice-first intelligence, device control, browser agent & Flash Wallet connector",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = AquaMutedText
-                    )
-                }
-            }
-
-            Card(
-                colors = CardDefaults.cardColors(containerColor = AquaCardSurface.copy(alpha = 0.9f)),
-                shape = RoundedCornerShape(24.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, AquaBorderGlow, RoundedCornerShape(24.dp))
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    SecurityFeatureRow(
-                        icon = Icons.Filled.Shield,
-                        title = "Zero-Trust Cloud Isolation",
-                        subtitle = "Conversations, memories, and validated skills sync privately to your Google account."
-                    )
-                    SecurityFeatureRow(
-                        icon = Icons.Filled.Memory,
-                        title = "Gemini Multi-Model Core",
-                        subtitle = "Hydrogen, Argon multimodal, Carbon high-thinking, Live voice & TTS."
-                    )
-                    SecurityFeatureRow(
-                        icon = Icons.Filled.Lock,
-                        title = "Explicit Action Authorization",
-                        subtitle = "Financial requests, calls, messages & file uploads require your confirmation."
-                    )
-                }
-            }
-
-            if (errorMessage != null) {
-                Surface(
-                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.14f),
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = errorMessage!!,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(14.dp),
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-
-            Button(
-                onClick = {
-                    errorMessage = null
-                    isLoading = true
-                    onGoogleSignInClicked(
-                        context = context,
-                        credentialManager = credentialManager,
-                        onAuthSuccess = {
-                            isLoading = false
-                            onAuthSuccess()
-                        },
-                        onAuthError = { msg ->
-                            isLoading = false
-                            errorMessage = msg
-                        },
-                        scope = scope,
-                        onAuthCancelled = {
-                            isLoading = false
-                        }
-                    )
-                },
-                enabled = !isLoading,
-                shape = RoundedCornerShape(18.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = AquaCyan,
-                    contentColor = AquaAbyss
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .testTag("google_sign_in_button")
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        color = AquaAbyss,
-                        strokeWidth = 2.5.dp,
-                        modifier = Modifier.size(22.dp)
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Filled.AccountCircle,
+                    Image(
+                        painter = painterResource(id = R.drawable.img_aqua_vault_emblem),
                         contentDescription = null,
-                        modifier = Modifier.size(22.dp)
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(16.dp)
+                            .size(58.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .border(1.dp, c.accentCyan.copy(alpha = 0.55f), RoundedCornerShape(16.dp))
                     )
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        text = "Sign in with Google",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(20.dp)
+                    ) {
+                        Surface(
+                            color = c.accentCyan.copy(alpha = 0.18f),
+                            shape = CircleShape,
+                            modifier = Modifier.border(1.dp, c.accentCyan.copy(alpha = 0.5f), CircleShape)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = c.accentCyan,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "ANDROID AUTONOMOUS CORE",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = c.accentCyan
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "AQUA AI",
+                            style = MaterialTheme.typography.displaySmall,
+                            color = Color(0xFFEAF6FF)
+                        )
+                        Text(
+                            text = "Adaptive Launcher, Voice Core, Workspace Hub & Self-Custodial Wallet",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFFB4D0E8)
+                        )
+                    }
+                }
+
+                AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        SecurityFeatureRow(
+                            icon = Icons.Filled.Shield,
+                            title = "Zero-Trust Cloud Isolation",
+                            subtitle = "Conversations, memories, and validated skills sync privately to your Google account."
+                        )
+                        SecurityFeatureRow(
+                            icon = Icons.Filled.Memory,
+                            title = "Multi-Persona Gemini Core",
+                            subtitle = "Adaptive reasoning personas, Gemini Live voice, Speech TTS & web tools."
+                        )
+                        SecurityFeatureRow(
+                            icon = Icons.Filled.Lock,
+                            title = "Explicit Action Authorization",
+                            subtitle = "Financial transfers, calls, messages & file uploads require your confirmation."
+                        )
+                    }
+                }
+
+                if (errorMessage != null) {
+                    Surface(
+                        color = c.error.copy(alpha = 0.14f),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = errorMessage!!,
+                            color = c.error,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(14.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = {
+                        errorMessage = null
+                        isLoading = true
+                        onGoogleSignInClicked(
+                            context = context,
+                            credentialManager = credentialManager,
+                            onAuthSuccess = {
+                                isLoading = false
+                                onAuthSuccess()
+                            },
+                            onAuthError = { msg ->
+                                isLoading = false
+                                errorMessage = msg
+                            },
+                            scope = scope,
+                            onAuthCancelled = {
+                                isLoading = false
+                            }
+                        )
+                    },
+                    enabled = !isLoading,
+                    shape = RoundedCornerShape(18.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = c.accentCyan,
+                        contentColor = c.onAccent
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .testTag("google_sign_in_button")
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            color = c.onAccent,
+                            strokeWidth = 2.5.dp,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.AccountCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = "Sign in with Google",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
@@ -276,9 +274,10 @@ private fun SecurityFeatureRow(
     title: String,
     subtitle: String
 ) {
+    val c = AquaTheme.colors
     Row(verticalAlignment = Alignment.Top) {
         Surface(
-            color = AquaAzure.copy(alpha = 0.2f),
+            color = c.accentAzure.copy(alpha = 0.2f),
             shape = CircleShape,
             modifier = Modifier.size(36.dp)
         ) {
@@ -286,15 +285,15 @@ private fun SecurityFeatureRow(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = AquaTeal,
+                    tint = c.accentTeal,
                     modifier = Modifier.size(18.dp)
                 )
             }
         }
         Spacer(Modifier.width(12.dp))
         Column {
-            Text(text = title, style = MaterialTheme.typography.titleMedium, color = AquaIceText)
-            Text(text = subtitle, style = MaterialTheme.typography.bodyMedium, color = AquaMutedText)
+            Text(text = title, style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
+            Text(text = subtitle, style = MaterialTheme.typography.bodyMedium, color = c.textMuted)
         }
     }
 }
