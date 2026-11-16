@@ -29,12 +29,14 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.DataObject
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Terminal
@@ -91,6 +93,9 @@ fun MemoryAndHistoryScreen(
     val c = AquaTheme.colors
 
     val conversations by viewModel.conversations.collectAsStateWithLifecycle()
+    val activeMessages by viewModel.messages.collectAsStateWithLifecycle()
+    val pinnedConvIds by viewModel.pinnedConversationIds.collectAsStateWithLifecycle()
+    val convAliases by viewModel.conversationAliases.collectAsStateWithLifecycle()
     val memories by viewModel.memories.collectAsStateWithLifecycle()
     val logs by viewModel.deviceActionLogs.collectAsStateWithLifecycle()
 
@@ -118,6 +123,18 @@ fun MemoryAndHistoryScreen(
         }
     }
 
+    val exportJsonLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { os ->
+                    os.write(viewModel.buildActiveConversationJson().toByteArray(Charsets.UTF_8))
+                }
+            }
+        }
+    }
+
     LaunchedEffect(driveAuthPendingIntent) {
         val pending = driveAuthPendingIntent ?: return@LaunchedEffect
         viewModel.consumeDriveAuthPendingIntent()
@@ -127,6 +144,8 @@ fun MemoryAndHistoryScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
     var editingMemory by remember { mutableStateOf<MemoryItem?>(null) }
+    var renamingConvId by remember { mutableStateOf<String?>(null) }
+    var renameInput by remember { mutableStateOf("") }
 
     val installedApps = remember { viewModel.deviceController.getInstalledLaunchableApps() }
 
@@ -165,11 +184,19 @@ fun MemoryAndHistoryScreen(
                         color = c.textPrimary,
                         modifier = Modifier.weight(1f)
                     )
-                    IconButton(
-                        onClick = { exportMdLauncher.launch("aqua-conversation.md") },
-                        modifier = Modifier.testTag("memory_export_md_button")
-                    ) {
-                        Icon(Icons.Filled.Description, contentDescription = "Export active chat as Markdown", tint = c.accentCyan)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = { exportJsonLauncher.launch("aqua-conversation.json") },
+                            modifier = Modifier.testTag("memory_export_json_button")
+                        ) {
+                            Icon(Icons.Filled.DataObject, contentDescription = "Export active chat as JSON", tint = c.accentTeal)
+                        }
+                        IconButton(
+                            onClick = { exportMdLauncher.launch("aqua-conversation.md") },
+                            modifier = Modifier.testTag("memory_export_md_button")
+                        ) {
+                            Icon(Icons.Filled.Description, contentDescription = "Export active chat as Markdown", tint = c.accentCyan)
+                        }
                     }
                 }
 
@@ -219,17 +246,39 @@ fun MemoryAndHistoryScreen(
 
                 when (selectedTab) {
                     0 -> {
-                        val filtered = remember(conversations, searchQuery) {
+                        val filtered = remember(conversations, searchQuery, pinnedConvIds, convAliases) {
                             val q = searchQuery.trim().lowercase()
-                            if (q.isEmpty()) conversations
-                            else conversations.filter {
-                                it.title.lowercase().contains(q) || it.summary.lowercase().contains(q)
-                            }
+                            conversations
+                                .filter {
+                                    val display = convAliases[it.id].orEmpty().ifBlank { it.title }
+                                    q.isEmpty() ||
+                                        display.lowercase().contains(q) ||
+                                        it.summary.lowercase().contains(q)
+                                }
+                                .sortedByDescending { pinnedConvIds.contains(it.id) }
                         }
                         LazyColumn(
                             contentPadding = PaddingValues(16.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
+                            if (activeMessages.isNotEmpty()) {
+                                item {
+                                    val stats = remember(activeMessages) {
+                                        com.example.ai.ConversationMarkdownExporter.computeSessionStats(activeMessages)
+                                    }
+                                    AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
+                                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Text("ACTIVE SESSION ANALYTICS", style = MaterialTheme.typography.labelSmall, color = c.accentTeal)
+                                            Text(
+                                                text = "${stats.totalMessages} msgs (${stats.userMessages} you / ${stats.assistantMessages} Aqua) • ${stats.estimatedWords} words • ${stats.codeBlockCount} code blocks • ${stats.toolCallCount} tool runs",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = c.textPrimary
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
                             item {
                                 GoogleDriveHistoryCard(
                                     connected = driveConnected,
@@ -264,7 +313,10 @@ fun MemoryAndHistoryScreen(
                                 }
                             } else {
                                 items(filtered, key = { it.id }) { conv ->
+                                    val isPinned = pinnedConvIds.contains(conv.id)
+                                    val displayTitle = convAliases[conv.id].orEmpty().ifBlank { conv.title }
                                     AquaGlassCard(
+                                        borderColor = if (isPinned) c.accentTeal else c.borderGlow,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clickable {
@@ -278,7 +330,7 @@ fun MemoryAndHistoryScreen(
                                         ) {
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(
-                                                    text = conv.title,
+                                                    text = displayTitle,
                                                     style = MaterialTheme.typography.titleMedium,
                                                     color = c.textPrimary,
                                                     maxLines = 1,
@@ -294,10 +346,27 @@ fun MemoryAndHistoryScreen(
                                                     )
                                                 }
                                                 Text(
-                                                    text = "${conv.messageCount} msgs • ${conv.modelUsed}",
+                                                    text = "${if (isPinned) "Pinned • " else ""}${conv.messageCount} msgs • ${conv.modelUsed}",
                                                     style = MaterialTheme.typography.labelSmall,
-                                                    color = c.accentCyan,
+                                                    color = if (isPinned) c.accentTeal else c.accentCyan,
                                                     modifier = Modifier.padding(top = 4.dp)
+                                                )
+                                            }
+                                            IconButton(onClick = { viewModel.togglePinConversation(conv.id) }) {
+                                                Icon(
+                                                    Icons.Filled.PushPin,
+                                                    contentDescription = if (isPinned) "Unpin conversation" else "Pin conversation",
+                                                    tint = if (isPinned) c.accentTeal else c.textMuted
+                                                )
+                                            }
+                                            IconButton(onClick = {
+                                                renamingConvId = conv.id
+                                                renameInput = displayTitle
+                                            }) {
+                                                Icon(
+                                                    Icons.Filled.Edit,
+                                                    contentDescription = "Rename conversation",
+                                                    tint = c.accentCyan
                                                 )
                                             }
                                             IconButton(onClick = { viewModel.deleteConversation(conv.id) }) {
@@ -490,6 +559,45 @@ fun MemoryAndHistoryScreen(
             onSave = { updated ->
                 viewModel.saveMemory(updated)
                 editingMemory = null
+            }
+        )
+    }
+
+    renamingConvId?.let { targetId ->
+        AlertDialog(
+            onDismissRequest = { renamingConvId = null },
+            containerColor = c.deepSurface,
+            title = { Text("Rename Conversation", color = c.textPrimary) },
+            text = {
+                OutlinedTextField(
+                    value = renameInput,
+                    onValueChange = { renameInput = it },
+                    label = { Text("Custom Conversation Title") },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = c.accentCyan,
+                        unfocusedBorderColor = c.borderGlow,
+                        focusedTextColor = c.textPrimary,
+                        unfocusedTextColor = c.textPrimary
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.renameConversationAlias(targetId, renameInput)
+                        renamingConvId = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = c.accentCyan, contentColor = c.canvas)
+                ) {
+                    Text("Save", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { renamingConvId = null }) {
+                    Text("Cancel", color = c.textMuted)
+                }
             }
         )
     }

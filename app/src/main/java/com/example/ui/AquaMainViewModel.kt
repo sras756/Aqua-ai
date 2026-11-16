@@ -11,6 +11,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ai.ContextManager
 import com.example.ai.ConversationMarkdownExporter
+import com.example.ai.DiagnosticReportExporter
 import com.example.ai.GeminiProvider
 import com.example.ai.ToolCallingEngine
 import com.example.browser.AquaBrowserController
@@ -113,6 +114,8 @@ class AquaMainViewModel(
     val personaId: StateFlow<String> = localPrefs.personaId
     val customDirective: StateFlow<String> = localPrefs.customDirective
     val pinnedRoutineIds: StateFlow<Set<String>> = localPrefs.pinnedRoutineIds
+    val pinnedConversationIds: StateFlow<Set<String>> = localPrefs.pinnedConversationIds
+    val conversationAliases: StateFlow<Map<String, String>> = localPrefs.conversationAliases
 
     val launcherEngine: AquaLauncherEngine = AquaLauncherEngine.getInstance(appContext)
     val launcherAiController: LauncherAiController = LauncherAiController(launcherEngine)
@@ -445,8 +448,29 @@ class AquaMainViewModel(
         }
     }
 
+    fun togglePinConversation(conversationId: String) {
+        val pinned = localPrefs.togglePinnedConversation(conversationId)
+        _bannerMessage.value = if (pinned) {
+            "Pinned conversation to top of History."
+        } else {
+            "Unpinned conversation."
+        }
+    }
+
+    fun renameConversationAlias(conversationId: String, newTitle: String) {
+        localPrefs.setConversationAlias(conversationId, newTitle)
+        _bannerMessage.value = if (newTitle.isBlank()) {
+            "Reset conversation title."
+        } else {
+            "Renamed conversation to '${newTitle.trim()}'."
+        }
+    }
+
     fun activeConversationTitle(): String {
         val id = _activeConversationId.value
+        if (!id.isNullOrBlank()) {
+            localPrefs.conversationAliases.value[id]?.takeIf { it.isNotBlank() }?.let { return it }
+        }
         return conversations.value.firstOrNull { it.id == id }?.title
             ?: "Aqua AI Session"
     }
@@ -456,6 +480,31 @@ class AquaMainViewModel(
             title = activeConversationTitle(),
             messages = messages.value
         )
+    }
+
+    fun buildActiveConversationJson(): String {
+        return ConversationMarkdownExporter.formatConversationAsJson(
+            title = activeConversationTitle(),
+            messages = messages.value
+        )
+    }
+
+    fun buildSystemDiagnosticsReport(): String {
+        refreshTelemetry()
+        val activeFgs = wakeWordRunning.value || automationKeepAliveActive.value
+        return DiagnosticReportExporter.buildSystemDiagnosticMarkdown(
+            telemetry = _telemetry.value,
+            storage = _storageAndMemory.value,
+            samples = _telemetryHistory.value,
+            installedAppsCount = launcherEngine.installedApps.value.size,
+            activeModel = settings.value.preferredModel,
+            activePersona = AquaPersona.fromId(personaId.value),
+            foregroundServiceActive = activeFgs
+        )
+    }
+
+    fun readClipboardPreview(): String {
+        return deviceController.readClipboardText().getOrDefault("")
     }
 
     fun openStandaloneLauncher() {

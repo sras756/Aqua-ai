@@ -77,6 +77,12 @@ class AquaLocalPreferences(
     private val _pinnedRoutineIds = MutableStateFlow(loadPinnedRoutines())
     val pinnedRoutineIds: StateFlow<Set<String>> = _pinnedRoutineIds.asStateFlow()
 
+    private val _pinnedConversationIds = MutableStateFlow(loadPinnedConversations())
+    val pinnedConversationIds: StateFlow<Set<String>> = _pinnedConversationIds.asStateFlow()
+
+    private val _conversationAliases = MutableStateFlow(loadConversationAliases())
+    val conversationAliases: StateFlow<Map<String, String>> = _conversationAliases.asStateFlow()
+
     private fun key(suffix: String): String = "${userId.ifBlank { "default" }}_$suffix"
 
     private fun loadPersonaId(): String =
@@ -87,6 +93,23 @@ class AquaLocalPreferences(
 
     private fun loadPinnedRoutines(): Set<String> =
         prefs.getStringSet(key(KEY_PINNED_ROUTINES), emptySet())?.toSet() ?: emptySet()
+
+    private fun loadPinnedConversations(): Set<String> =
+        prefs.getStringSet(key(KEY_PINNED_CONVERSATIONS), emptySet())?.toSet() ?: emptySet()
+
+    private fun loadConversationAliases(): Map<String, String> {
+        val raw = prefs.getString(key(KEY_CONV_ALIASES), "").orEmpty()
+        if (raw.isBlank()) return emptyMap()
+        return runCatching {
+            val obj = org.json.JSONObject(raw)
+            buildMap {
+                obj.keys().forEach { k ->
+                    val v = obj.optString(k, "").trim()
+                    if (v.isNotEmpty()) put(k, v)
+                }
+            }
+        }.getOrDefault(emptyMap())
+    }
 
     fun setPersonaId(id: String) {
         val resolved = AquaPersona.fromId(id).id
@@ -115,10 +138,42 @@ class AquaLocalPreferences(
         return nowPinned
     }
 
+    fun togglePinnedConversation(conversationId: String): Boolean {
+        if (conversationId.isBlank()) return false
+        val next = _pinnedConversationIds.value.toMutableSet()
+        val nowPinned = if (next.contains(conversationId)) {
+            next.remove(conversationId)
+            false
+        } else {
+            next.add(conversationId)
+            true
+        }
+        prefs.edit().putStringSet(key(KEY_PINNED_CONVERSATIONS), next).apply()
+        _pinnedConversationIds.value = next
+        return nowPinned
+    }
+
+    fun setConversationAlias(conversationId: String, alias: String) {
+        if (conversationId.isBlank()) return
+        val clean = alias.trim().take(80)
+        val next = _conversationAliases.value.toMutableMap()
+        if (clean.isBlank()) {
+            next.remove(conversationId)
+        } else {
+            next[conversationId] = clean
+        }
+        val json = org.json.JSONObject()
+        next.forEach { (k, v) -> json.put(k, v) }
+        prefs.edit().putString(key(KEY_CONV_ALIASES), json.toString()).apply()
+        _conversationAliases.value = next
+    }
+
     private companion object {
         const val PREFS_NAME = "aqua_local_companion_prefs"
         const val KEY_PERSONA = "ai_persona_id"
         const val KEY_DIRECTIVE = "custom_persona_directive"
         const val KEY_PINNED_ROUTINES = "pinned_routine_ids"
+        const val KEY_PINNED_CONVERSATIONS = "pinned_conversation_ids"
+        const val KEY_CONV_ALIASES = "conversation_aliases_json"
     }
 }

@@ -94,6 +94,7 @@ import com.example.ui.components.AquaCoreOrb
 import com.example.ui.components.AquaGlassCard
 import com.example.ui.components.ChatMessageBubble
 import com.example.ui.components.PersistentChatBar
+import com.example.ui.components.PromptStudioSheet
 import com.example.ui.components.TelemetrySparklineCard
 import com.example.ui.theme.AquaTheme
 import kotlinx.coroutines.delay
@@ -146,6 +147,8 @@ fun HomeScreen(
 
     var chatInput by rememberSaveable { mutableStateOf("") }
     var conversationExpanded by rememberSaveable { mutableStateOf(false) }
+    var showPromptStudio by rememberSaveable { mutableStateOf(false) }
+    var clipboardPreview by remember { mutableStateOf<String?>(null) }
     var currentDateTimeLabel by remember { mutableStateOf(formatNow()) }
 
     LaunchedEffect(Unit) {
@@ -433,15 +436,51 @@ fun HomeScreen(
                             }
                         }
 
-                        // Pinned Routines + Quick Starters Strip
+                        // Pinned Routines, Prompt Studio & Clipboard Smart Strip
                         item {
                             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(
-                                    text = if (pinnedRoutines.isNotEmpty()) "PINNED ROUTINES & QUICK PROMPTS" else "QUICK PROMPT STARTERS",
+                                    text = if (pinnedRoutines.isNotEmpty()) "PINNED ROUTINES, STUDIO & QUICK PROMPTS" else "PROMPT STUDIO & QUICK STARTERS",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = c.textMuted
                                 )
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    item(key = "open_prompt_studio") {
+                                        AssistChip(
+                                            onClick = { showPromptStudio = true },
+                                            label = { Text("Prompt Studio") },
+                                            leadingIcon = {
+                                                Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            },
+                                            colors = AssistChipDefaults.assistChipColors(
+                                                containerColor = c.accentCyan.copy(alpha = 0.20f),
+                                                labelColor = c.accentCyan,
+                                                leadingIconContentColor = c.accentCyan
+                                            ),
+                                            modifier = Modifier.testTag("home_prompt_studio_button")
+                                        )
+                                    }
+                                    item(key = "inspect_clipboard") {
+                                        AssistChip(
+                                            onClick = {
+                                                val clip = viewModel.readClipboardPreview().trim()
+                                                clipboardPreview = clip.ifBlank { null }
+                                                if (clip.isBlank()) {
+                                                    viewModel.copyToClipboard("Aqua", "Clipboard is currently empty.")
+                                                }
+                                            },
+                                            label = { Text("Inspect Clipboard") },
+                                            leadingIcon = {
+                                                Icon(Icons.Filled.ContentPasteGo, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            },
+                                            colors = AssistChipDefaults.assistChipColors(
+                                                containerColor = c.cardSurface,
+                                                labelColor = c.textPrimary,
+                                                leadingIconContentColor = c.accentTeal
+                                            ),
+                                            modifier = Modifier.testTag("home_clipboard_inspect_button")
+                                        )
+                                    }
                                     items(pinnedRoutines, key = { "pinned_${it.id}" }) { routine ->
                                         AssistChip(
                                             onClick = { viewModel.executeRoutine(routine) },
@@ -474,6 +513,87 @@ fun HomeScreen(
                                                 leadingIconContentColor = c.accentCyan
                                             )
                                         )
+                                    }
+                                }
+
+                                AnimatedVisibility(visible = !clipboardPreview.isNullOrBlank()) {
+                                    val clip = clipboardPreview.orEmpty()
+                                    AquaGlassCard(
+                                        borderColor = c.accentTeal.copy(alpha = 0.5f),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .testTag("home_clipboard_preview_card")
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(14.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = "CLIPBOARD PREVIEW (${clip.length} chars)",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = c.accentTeal
+                                                )
+                                                Text(
+                                                    text = "Dismiss",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = c.textMuted,
+                                                    modifier = Modifier.clickable { clipboardPreview = null }
+                                                )
+                                            }
+                                            Text(
+                                                text = clip.take(220) + if (clip.length > 220) "..." else "",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = c.textPrimary,
+                                                maxLines = 3,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                item {
+                                                    AssistChip(
+                                                        onClick = {
+                                                            clipboardPreview = null
+                                                            conversationExpanded = true
+                                                            viewModel.sendMessage("Summarize and highlight key action items from this clipboard text:\n\n$clip")
+                                                        },
+                                                        label = { Text("Summarize") }
+                                                    )
+                                                }
+                                                item {
+                                                    AssistChip(
+                                                        onClick = {
+                                                            clipboardPreview = null
+                                                            conversationExpanded = true
+                                                            viewModel.sendMessage("Explain and verify any technical, URL, or crypto details in this clipboard text:\n\n$clip")
+                                                        },
+                                                        label = { Text("Analyze") }
+                                                    )
+                                                }
+                                                item {
+                                                    AssistChip(
+                                                        onClick = {
+                                                            clipboardPreview = null
+                                                            conversationExpanded = true
+                                                            viewModel.sendMessage("Translate this text into natural English:\n\n$clip")
+                                                        },
+                                                        label = { Text("Translate") }
+                                                    )
+                                                }
+                                                item {
+                                                    AssistChip(
+                                                        onClick = {
+                                                            chatInput = clip
+                                                            clipboardPreview = null
+                                                        },
+                                                        label = { Text("Paste to Input") }
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -920,6 +1040,16 @@ fun HomeScreen(
                     chatInput = ""
                     conversationExpanded = true
                     viewModel.sendMessage(toSend, speakReply = false)
+                }
+            )
+        }
+
+        if (showPromptStudio) {
+            PromptStudioSheet(
+                onDismiss = { showPromptStudio = false },
+                onSubmitPrompt = { promptText ->
+                    conversationExpanded = true
+                    viewModel.sendMessage(promptText, speakReply = false)
                 }
             )
         }

@@ -1,76 +1,187 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Aqua AI — Legal &amp; Overview</title>
+  <title>Aqua AI — Legal, Privacy &amp; Security Trust Portal</title>
   <style>
     :root {
-      --bg: #04111f;
-      --card: #0a1c30;
-      --border: #173759;
+      --bg: #030b16;
+      --bg-grad-1: rgba(34, 211, 238, 0.14);
+      --bg-grad-2: rgba(45, 212, 191, 0.10);
+      --surface: rgba(11, 25, 44, 0.90);
+      --surface-elevated: rgba(16, 36, 62, 0.95);
+      --border: rgba(56, 189, 248, 0.22);
+      --border-strong: rgba(34, 211, 238, 0.45);
       --cyan: #22d3ee;
-      --text: #e6f4ff;
+      --teal: #2dd4bf;
+      --text: #eaf6ff;
       --muted: #93b3cc;
+      --code-bg: rgba(3, 11, 22, 0.72);
+    }
+    html[data-theme="light"] {
+      --bg: #f1f8fe;
+      --bg-grad-1: rgba(14, 165, 233, 0.14);
+      --bg-grad-2: rgba(13, 148, 136, 0.10);
+      --surface: rgba(255, 255, 255, 0.94);
+      --surface-elevated: #e8f4fc;
+      --border: rgba(14, 116, 144, 0.18);
+      --border-strong: rgba(2, 132, 199, 0.45);
+      --cyan: #0284c7;
+      --teal: #0d9488;
+      --text: #092035;
+      --muted: #456580;
+      --code-bg: rgba(224, 242, 254, 0.75);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: var(--bg);
+      background:
+        radial-gradient(800px 480px at 8% -5%, var(--bg-grad-1), transparent 60%),
+        radial-gradient(700px 420px at 95% 12%, var(--bg-grad-2), transparent 60%),
+        var(--bg);
       color: var(--text);
       line-height: 1.65;
     }
-    .wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; }
-    nav { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; font-size: 0.95rem; }
-    h1 { margin: 0 0 6px; font-size: 1.75rem; color: var(--text); }
-    .subtitle { margin: 0 0 18px; color: var(--cyan); font-weight: 600; font-size: 0.95rem; }
-    .card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 20px;
-      margin-bottom: 16px;
+    .topbar {
+      position: sticky; top: 0; z-index: 40;
+      background: var(--surface); border-bottom: 1px solid var(--border);
     }
-    h2 { margin-top: 0; color: var(--cyan); font-size: 1.15rem; }
-    ul { padding-left: 20px; color: var(--muted); }
-    li { margin-bottom: 8px; }
-    a { color: var(--cyan); text-decoration: none; }
-    .btn-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
-    .btn {
-      display: inline-block;
-      padding: 10px 16px;
-      border-radius: 10px;
-      border: 1px solid var(--cyan);
-      color: var(--cyan);
-      font-weight: 600;
+    .topbar-inner {
+      max-width: 980px; margin: 0 auto; padding: 12px 16px;
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
     }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+    .brand-svg {
+      width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--border-strong);
+      background: linear-gradient(135deg, #07223a, #0e4a6b); display: flex; align-items: center; justify-content: center; color: #22d3ee;
+    }
+    .brand-title { font-weight: 700; font-size: 1rem; display: block; }
+    .brand-sub { font-size: 0.68rem; color: var(--cyan); display: block; letter-spacing: 0.04em; }
+    .nav-links { display: flex; flex-wrap: wrap; gap: 6px; }
+    .nav-links a {
+      padding: 6px 12px; border-radius: 999px; font-size: 0.85rem; font-weight: 600;
+      color: var(--muted); text-decoration: none; border: 1px solid transparent;
+    }
+    .nav-links a.active { color: var(--cyan); background: rgba(34, 211, 238, 0.12); border-color: var(--border-strong); }
+    .icon-btn {
+      cursor: pointer; padding: 6px 11px; border-radius: 999px; border: 1px solid var(--border);
+      background: var(--surface-elevated); color: var(--text); font-size: 0.8rem; font-weight: 600;
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
+    .hero, .card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 22px; margin-bottom: 16px;
+    }
+    .badge {
+      display: inline-block; font-size: 0.72rem; font-weight: 700; color: var(--teal);
+      background: rgba(45, 212, 191, 0.12); border: 1px solid rgba(45, 212, 191, 0.35);
+      padding: 4px 10px; border-radius: 999px; margin-bottom: 10px;
+    }
+    h1 { margin: 0 0 8px; font-size: 1.65rem; }
+    h2 { margin-top: 0; color: var(--cyan); font-size: 1.12rem; }
+    p, li { color: var(--muted); font-size: 0.94rem; }
+    .bento { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .bento .card { margin-bottom: 0; }
+    .cta-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+    .btn-primary {
+      display: inline-block; padding: 10px 16px; border-radius: 10px;
+      background: var(--cyan); color: #031320; font-weight: 700; text-decoration: none; font-size: 0.88rem;
+    }
+    .btn-secondary {
+      display: inline-block; padding: 10px 16px; border-radius: 10px;
+      background: var(--surface-elevated); border: 1px solid var(--border-strong); color: var(--cyan); font-weight: 600; text-decoration: none; font-size: 0.88rem;
+    }
+    code { background: var(--code-bg); color: var(--text); padding: 2px 5px; border-radius: 5px; font-size: 0.84em; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); color: var(--muted); }
+    th { color: var(--cyan); font-size: 0.75rem; text-transform: uppercase; }
+    td strong { color: var(--text); }
+    a { color: var(--cyan); }
   </style>
 </head>
 <body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="index.html">
+        <span class="brand-svg" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 20 8.5 17 20 7 20 4 8.5"/></svg>
+        </span>
+        <div>
+          <span class="brand-title">Aqua AI</span>
+          <span class="brand-sub">TRUST &amp; LEGAL PORTAL</span>
+        </div>
+      </a>
+      <nav class="nav-links" aria-label="Primary Navigation">
+        <a class="active" href="index.html">Overview</a>
+        <a href="privacy.html">Privacy Policy</a>
+        <a href="terms.html">Terms &amp; Conditions</a>
+      </nav>
+      <button class="icon-btn" type="button" id="themeToggle">◐ Theme</button>
+    </div>
+  </header>
+
   <main class="wrap">
-    <nav>
-      <a href="index.html"><strong>Home</strong></a>
-      <a href="privacy.html">Privacy Policy</a>
-      <a href="terms.html">Terms &amp; Conditions</a>
-    </nav>
-    <h1>Aqua AI</h1>
-    <p class="subtitle">Autonomous Android AI Assistant, Workspace Hub &amp; Self-Custodial Multi-Chain Wallet</p>
-    <section class="card">
-      <h2>Overview</h2>
+    <section class="hero">
+      <span class="badge">EFFECTIVE NOV 16, 2026 • GOOGLE PLAY COMPLIANT</span>
+      <h1>Transparent Privacy &amp; Clear Terms</h1>
       <p>
-        Aqua AI (Android package <code>com.aistudio.aquaai.vqrzmn</code>) is a native Android personal AI assistant
-        combining Gemini intelligence, voice conversations, user-controlled live web research, device automation, optional
-        Google Workspace and Google Drive backup tools, and a non-custodial multi-chain cryptocurrency wallet.
+        Aqua AI (<code>com.aistudio.aquaai.vqrzmn</code>) unites Gemini personas, Aqua Launcher, optional Google Workspace
+        automation, and a strictly self-custodial multi-chain crypto wallet.
       </p>
-    </section>
-    <section class="card">
-      <h2>Legal Documentation</h2>
-      <div class="btn-row">
-        <a class="btn" href="privacy.html">Privacy Policy</a>
-        <a class="btn" href="terms.html">Terms &amp; Conditions</a>
+      <div class="cta-row">
+        <a class="btn-primary" href="privacy.html">Privacy Policy →</a>
+        <a class="btn-secondary" href="terms.html">Terms &amp; Conditions</a>
       </div>
     </section>
+
+    <section class="bento">
+      <article class="card">
+        <h2>AI Personas &amp; Tools</h2>
+        <p>Five switchable AI personas plus per-user custom system directives stored locally.</p>
+      </article>
+      <article class="card">
+        <h2>Aqua Launcher &amp; Service</h2>
+        <p>Installed apps stay on-device; optional Foreground Service shows a persistent status notification.</p>
+      </article>
+      <article class="card">
+        <h2>Google API Limited Use</h2>
+        <p>Workspace &amp; Drive scopes act strictly on request—never sold or used for advertising.</p>
+      </article>
+      <article class="card">
+        <h2>On-Device Wallet Vault</h2>
+        <p>BIP-39 seeds and PINs remain encrypted inside Android Keystore AES-256-GCM storage.</p>
+      </article>
+    </section>
+
+    <section class="card">
+      <h2>Data Safety Summary</h2>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>Category</th><th>Storage</th><th>User Control</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Google Profile</strong></td><td>Firebase Auth / Firestore</td><td>Sign out or email for deletion</td></tr>
+            <tr><td><strong>Chats &amp; Memories</strong></td><td>User Firestore &amp; optional Drive</td><td>Delete or export Markdown/JSON</td></tr>
+            <tr><td><strong>Wallet Keys &amp; PIN</strong></td><td>Device Android Keystore only</td><td>PIN/Biometric &amp; Emergency Lock</td></tr>
+            <tr><td><strong>Launcher Apps</strong></td><td>Device memory only</td><td>Revoke Home role anytime</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-bottom:0;margin-top:12px;">Developer Support: <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a></p>
+    </section>
   </main>
+  <script>
+    (function () {
+      const root = document.documentElement;
+      const btn = document.getElementById("themeToggle");
+      if (btn) {
+        btn.addEventListener("click", () => {
+          const next = root.getAttribute("data-theme") === "light" ? "dark" : "light";
+          root.setAttribute("data-theme", next);
+          btn.textContent = next === "light" ? "☾ Dark" : "☀ Light";
+        });
+      }
+    })();
+  </script>
 </body>
 </html>

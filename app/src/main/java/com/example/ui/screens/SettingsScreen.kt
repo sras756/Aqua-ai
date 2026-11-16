@@ -9,6 +9,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -35,16 +38,20 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Policy
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SettingsApplications
 import androidx.compose.material3.Button
@@ -82,6 +89,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -131,6 +139,21 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
 
     var brightnessSlider by remember { mutableFloatStateOf(75f) }
     var activeLegalDialog by remember { mutableStateOf<String?>(null) }
+
+    val exportDiagnosticsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/markdown")
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                val report = viewModel.buildSystemDiagnosticsReport()
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(report.toByteArray(Charsets.UTF_8))
+                }
+            }.onSuccess {
+                viewModel.copyToClipboard("Aqua Diagnostics", "Saved diagnostic report to Markdown.")
+            }
+        }
+    }
 
     val micAndNotifLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -733,6 +756,16 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                                 Spacer(Modifier.width(6.dp))
                                 Text("Open Android App Permissions", color = c.accentCyan)
                             }
+                            OutlinedButton(
+                                onClick = { exportDiagnosticsLauncher.launch("aqua-diagnostics.md") },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("settings_export_diagnostics_button")
+                            ) {
+                                Icon(Icons.Filled.FileDownload, contentDescription = null, tint = c.accentTeal, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Export Live System Diagnostics (.md)", color = c.accentTeal)
+                            }
                         }
                     }
                 }
@@ -750,7 +783,7 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                                 Text("Legal, Privacy Policy & Terms", style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
                             }
                             Text(
-                                text = "Review how Aqua AI handles Google account data, Gemini AI requests, and non-custodial wallet keys, along with our Terms & Conditions.",
+                                text = "Browse our redesigned Trust Portal, Privacy Policy, Google Limited Use disclosures, and self-custodial Wallet Terms (updated Nov 16, 2026).",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = c.textMuted
                             )
@@ -779,6 +812,16 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                                     Text("Terms & Conditions", color = c.accentCyan)
                                 }
                             }
+                            OutlinedButton(
+                                onClick = { activeLegalDialog = "index" },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("settings_legal_portal_button")
+                            ) {
+                                Icon(Icons.Filled.Language, contentDescription = null, tint = c.accentTeal, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Open Legal & Data Safety Portal", color = c.accentTeal)
+                            }
                         }
                     }
                 }
@@ -793,67 +836,93 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                 "terms" -> "https://sras756.github.io/aqua-ai/terms.html"
                 else -> "https://sras756.github.io/aqua-ai/privacy.html"
             }
+            val assetUrl = when (activeDoc) {
+                "index" -> "file:///android_asset/legal/index.html"
+                "terms" -> "file:///android_asset/legal/terms.html"
+                else -> "file:///android_asset/legal/privacy.html"
+            }
             var copiedFeedback by remember(activeDoc) { mutableStateOf(false) }
+            var useWebViewMode by remember { mutableStateOf(false) }
+            var clauseFilter by remember(activeDoc) { mutableStateOf("") }
 
             val sections: List<Pair<String, String>> = remember(activeDoc) {
                 when (activeDoc) {
                     "index" -> listOf(
                         "Aqua AI — Package: com.aistudio.aquaai.vqrzmn" to
-                            "Autonomous Android AI Assistant, Workspace Hub & Self-Custodial Multi-Chain Crypto Wallet.",
-                        "Overview" to
-                            "Aqua AI is a native Android personal AI assistant combining Gemini intelligence, voice conversations, user-controlled live web research, device automation, optional Google Workspace and Google Drive backup tools, and a non-custodial multi-chain cryptocurrency wallet.",
+                            "Trust & Legal Portal (Effective Nov 16, 2026) • Autonomous Android AI Assistant, Aqua Launcher, Workspace Hub & Self-Custodial Multi-Chain Crypto Wallet.",
+                        "Data Safety Summary" to
+                            "• Google Account Profile: Used strictly for Firebase Authentication & per-user Firestore isolation.\n" +
+                            "• AI Chats & Memories: User-scoped Firestore records; exportable anytime as Markdown (.md) or JSON.\n" +
+                            "• Wallet Keys & PIN: Created locally with OS SecureRandom & stored only in Android Keystore AES-256-GCM.\n" +
+                            "• Installed Apps & Telemetry: Launcher package lists and RAM/battery metrics remain strictly on-device.",
                         "Core Capabilities" to
-                            "• Gemini AI & Live Web Access: Multimodal reasoning, live web search, webpage reading, and public HTTP API inspection governed by your in-app toggles.\n" +
-                            "• Google Workspace & Drive (Optional): Connects to Gmail, Calendar, Contacts, Sheets, Forms, Chat, and Google Drive strictly for user-requested actions and conversation backups.\n" +
-                            "• Self-Custodial Crypto Wallet: Supports Ethereum, BNB Smart Chain, Polygon, Base, Arbitrum, Solana, and Bitcoin using local OS randomness and Android Keystore-backed encrypted key storage.",
+                            "• Gemini Personas & Directives: Autonomous, Voice Concise, Deep Analyst, Device Power & On-Chain Pro.\n" +
+                            "• Aqua Launcher & Priority Service: Genuine Android HOME experience and opt-in foreground status notification.\n" +
+                            "• Google Workspace & Drive (Optional): Connects strictly on explicit user consent with Limited Use compliance.",
                         "Support" to
-                            "Developer support & privacy inquiries: srasmarkhor7289@gmail.com"
+                            "Developer support & data deletion requests: srasmarkhor7289@gmail.com"
                     )
                     "terms" -> listOf(
-                        "Effective Date: November 14, 2026" to
+                        "Effective Date: November 16, 2026" to
                             "App Package: com.aistudio.aquaai.vqrzmn | Developer Contact: srasmarkhor7289@gmail.com",
                         "1. Acceptance of Terms" to
                             "By downloading, accessing, or using Aqua AI, you agree to be bound by these Terms & Conditions and our Privacy Policy. If you do not agree, discontinue using the application.",
-                        "2. AI Assistant, Web Tools & External Actions" to
-                            "• Aqua AI uses generative AI and optional connected tools (web search, webpage inspection, device controls, and Google Workspace) to assist with your requests.\n" +
-                            "• AI outputs, web summaries, and research notes may occasionally contain errors or outdated information; you remain responsible for reviewing critical information before acting on it.\n" +
-                            "• High-impact actions (such as sending emails/messages, posting HTTP mutations, modifying wallet vaults/contacts, or signing blockchain transactions) present confirmation prompts that require your explicit review and approval.",
-                        "3. Self-Custodial Wallet & Financial Disclaimers" to
-                            "• Non-Custodial Software: Aqua Wallet is purely self-custodial software. You alone control your recovery phrases (mnemonics), private keys, PINs, and device security.\n" +
-                            "• No Recovery Guarantee: The developer does not store or have access to your recovery phrases, private keys, or PINs and cannot recover lost funds or credentials.\n" +
-                            "• Irreversible Blockchain Transactions: Digital asset transfers and smart-contract interactions (including ERC-20 approvals/revocations) are irreversible once broadcast. Always verify recipient addresses, network selection, gas fees, and risk warnings before authorizing signing.\n" +
-                            "• Not Financial Advice: Portfolio analytics, token information, and CoinGecko market data displayed inside Aqua AI are informational only and do not constitute financial, investment, legal, or tax advice.",
-                        "4. Third-Party Services" to
-                            "Aqua AI integrates with external providers including Google (Firebase, Google Sign-In, Google Workspace/Drive), public blockchain RPC nodes, explorers, and CoinGecko. Availability and accuracy of third-party services are subject to those providers' uptime and terms.",
-                        "5. Acceptable Use" to
-                            "You agree not to misuse Aqua AI to violate applicable laws, infringe intellectual property rights, distribute malware, bypass rate limits, or attempt unauthorized access to external accounts, networks, or APIs.",
-                        "6. Disclaimer of Warranties & Limitation of Liability" to
-                            "Aqua AI is provided on an \"as is\" and \"as available\" basis without warranties of any kind, express or implied. To the fullest extent permitted by applicable law, the developer shall not be liable for any indirect, incidental, special, consequential, or financial damages arising from your use of the application.",
-                        "7. Changes & Contact" to
-                            "We reserve the right to update these Terms & Conditions from time to time. Continued use after updates become effective constitutes acceptance. Contact srasmarkhor7289@gmail.com with any questions."
+                        "2. AI Assistant, Personas & Supervision" to
+                            "• Aqua AI uses generative AI, custom user directives, web search, webpage inspection, and connected tools.\n" +
+                            "• Generative outputs may occasionally contain inaccuracies; verify critical code, financial, or legal details independently.\n" +
+                            "• High-impact actions (sending emails/messages, HTTP writes, wallet contact edits, or signing blockchain transactions) require your explicit modal approval.",
+                        "3. Aqua Launcher & Foreground Service Operation" to
+                            "Default Home selection and background voice/task prioritization are strictly optional, display a persistent Android foreground notification when active, and remain reversible anytime.",
+                        "4. Self-Custodial Wallet & Financial Disclaimers" to
+                            "• Non-Custodial Software: Aqua Wallet is purely self-custodial software. You alone control recovery phrases (mnemonics), private keys, PINs, and device security.\n" +
+                            "• No Recovery Guarantee: The developer does not store or have access to your recovery phrases, private keys, or PINs and cannot recover lost funds.\n" +
+                            "• Irreversible Blockchain Transactions: Digital asset transfers and smart-contract interactions (including ERC-20 approvals/revocations) are irreversible once broadcast.\n" +
+                            "• Not Financial Advice: Portfolio analytics and CoinGecko market data are informational only.",
+                        "5. Third-Party Services" to
+                            "Integrations with Google (Firebase, Workspace, Drive), Gemini APIs, public blockchain RPC nodes, explorers, and CoinGecko depend on those third parties' uptime and terms.",
+                        "6. Imported Skills & Acceptable Use" to
+                            "Declarative YAML, JSON, and Markdown skills are checked against executable code payloads; do not import untrusted instructions or misuse Aqua AI to violate laws or rate limits.",
+                        "7. Disclaimer of Warranties & Limitation of Liability" to
+                            "Aqua AI is provided on an \"as is\" and \"as available\" basis without warranties of any kind. To the fullest extent permitted by law, the developer is not liable for indirect, incidental, consequential, or digital-asset damages.",
+                        "8. Changes & Contact" to
+                            "Continued use after revised terms take effect constitutes acceptance. Contact srasmarkhor7289@gmail.com with questions."
                     )
                     else -> listOf(
-                        "Effective Date: November 14, 2026" to
+                        "Effective Date: November 16, 2026" to
                             "App Package: com.aistudio.aquaai.vqrzmn | Developer Contact: srasmarkhor7289@gmail.com",
                         "1. Information We Access & Process" to
-                            "• Account Information: When you sign in with Google via Firebase Authentication, Aqua AI receives your Firebase user ID, display name, email address, and profile photo URL to sync your preferences, memories, and chat sessions.\n" +
-                            "• AI Prompts & Attachments: Messages, voice transcripts, images, and tool outputs you submit to the assistant are processed via Gemini / Firebase AI Logic to generate responses.\n" +
-                            "• Live Web & Network Requests: When Full Internet Access is enabled, search queries and URLs you ask Aqua AI to inspect are fetched directly over HTTPS without advertising trackers.\n" +
-                            "• Device Permissions (Opt-In): Camera (QR scanning and photo capture), Microphone (voice commands and wake-word service), Biometrics (local wallet unlock/signing), Coarse Location (optional Maps context), and Alarms (when requested).",
-                        "2. Google Workspace & Google Drive Data (Limited Use Disclosure)" to
-                            "• Google Drive (drive.appdata, drive.file): Used strictly to back up and restore your Aqua AI conversation history and memory snapshots inside your own Google Drive account.\n" +
-                            "• Google Workspace (Gmail, Calendar, Contacts, Sheets, Forms, Chat): Accessed strictly on your explicit request to read, compose, schedule, inspect, or send items inside your connected Google account. Outbound sends require your confirmation.\n" +
-                            "Aqua AI's use and transfer of information received from Google APIs adheres strictly to the Google API Services User Data Policy, including Limited Use requirements. Google user data is never sold, shared with brokers, or used for ads or generalized model training.",
-                        "3. Self-Custodial Crypto Wallet & AI Wallet Controls" to
-                            "• Local Key Custody: BIP-39 recovery phrases and private keys for Aqua Wallet are generated on-device using OS secure randomness and stored locally using Android Keystore-backed AES encryption. Private keys, seeds, and PINs are NEVER transmitted to Firebase, AI models, or third parties.\n" +
-                            "• AI Wallet Boundary: You control Wallet Read Permission and Wallet Write Permission through switches in Settings and Wallet. Every transaction, revoke, vault/account creation, or contact edit requires your explicit approval and PIN/Biometric unlock when enabled.",
-                        "4. Third-Party Blockchain & Market Services" to
-                            "When checking balances, broadcasting signed transactions, resolving ENS names, or viewing prices, Aqua AI communicates directly with public blockchain RPC endpoints and CoinGecko market APIs using only public addresses or coin IDs.",
-                        "5. Data Storage, Security, Retention & Deletion" to
-                            "Cloud conversations and memories are stored in user-scoped Firebase Firestore records isolated to your account. Local wallet vaults remain encrypted in private device storage. You may sign out, clear conversations, delete local wallets, revoke Google OAuth access in your Google Account settings, or email srasmarkhor7289@gmail.com for complete data deletion.",
-                        "6. Children's Privacy & Updates" to
-                            "Aqua AI is not intended for children under 13 (or the applicable minimum age in your jurisdiction). Material policy updates will be reflected by an updated Effective Date."
+                            "• Account Information: Google Sign-In via Firebase Authentication provides Firebase UID, display name, email, and avatar for user-scoped sync.\n" +
+                            "• User Prompts & Attachments: Messages, voice transcripts, images, and SAF files selected by you are processed via Gemini when submitted.\n" +
+                            "• Live Web Requests: When Full Internet Access is enabled, search queries and public URLs are fetched over HTTPS without ad trackers.\n" +
+                            "• On-Device Session Telemetry: Real battery % and RAM % metrics plotted inside Core/Hub remain strictly on-device during your session.",
+                        "2. AI Personas, Directives & Gemini Processing" to
+                            "Your chosen AI Persona, pinned items, and custom system directive stay saved per user in local private storage and shape only requests you initiate.",
+                        "3. Permissions, Aqua Launcher & Foreground Service" to
+                            "• Opt-In Runtime Permissions: Microphone, Camera, Biometrics, Coarse Location, and Alarms.\n" +
+                            "• Zero Broad Storage Scans: Uses Android Photo Picker & SAF rather than broad media-library storage permissions.\n" +
+                            "• Foreground Service & Launcher: Background prioritization displays a persistent notification with pause/stop actions; discovered installed apps stay on-device.",
+                        "4. Google Workspace & Google Drive Data (Limited Use)" to
+                            "• Google Drive (drive.appdata, drive.file): Back up and restore your Aqua AI chats and memories inside your own Drive account.\n" +
+                            "• Workspace (Gmail, Calendar, Contacts, Sheets, Forms, Chat): Accessed strictly on request; outbound sends require approval.\n" +
+                            "Adheres strictly to the Google API Services User Data Policy (Limited Use). Google user data is never sold, shared for ads, or used for generalized AI training.",
+                        "5. Self-Custodial Crypto Wallet & AI Boundary Controls" to
+                            "• Local Key Custody: BIP-39 seeds and private keys are generated using OS SecureRandom and encrypted inside Android Keystore AES-256-GCM. Keys and PINs NEVER leave your device.\n" +
+                            "• AI Boundary: Wallet Read and Wallet Write permissions are governed separately in Settings/Wallet with PIN/Biometric & confirmation gates.",
+                        "6. Storage & Markdown / JSON Portability" to
+                            "Cloud chats and memories are isolated in per-user Firebase Firestore rules. Export conversations anytime as Markdown (.md) or JSON (.json).",
+                        "7. Third-Party Blockchain & Market Services" to
+                            "Public RPC endpoints and CoinGecko receive only public addresses, signed raw payloads, or coin IDs when checking balances or prices.",
+                        "8. Retention, Deletion, Children's Privacy & Updates" to
+                            "Delete chats, memories, or wallets in-app, revoke Google OAuth in Google Account settings, or email srasmarkhor7289@gmail.com for complete deletion. Not intended for children under 13."
                     )
+                }
+            }
+
+            val visibleSections = remember(sections, clauseFilter) {
+                val q = clauseFilter.trim().lowercase()
+                if (q.isEmpty()) sections
+                else sections.filter {
+                    it.first.lowercase().contains(q) || it.second.lowercase().contains(q)
                 }
             }
 
@@ -874,7 +943,7 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                     ) {
                         Text(
                             text = when (activeDoc) {
-                                "index" -> "Aqua AI Legal Overview"
+                                "index" -> "Aqua AI Trust Portal"
                                 "terms" -> "Terms & Conditions — Aqua AI"
                                 else -> "Privacy Policy — Aqua AI"
                             },
@@ -893,6 +962,7 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
                             .padding(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -911,34 +981,90 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                             onClick = { activeLegalDialog = "index" },
                             label = { Text("Overview") }
                         )
+                        FilterChip(
+                            selected = useWebViewMode,
+                            onClick = { useWebViewMode = !useWebViewMode },
+                            label = { Text(if (useWebViewMode) "Cards View" else "Web Portal View") },
+                            modifier = Modifier.testTag("legal_toggle_webview_mode")
+                        )
                     }
 
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(sections) { (heading, body) ->
-                            AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
-                                Column(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Text(
-                                        text = heading,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        color = c.accentCyan,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                    Text(
-                                        text = body,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = c.textMuted
-                                    )
+                    if (!useWebViewMode) {
+                        OutlinedTextField(
+                            value = clauseFilter,
+                            onValueChange = { clauseFilter = it },
+                            placeholder = { Text("Filter clauses (e.g. wallet, Drive, delete)...") },
+                            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = c.accentCyan) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = fieldColors,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .testTag("legal_clause_search")
+                        )
+
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(visibleSections) { (heading, body) ->
+                                AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
+                                    Column(
+                                        modifier = Modifier.padding(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = heading,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = c.accentCyan,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            text = body,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = c.textMuted
+                                        )
+                                    }
                                 }
                             }
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                                .border(1.dp, c.borderGlow, RoundedCornerShape(16.dp))
+                        ) {
+                            AndroidView(
+                                factory = { ctx ->
+                                    WebView(ctx).apply {
+                                        @Suppress("SetJavaScriptEnabled")
+                                        getSettings().apply {
+                                            javaScriptEnabled = true
+                                            allowFileAccess = true
+                                        }
+                                        webViewClient = object : WebViewClient() {
+                                            override fun shouldOverrideUrlLoading(
+                                                view: WebView?,
+                                                request: WebResourceRequest?
+                                            ): Boolean {
+                                                val target = request?.url?.toString().orEmpty()
+                                                return !target.startsWith("file:///android_asset/legal/")
+                                            }
+                                        }
+                                        loadUrl(assetUrl)
+                                    }
+                                },
+                                update = { wv ->
+                                    if (wv.url != assetUrl) wv.loadUrl(assetUrl)
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
                         }
                     }
 
@@ -951,19 +1077,32 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                            Text("Public Hosting URL (GitHub Pages)", style = MaterialTheme.typography.labelSmall, color = c.accentCyan)
-                            Text(externalUrl, style = MaterialTheme.typography.bodySmall, color = c.textMuted)
+                            Text("Public Website (GitHub Pages)", style = MaterialTheme.typography.labelSmall, color = c.accentCyan)
+                            Text(externalUrl, style = MaterialTheme.typography.bodySmall, color = c.textMuted, maxLines = 1)
                         }
-                        OutlinedButton(
-                            onClick = {
-                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                cm?.setPrimaryClip(ClipData.newPlainText("Aqua AI Legal URL", externalUrl))
-                                copiedFeedback = true
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            OutlinedButton(
+                                onClick = {
+                                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                    cm?.setPrimaryClip(ClipData.newPlainText("Aqua AI Legal URL", externalUrl))
+                                    copiedFeedback = true
+                                }
+                            ) {
+                                Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(if (copiedFeedback) "Copied" else "Copy", color = c.accentCyan)
                             }
-                        ) {
-                            Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text(if (copiedFeedback) "Copied" else "Copy URL", color = c.accentCyan)
+                            OutlinedButton(
+                                onClick = {
+                                    activeLegalDialog = null
+                                    viewModel.navigateBrowser(externalUrl)
+                                    viewModel.openTab("browser")
+                                }
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = c.accentTeal, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Web", color = c.accentTeal)
+                            }
                         }
                     }
                 }

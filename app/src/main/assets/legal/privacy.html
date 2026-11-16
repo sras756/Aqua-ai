@@ -1,101 +1,200 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Privacy Policy — Aqua AI</title>
   <style>
     :root {
-      --bg: #04111f;
-      --card: #0a1c30;
-      --border: #173759;
+      --bg: #030b16;
+      --bg-grad-1: rgba(34, 211, 238, 0.14);
+      --bg-grad-2: rgba(45, 212, 191, 0.10);
+      --surface: rgba(11, 25, 44, 0.90);
+      --surface-elevated: rgba(16, 36, 62, 0.95);
+      --border: rgba(56, 189, 248, 0.22);
+      --border-strong: rgba(34, 211, 238, 0.45);
       --cyan: #22d3ee;
-      --text: #e6f4ff;
+      --teal: #2dd4bf;
+      --text: #eaf6ff;
       --muted: #93b3cc;
+      --code-bg: rgba(3, 11, 22, 0.72);
+    }
+    html[data-theme="light"] {
+      --bg: #f1f8fe;
+      --bg-grad-1: rgba(14, 165, 233, 0.14);
+      --bg-grad-2: rgba(13, 148, 136, 0.10);
+      --surface: rgba(255, 255, 255, 0.94);
+      --surface-elevated: #e8f4fc;
+      --border: rgba(14, 116, 144, 0.18);
+      --border-strong: rgba(2, 132, 199, 0.45);
+      --cyan: #0284c7;
+      --teal: #0d9488;
+      --text: #092035;
+      --muted: #456580;
+      --code-bg: rgba(224, 242, 254, 0.75);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: var(--bg);
+      background:
+        radial-gradient(800px 480px at 8% -5%, var(--bg-grad-1), transparent 60%),
+        radial-gradient(700px 420px at 95% 12%, var(--bg-grad-2), transparent 60%),
+        var(--bg);
       color: var(--text);
-      line-height: 1.65;
+      line-height: 1.68;
     }
-    .wrap { max-width: 860px; margin: 0 auto; padding: 20px 14px 48px; }
-    nav { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 18px; font-size: 0.95rem; }
-    h1 { color: var(--text); margin-top: 0; margin-bottom: 6px; font-size: 1.55rem; }
-    h2 { color: var(--cyan); margin-top: 24px; font-size: 1.1rem; }
-    p, li { color: var(--muted); }
-    ul { padding-left: 20px; }
+    .topbar { position: sticky; top: 0; z-index: 40; background: var(--surface); border-bottom: 1px solid var(--border); }
+    .topbar-inner {
+      max-width: 980px; margin: 0 auto; padding: 12px 16px;
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+    .brand-svg {
+      width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--border-strong);
+      background: linear-gradient(135deg, #07223a, #0e4a6b); display: flex; align-items: center; justify-content: center; color: #22d3ee;
+    }
+    .brand-title { font-weight: 700; font-size: 1rem; display: block; }
+    .brand-sub { font-size: 0.68rem; color: var(--cyan); display: block; }
+    .nav-links { display: flex; flex-wrap: wrap; gap: 6px; }
+    .nav-links a { padding: 6px 12px; border-radius: 999px; font-size: 0.85rem; font-weight: 600; color: var(--muted); text-decoration: none; border: 1px solid transparent; }
+    .nav-links a.active { color: var(--cyan); background: rgba(34, 211, 238, 0.12); border-color: var(--border-strong); }
+    .icon-btn { cursor: pointer; padding: 6px 11px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-elevated); color: var(--text); font-size: 0.8rem; font-weight: 600; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 20px 14px 48px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 20px; margin-bottom: 14px; }
+    .card.hidden { display: none; }
+    h1 { margin: 0 0 8px; font-size: 1.5rem; }
+    h2 { color: var(--cyan); margin: 0 0 10px; font-size: 1.1rem; }
+    p, li { color: var(--muted); font-size: 0.94rem; }
+    strong { color: var(--text); }
+    ul { padding-left: 18px; margin-bottom: 0; }
     li { margin-bottom: 8px; }
-    .card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 20px;
-    }
-    a { color: var(--cyan); text-decoration: none; }
-    code { color: var(--text); }
+    code { background: var(--code-bg); color: var(--text); padding: 2px 5px; border-radius: 5px; font-size: 0.84em; }
+    a { color: var(--cyan); }
+    .search-box { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 8px 12px; margin-bottom: 14px; }
+    .search-box input { flex: 1; border: none; background: transparent; color: var(--text); font-size: 0.92rem; outline: none; }
+    .callout { margin-top: 10px; padding: 12px 14px; border-radius: 12px; background: rgba(45, 212, 191, 0.10); border: 1px solid rgba(45, 212, 191, 0.32); color: var(--text); font-size: 0.9rem; }
   </style>
 </head>
 <body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="index.html">
+        <span class="brand-svg" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 20 8.5 17 20 7 20 4 8.5"/></svg>
+        </span>
+        <div>
+          <span class="brand-title">Aqua AI</span>
+          <span class="brand-sub">PRIVACY POLICY</span>
+        </div>
+      </a>
+      <nav class="nav-links" aria-label="Primary Navigation">
+        <a href="index.html">Overview</a>
+        <a class="active" href="privacy.html">Privacy Policy</a>
+        <a href="terms.html">Terms &amp; Conditions</a>
+      </nav>
+      <button class="icon-btn" type="button" id="themeToggle">◐ Theme</button>
+    </div>
+  </header>
+
   <main class="wrap">
-    <nav>
-      <a href="index.html">Home</a>
-      <a href="privacy.html"><strong>Privacy Policy</strong></a>
-      <a href="terms.html">Terms &amp; Conditions</a>
-    </nav>
-
-    <div class="card">
+    <section class="card">
       <h1>Privacy Policy for Aqua AI</h1>
-      <p><strong>Effective Date:</strong> November 14, 2026 &nbsp;|&nbsp; <strong>App Package:</strong> <code>com.aistudio.aquaai.vqrzmn</code></p>
-      <p><strong>Developer Contact:</strong> <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a></p>
+      <p style="margin-bottom:4px;"><strong>Effective Date:</strong> November 16, 2026 &nbsp;|&nbsp; <strong>App Package:</strong> <code>com.aistudio.aquaai.vqrzmn</code></p>
+      <p style="margin:0;"><strong>Developer Contact:</strong> <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a></p>
+    </section>
 
+    <div class="search-box">
+      <span style="color:var(--cyan);font-weight:700;">⌕</span>
+      <input id="clauseSearch" type="search" placeholder="Filter privacy clauses (e.g. wallet, microphone, Drive)..." />
+      <span id="searchCount" style="font-size:0.78rem;color:var(--cyan);">8 / 8</span>
+    </div>
+
+    <article class="card clause">
       <h2>1. Information We Access and Process</h2>
       <ul>
-        <li><strong>Account Information:</strong> When you sign in with Google via Firebase Authentication, Aqua AI receives your Firebase user ID, display name, email address, and profile photo URL to sync your preferences, memories, and chat sessions.</li>
-        <li><strong>AI Prompts &amp; Attachments:</strong> Messages, voice transcripts, images, and tool outputs you submit to the assistant are processed via Gemini / Firebase AI Logic to generate responses.</li>
-        <li><strong>Live Web &amp; Network Requests:</strong> When <em>Full Internet Access</em> is enabled, search queries and URLs you ask Aqua AI to inspect are fetched directly over HTTPS without advertising trackers.</li>
-        <li><strong>Device Permissions (Opt-In):</strong> Camera (QR scanning and photo capture), Microphone (voice commands and optional wake-word service), Biometrics (local wallet unlock and transaction signing approval), Coarse Location (optional local context), and Alarms (when explicitly requested).</li>
+        <li><strong>Account Information:</strong> Google Sign-In via Firebase Authentication provides your UID, display name, email, and avatar solely to scope your account.</li>
+        <li><strong>AI Prompts &amp; Attachments:</strong> Messages, voice transcripts, images, and SAF files you submit are sent to Gemini / Firebase AI Logic when you trigger a request.</li>
+        <li><strong>Live Web Requests:</strong> Queries and public URLs fetched when <em>Full Internet Access</em> is enabled carry zero ad trackers.</li>
+        <li><strong>On-Device Session Telemetry:</strong> Real battery % and RAM % metrics plotted in Core/Hub remain strictly local to your active session.</li>
       </ul>
+    </article>
 
-      <h2>2. Google Workspace &amp; Google Drive Data (Limited Use Disclosure)</h2>
-      <p>Aqua AI only requests Google Drive or Google Workspace OAuth scopes when you explicitly connect those integrations:</p>
+    <article class="card clause">
+      <h2>2. AI Personas &amp; Custom Directives</h2>
+      <p>Your chosen AI Persona, pinned routines, and custom system directives stay stored locally per user on-device and shape only prompts you send.</p>
+    </article>
+
+    <article class="card clause">
+      <h2>3. Permissions, Aqua Launcher &amp; Foreground Service</h2>
       <ul>
-        <li><strong>Google Drive (<code>drive.appdata</code>, <code>drive.file</code>):</strong> Used strictly to back up and restore your Aqua AI conversation history and memory snapshots inside your own Google Drive account.</li>
-        <li><strong>Google Workspace (Gmail, Calendar, Contacts, Sheets, Forms, Chat):</strong> Accessed strictly on your explicit request to read, compose, schedule, inspect, or send items inside your connected Google account. Outbound emails and messages require your confirmation.</li>
+        <li><strong>Runtime Permissions:</strong> Opt-in <code>RECORD_AUDIO</code>, <code>CAMERA</code>, <code>USE_BIOMETRIC</code>, <code>ACCESS_COARSE_LOCATION</code>, and alarms.</li>
+        <li><strong>Zero Broad Storage Scans:</strong> Uses Android Photo Picker and SAF rather than broad media-library storage permissions.</li>
+        <li><strong>Foreground Service &amp; Launcher:</strong> Persistent notification appears whenever background wake-word or prioritization is active; discovered installed apps stay on-device.</li>
       </ul>
-      <p>
-        Aqua AI's use and transfer to any other app of information received from Google APIs adheres strictly to the
-        Google API Services User Data Policy, including the Limited Use requirements. Google user data is never sold, shared with data brokers, used for advertising, or used to train generalized AI/ML models.
-      </p>
+    </article>
 
-      <h2>3. Self-Custodial Crypto Wallet &amp; AI Wallet Controls</h2>
+    <article class="card clause">
+      <h2>4. Google Workspace &amp; Google Drive (Limited Use)</h2>
       <ul>
-        <li><strong>Local Key Custody:</strong> Recovery phrases (BIP-39 mnemonics) and private keys for Aqua Wallet are generated on-device using operating-system secure randomness and stored locally using Android Keystore-backed AES encryption. Private keys, seeds, and PINs are <strong>never</strong> transmitted to Firebase, AI models, analytics services, or third-party servers.</li>
-        <li><strong>AI Wallet Boundary:</strong> You control whether Aqua AI has Wallet Read Permission or Wallet Write Permission through toggles in Settings and Wallet. Every transaction, allowance revoke, vault/account creation, or contact modification requires your explicit authorization and PIN/Biometric unlock when enabled.</li>
+        <li><strong>Google Drive (<code>drive.appdata</code>, <code>drive.file</code>):</strong> Conversation &amp; memory backups inside your personal Drive.</li>
+        <li><strong>Workspace (Gmail, Calendar, Contacts, Sheets, Forms, Chat):</strong> Accessed strictly on explicit request; outbound sends require approval.</li>
       </ul>
+      <div class="callout">
+        Adheres strictly to the Google API Services User Data Policy (Limited Use). Google user data is never sold, shared for ads, or used to train generalized AI models.
+      </div>
+    </article>
 
-      <h2>4. Third-Party Blockchain &amp; Market Services</h2>
-      <p>
-        When checking balances, broadcasting signed transactions, resolving ENS names, or viewing prices, Aqua AI communicates directly with public blockchain RPC endpoints and CoinGecko market APIs using only public wallet addresses or coin identifiers.
-      </p>
+    <article class="card clause">
+      <h2>5. Self-Custodial Wallet &amp; AI Controls</h2>
+      <ul>
+        <li><strong>Local Key Custody:</strong> BIP-39 seeds and private keys remain encrypted locally via Android Keystore AES-256-GCM and are never transmitted externally.</li>
+        <li><strong>AI Boundary:</strong> Separate Wallet Read &amp; Wallet Write switches in Settings/Wallet govern every agent action behind PIN/Biometric &amp; approval prompts.</li>
+      </ul>
+    </article>
 
-      <h2>5. Data Storage, Security, Retention &amp; Deletion</h2>
-      <p>
-        Cloud conversations and user memories are stored in user-scoped Firebase Firestore documents isolated to your signed-in account. Local wallet vaults and transaction caches remain encrypted or scoped inside the app's private storage on your device. You may sign out, delete conversations or local wallets, disable AI permissions anytime, revoke Google OAuth access in your Google Account security settings, or request complete account deletion by emailing <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a>.
-      </p>
+    <article class="card clause">
+      <h2>6. Storage &amp; Markdown / JSON Portability</h2>
+      <p>Cloud chats and memories live in user-scoped Firebase Firestore records. You can export conversations anytime as Markdown (<code>.md</code>) or JSON (<code>.json</code>).</p>
+    </article>
 
-      <h2>6. Children's Privacy</h2>
-      <p>
-        Aqua AI is not intended for children under the age of 13 (or the applicable minimum age in your jurisdiction), and we do not knowingly collect personal information from children.
-      </p>
+    <article class="card clause">
+      <h2>7. Blockchain RPCs &amp; CoinGecko APIs</h2>
+      <p>Public RPC endpoints and CoinGecko receive only public addresses, signed raw transactions, or coin identifiers when balances/prices are requested.</p>
+    </article>
 
-      <h2>7. Updates &amp; Contact</h2>
-      <p>
-        We may update this Privacy Policy as features evolve. Material changes will be reflected by an updated Effective Date on this page. Questions or data deletion requests may be sent to <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a>.
-      </p>
-    </div>
+    <article class="card clause">
+      <h2>8. Retention, Deletion, Children &amp; Updates</h2>
+      <p>Delete chats, memories, or local wallets anytime, revoke OAuth in your Google Account, or email <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a> for full account deletion. Not intended for children under 13.</p>
+    </article>
   </main>
+  <script>
+    (function () {
+      const root = document.documentElement;
+      const btn = document.getElementById("themeToggle");
+      if (btn) {
+        btn.addEventListener("click", () => {
+          const next = root.getAttribute("data-theme") === "light" ? "dark" : "light";
+          root.setAttribute("data-theme", next);
+          btn.textContent = next === "light" ? "☾ Dark" : "☀ Light";
+        });
+      }
+      const input = document.getElementById("clauseSearch");
+      const countEl = document.getElementById("searchCount");
+      const cards = Array.from(document.querySelectorAll(".clause"));
+      if (input && countEl) {
+        input.addEventListener("input", () => {
+          const q = input.value.trim().toLowerCase();
+          let shown = 0;
+          cards.forEach((c) => {
+            const match = !q || c.textContent.toLowerCase().includes(q);
+            c.classList.toggle("hidden", !match);
+            if (match) shown++;
+          });
+          countEl.textContent = shown + " / " + cards.length;
+        });
+      }
+    })();
+  </script>
 </body>
 </html>

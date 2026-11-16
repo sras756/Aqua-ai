@@ -1,104 +1,465 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Terms &amp; Conditions — Aqua AI</title>
+  <meta name="description" content="Terms and Conditions governing use of Aqua AI, Aqua Launcher, AI tools, Google Workspace integrations, and the non-custodial wallet." />
   <link rel="icon" type="image/png" href="public/branding/aqua-ai-logo-512.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg: #04111f;
-      --card: #0a1c30;
-      --border: #173759;
+      --bg: #030b16;
+      --bg-grad-1: rgba(34, 211, 238, 0.14);
+      --bg-grad-2: rgba(56, 189, 248, 0.10);
+      --surface: rgba(11, 25, 44, 0.88);
+      --surface-elevated: rgba(16, 36, 62, 0.94);
+      --border: rgba(56, 189, 248, 0.22);
+      --border-strong: rgba(34, 211, 238, 0.45);
       --cyan: #22d3ee;
-      --text: #e6f4ff;
+      --teal: #2dd4bf;
+      --amber: #fbbf24;
+      --text: #eaf6ff;
       --muted: #93b3cc;
+      --code-bg: rgba(3, 11, 22, 0.72);
+      --shadow: 0 20px 50px rgba(0, 0, 0, 0.42);
+    }
+    html[data-theme="light"] {
+      --bg: #f1f8fe;
+      --bg-grad-1: rgba(14, 165, 233, 0.14);
+      --bg-grad-2: rgba(13, 148, 136, 0.10);
+      --surface: rgba(255, 255, 255, 0.94);
+      --surface-elevated: #e8f4fc;
+      --border: rgba(14, 116, 144, 0.18);
+      --border-strong: rgba(2, 132, 199, 0.45);
+      --cyan: #0284c7;
+      --teal: #0d9488;
+      --amber: #b45309;
+      --text: #092035;
+      --muted: #456580;
+      --code-bg: rgba(224, 242, 254, 0.75);
+      --shadow: 0 14px 36px rgba(10, 40, 75, 0.08);
     }
     * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
     body {
       margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: var(--bg);
+      font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background:
+        radial-gradient(900px 520px at 8% -5%, var(--bg-grad-1), transparent 60%),
+        radial-gradient(760px 460px at 95% 12%, var(--bg-grad-2), transparent 60%),
+        var(--bg);
       color: var(--text);
-      line-height: 1.65;
+      line-height: 1.7;
+      min-height: 100vh;
     }
-    .wrap { max-width: 860px; margin: 0 auto; padding: 48px 20px; }
-    nav {
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .topbar-inner {
+      max-width: 1140px;
+      margin: 0 auto;
+      padding: 12px 20px;
       display: flex;
       flex-wrap: wrap;
-      gap: 16px;
-      margin-bottom: 24px;
-      font-size: 0.95rem;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
     }
-    h1 { color: var(--text); margin-top: 0; margin-bottom: 6px; }
-    h2 { color: var(--cyan); margin-top: 28px; font-size: 1.15rem; }
-    p, li { color: var(--muted); }
-    ul { padding-left: 20px; }
-    li { margin-bottom: 8px; }
-    .card {
-      background: var(--card);
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+    .brand-logo { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border-strong); object-fit: cover; }
+    .brand-svg {
+      width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border-strong);
+      background: linear-gradient(135deg, #07223a, #0e4a6b); display: none; align-items: center; justify-content: center; color: #22d3ee;
+    }
+    .brand-title { font-family: "Outfit", sans-serif; font-weight: 700; font-size: 1.05rem; }
+    .brand-sub { font-family: "JetBrains Mono", monospace; font-size: 0.7rem; color: var(--cyan); display: block; }
+    .nav-links { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .nav-links a {
+      padding: 7px 13px; border-radius: 999px; font-size: 0.88rem; font-weight: 600;
+      color: var(--muted); text-decoration: none; border: 1px solid transparent; transition: all 0.18s ease;
+    }
+    .nav-links a:hover { color: var(--text); background: var(--surface-elevated); }
+    .nav-links a.active { color: var(--cyan); background: rgba(34, 211, 238, 0.12); border-color: var(--border-strong); }
+    .controls { display: flex; align-items: center; gap: 8px; }
+    .icon-btn {
+      font-family: inherit; cursor: pointer; padding: 7px 12px; border-radius: 999px;
+      border: 1px solid var(--border); background: var(--surface-elevated); color: var(--text);
+      font-size: 0.82rem; font-weight: 600;
+    }
+    .icon-btn:hover { border-color: var(--border-strong); }
+    .wrap { max-width: 1140px; margin: 0 auto; padding: 32px 20px 64px; }
+    .doc-banner {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 28px;
+      box-shadow: var(--shadow);
+      margin-bottom: 20px;
+    }
+    .badge {
+      display: inline-block;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--cyan);
+      background: rgba(34, 211, 238, 0.12);
+      border: 1px solid var(--border-strong);
+      padding: 4px 12px;
+      border-radius: 999px;
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-family: "Outfit", sans-serif;
+      margin: 0 0 8px;
+      font-size: clamp(1.75rem, 3vw, 2.35rem);
+      line-height: 1.2;
+    }
+    .meta-chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; align-items: center; }
+    .meta-chip {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.78rem;
+      padding: 5px 11px;
+      border-radius: 10px;
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .meta-chip strong { color: var(--text); }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+    .summary-card {
+      background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 16px;
-      padding: 28px;
+      padding: 16px;
     }
-    a { color: var(--cyan); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    code { color: var(--text); }
+    .summary-card .label {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.72rem;
+      color: var(--cyan);
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .summary-card p { margin: 0; font-size: 0.87rem; color: var(--muted); }
+    .layout {
+      display: grid;
+      grid-template-columns: 270px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+    @media (max-width: 880px) {
+      .layout { grid-template-columns: 1fr; }
+      .toc { position: static !important; }
+    }
+    .toc {
+      position: sticky;
+      top: 82px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 18px;
+    }
+    .toc-title {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.76rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--cyan);
+      margin: 0 0 10px;
+    }
+    .toc a {
+      display: block;
+      padding: 7px 10px;
+      border-radius: 10px;
+      font-size: 0.86rem;
+      color: var(--muted);
+      text-decoration: none;
+      margin-bottom: 2px;
+    }
+    .toc a:hover { background: rgba(34, 211, 238, 0.12); color: var(--cyan); font-weight: 600; }
+    .search-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 10px 14px;
+      margin-bottom: 16px;
+    }
+    .search-box input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.94rem;
+      outline: none;
+    }
+    .search-count { font-family: "JetBrains Mono", monospace; font-size: 0.76rem; color: var(--cyan); }
+    .clause-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow);
+      scroll-margin-top: 86px;
+    }
+    .clause-card.hidden { display: none; }
+    .clause-card h2 { font-family: "Outfit", sans-serif; color: var(--cyan); margin: 0 0 12px; font-size: 1.22rem; }
+    .clause-card p, .clause-card li { color: var(--muted); font-size: 0.96rem; }
+    .clause-card ul { padding-left: 20px; margin-bottom: 0; }
+    .clause-card li { margin-bottom: 9px; }
+    .clause-card strong { color: var(--text); }
+    .warn-callout {
+      margin-top: 12px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: rgba(251, 191, 36, 0.10);
+      border: 1px solid rgba(251, 191, 36, 0.35);
+      color: var(--text);
+      font-size: 0.92rem;
+    }
+    code {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.84em;
+      background: var(--code-bg);
+      color: var(--text);
+      padding: 2px 6px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+    a { color: var(--cyan); }
+    footer {
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+    @media print {
+      .topbar, .toc, .search-box, .controls { display: none !important; }
+      .layout { grid-template-columns: 1fr; }
+      body { background: #fff !important; color: #111 !important; }
+      .clause-card, .doc-banner, .summary-card { background: #fff !important; border: 1px solid #ccc !important; box-shadow: none !important; }
+      p, li, .summary-card p, .meta-chip { color: #333 !important; }
+      h1, h2, strong { color: #000 !important; }
+    }
   </style>
 </head>
 <body>
-  <main class="wrap">
-    <nav aria-label="Primary Navigation">
-      <a href="index.html">Home</a>
-      <a href="privacy.html">Privacy Policy</a>
-      <a href="terms.html"><strong>Terms &amp; Conditions</strong></a>
-    </nav>
-
-    <div class="card">
-      <h1>Terms &amp; Conditions for Aqua AI</h1>
-      <p><strong>Effective Date:</strong> November 14, 2026 &nbsp;|&nbsp; <strong>App Package:</strong> <code>com.aistudio.aquaai.vqrzmn</code></p>
-      <p><strong>Developer Contact:</strong> <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a></p>
-
-      <h2>1. Acceptance of Terms</h2>
-      <p>
-        By downloading, accessing, or using Aqua AI, you agree to be bound by these Terms &amp; Conditions and our <a href="privacy.html">Privacy Policy</a>. If you do not agree, discontinue using the application.
-      </p>
-
-      <h2>2. AI Assistant, Web Tools &amp; External Actions</h2>
-      <ul>
-        <li>Aqua AI uses generative AI and optional connected tools (web search, webpage inspection, device controls, and Google Workspace) to assist with your requests.</li>
-        <li>AI outputs, web summaries, and research notes may occasionally contain errors or outdated information; you remain responsible for reviewing critical information before acting on it.</li>
-        <li>High-impact actions (such as sending emails/messages, posting HTTP mutations, or preparing blockchain transactions) present confirmation prompts that require your explicit review and approval.</li>
-      </ul>
-
-      <h2>3. Self-Custodial Wallet &amp; Financial Disclaimers</h2>
-      <ul>
-        <li><strong>Non-Custodial Software:</strong> Aqua Wallet is purely self-custodial software. You alone control your recovery phrases (mnemonics), private keys, PINs, and device security.</li>
-        <li><strong>No Recovery Guarantee:</strong> The developer does not store or have access to your recovery phrases, private keys, or PINs and cannot recover lost funds or credentials.</li>
-        <li><strong>Irreversible Blockchain Transactions:</strong> Digital asset transfers and smart-contract interactions (including ERC-20 approvals/revocations) are irreversible once broadcast. Always verify recipient addresses, network selection, gas fees, and risk warnings before authorizing signing.</li>
-        <li><strong>Not Financial Advice:</strong> Portfolio analytics, token information, and CoinGecko market data displayed inside Aqua AI are informational only and do not constitute financial, investment, legal, or tax advice.</li>
-      </ul>
-
-      <h2>4. Third-Party Services</h2>
-      <p>
-        Aqua AI integrates with external providers including Google (Firebase, Google Sign-In, Google Workspace/Drive), public blockchain RPC nodes, explorers, and CoinGecko. Availability and accuracy of third-party services are subject to those providers' uptime and terms.
-      </p>
-
-      <h2>5. Acceptable Use</h2>
-      <p>
-        You agree not to misuse Aqua AI to violate applicable laws, infringe intellectual property rights, distribute malware, bypass rate limits, or attempt unauthorized access to external accounts, networks, or APIs.
-      </p>
-
-      <h2>6. Disclaimer of Warranties &amp; Limitation of Liability</h2>
-      <p>
-        Aqua AI is provided on an &ldquo;as is&rdquo; and &ldquo;as available&rdquo; basis without warranties of any kind, express or implied. To the fullest extent permitted by applicable law, the developer shall not be liable for any indirect, incidental, special, consequential, or financial damages (including loss of digital assets or data) arising from your use of the application.
-      </p>
-
-      <h2>7. Changes &amp; Contact</h2>
-      <p>
-        We reserve the right to update these Terms &amp; Conditions from time to time. Continued use of Aqua AI after updates become effective constitutes acceptance of the revised terms. Contact <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a> with any questions.
-      </p>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="index.html">
+        <img class="brand-logo" src="public/branding/aqua-ai-logo-512.png" alt="Aqua AI Logo" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <span class="brand-svg" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 20 8.5 17 20 7 20 4 8.5"/></svg>
+        </span>
+        <div>
+          <span class="brand-title">Aqua AI</span>
+          <span class="brand-sub">TERMS &amp; CONDITIONS</span>
+        </div>
+      </a>
+      <nav class="nav-links" aria-label="Primary Navigation">
+        <a href="index.html">Overview</a>
+        <a href="privacy.html">Privacy Policy</a>
+        <a class="active" href="terms.html">Terms &amp; Conditions</a>
+      </nav>
+      <div class="controls">
+        <button class="icon-btn" type="button" id="themeToggle">◐ Theme</button>
+        <button class="icon-btn" type="button" onclick="window.print()">⎙ Print</button>
+      </div>
     </div>
+  </header>
+
+  <main class="wrap">
+    <section class="doc-banner">
+      <span class="badge">SERVICE AGREEMENT &amp; SELF-CUSTODIAL TERMS</span>
+      <h1>Terms &amp; Conditions for Aqua AI</h1>
+      <p style="margin:0;color:var(--muted);">
+        Please read these Terms &amp; Conditions carefully before using Aqua AI, Aqua Launcher, connected Workspace tools,
+        or the non-custodial multi-chain cryptocurrency wallet.
+      </p>
+      <div class="meta-chips">
+        <span class="meta-chip"><strong>Effective Date:</strong> November 16, 2026</span>
+        <span class="meta-chip"><strong>App Package:</strong> com.aistudio.aquaai.vqrzmn</span>
+        <span class="meta-chip"><strong>Contact:</strong> <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a></span>
+      </div>
+    </section>
+
+    <section class="summary-grid" aria-label="Key Terms Highlights">
+      <div class="summary-card">
+        <div class="label">SUPERVISED AI</div>
+        <p>You control tool toggles and must review high-impact emails, requests, and blockchain transactions before confirmation.</p>
+      </div>
+      <div class="summary-card">
+        <div class="label">NON-CUSTODIAL</div>
+        <p>You alone hold recovery phrases, private keys, and PINs; the developer cannot access or restore lost wallets.</p>
+      </div>
+      <div class="summary-card">
+        <div class="label">NO FINANCIAL ADVICE</div>
+        <p>Market charts, token balances, and AI commentary are purely informational and not financial, tax, or legal advice.</p>
+      </div>
+      <div class="summary-card">
+        <div class="label">SKILL SAFETY</div>
+        <p>Declarative YAML/JSON/Markdown skills run through validator rules; avoid importing untrusted third-party instructions.</p>
+      </div>
+    </section>
+
+    <div class="layout">
+      <aside class="toc" aria-label="Table of Contents">
+        <p class="toc-title">On This Page</p>
+        <a href="#t-1">1. Acceptance of Terms</a>
+        <a href="#t-2">2. AI Assistant &amp; Supervision</a>
+        <a href="#t-3">3. Aqua Launcher &amp; Service</a>
+        <a href="#t-4">4. Self-Custodial Wallet Terms</a>
+        <a href="#t-5">5. Third-Party Providers</a>
+        <a href="#t-6">6. Skills &amp; Acceptable Use</a>
+        <a href="#t-7">7. Disclaimers &amp; Liability</a>
+        <a href="#t-8">8. Updates &amp; Contact</a>
+      </aside>
+
+      <div>
+        <div class="search-box">
+          <span style="color:var(--cyan);font-weight:700;">⌕</span>
+          <input id="clauseSearch" type="search" placeholder="Filter terms clauses (e.g. liability, wallet, launcher, skills)..." aria-label="Filter terms clauses" />
+          <span class="search-count" id="searchCount">8 / 8 sections</span>
+        </div>
+
+        <article class="clause-card" id="t-1">
+          <h2>1. Acceptance of Terms</h2>
+          <p>
+            By downloading, installing, accessing, or using Aqua AI (package <code>com.aistudio.aquaai.vqrzmn</code>),
+            you agree to be bound by these Terms &amp; Conditions and our <a href="privacy.html">Privacy Policy</a>.
+            If you do not agree, stop using the application and revoke any optional OAuth or Default Home grants.
+          </p>
+        </article>
+
+        <article class="clause-card" id="t-2">
+          <h2>2. AI Assistant, Personas &amp; Action Supervision</h2>
+          <ul>
+            <li><strong>Generative Output Disclaimer:</strong> Aqua AI uses Gemini AI models, optional custom directives, live web inspection, and connected tools. Generative outputs may contain inaccuracies or outdated facts; verify critical code, legal, medical, or financial details independently.</li>
+            <li><strong>User Approval Gates:</strong> Impactful actions—including sending emails or Chat messages, submitting HTTP mutations, saving trusted wallet contacts, or signing blockchain transfers and revocations—require explicit review inside an in-app confirmation modal.</li>
+          </ul>
+        </article>
+
+        <article class="clause-card" id="t-3">
+          <h2>3. Aqua Launcher &amp; Foreground Service Operation</h2>
+          <ul>
+            <li><strong>Optional Home Replacement:</strong> Setting Aqua Launcher as your Android Default Home app is optional and reversible anytime inside Android System Settings.</li>
+            <li><strong>Foreground Keep-Alive Service:</strong> Enabling background wake-word detection or prioritized task execution launches a transparent Android foreground service notification; battery impact depends on device OS scheduling and wake-word usage.</li>
+          </ul>
+        </article>
+
+        <article class="clause-card" id="t-4">
+          <h2>4. Self-Custodial Wallet &amp; Financial Disclaimers</h2>
+          <ul>
+            <li><strong>Purely Self-Custodial Software:</strong> Aqua Wallet creates and stores keys locally via Android Keystore. You alone hold responsibility for backing up your BIP-39 recovery phrases, encrypted backup JSONs, and PINs.</li>
+            <li><strong>No Recovery Capability:</strong> The developer never sees or stores your private keys or PINs and cannot reverse transactions or restore inaccessible wallets.</li>
+            <li><strong>Irreversible Blockchain State:</strong> Transfers, contract interactions, and ERC-20 token approvals/revocations are permanent once broadcast. Verify recipient addresses, chains, and fee warnings carefully.</li>
+          </ul>
+          <div class="warn-callout">
+            <strong>Not Financial Advice:</strong> Live market charts, token metadata, and CoinGecko valuations are informational utilities only and never constitute investment, tax, or legal advice.
+          </div>
+        </article>
+
+        <article class="clause-card" id="t-5">
+          <h2>5. Third-Party Services &amp; API Availability</h2>
+          <p>
+            Aqua AI interacts with third-party infrastructure including Google (Firebase, Sign-In, Workspace, Drive),
+            Gemini APIs, public EVM/Solana/Bitcoin RPC endpoints, block explorers, and CoinGecko. Service uptime, rate quotas,
+            and external API accuracy remain governed by those third-party providers.
+          </p>
+        </article>
+
+        <article class="clause-card" id="t-6">
+          <h2>6. Imported Skills &amp; Acceptable Use</h2>
+          <ul>
+            <li><strong>Declarative Skills:</strong> Custom YAML, JSON, and Markdown skills are checked by Aqua's security validator to block executable code payloads, yet you remain responsible for reviewing instructions imported from external files.</li>
+            <li><strong>Prohibited Conduct:</strong> You may not use Aqua AI to violate applicable laws, distribute malware, bypass rate limits, scrape restricted services unlawfully, or perform unauthorized access against external accounts or networks.</li>
+          </ul>
+        </article>
+
+        <article class="clause-card" id="t-7">
+          <h2>7. Disclaimer of Warranties &amp; Limitation of Liability</h2>
+          <p>
+            Aqua AI is provided on an &ldquo;as is&rdquo; and &ldquo;as available&rdquo; basis without warranties of any kind,
+            express or implied, including merchantability, fitness for a particular purpose, or uninterrupted uptime. To the
+            fullest extent permitted by law, the developer shall not be liable for indirect, incidental, consequential,
+            or special damages (including loss of digital assets, private keys, or data) arising from your use of the software.
+          </p>
+        </article>
+
+        <article class="clause-card" id="t-8">
+          <h2>8. Changes, Termination &amp; Developer Contact</h2>
+          <p>
+            We may revise these Terms &amp; Conditions as Aqua AI introduces new capabilities. Continued use after revised terms
+            take effect constitutes acceptance. For questions or legal notices, email <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a>.
+          </p>
+        </article>
+      </div>
+    </div>
+
+    <footer>
+      <span>&copy; 2026 Aqua AI • Terms &amp; Conditions (Effective Nov 16, 2026)</span>
+      <span><a href="privacy.html">← Read Privacy Policy</a></span>
+    </footer>
   </main>
+
+  <script>
+    (function () {
+      const root = document.documentElement;
+      const key = "aqua_legal_theme";
+      const saved = localStorage.getItem(key);
+      if (saved === "light" || saved === "dark") root.setAttribute("data-theme", saved);
+      const btn = document.getElementById("themeToggle");
+      if (btn) {
+        const sync = () => {
+          btn.textContent = root.getAttribute("data-theme") === "light" ? "☾ Abyss Dark" : "☀ Oceanic Light";
+        };
+        sync();
+        btn.addEventListener("click", () => {
+          const next = root.getAttribute("data-theme") === "light" ? "dark" : "light";
+          root.setAttribute("data-theme", next);
+          localStorage.setItem(key, next);
+          sync();
+        });
+      }
+
+      const input = document.getElementById("clauseSearch");
+      const countEl = document.getElementById("searchCount");
+      const cards = Array.from(document.querySelectorAll(".clause-card"));
+      if (input && countEl) {
+        input.addEventListener("input", () => {
+          const q = input.value.trim().toLowerCase();
+          let shown = 0;
+          cards.forEach((card) => {
+            const match = !q || card.textContent.toLowerCase().includes(q);
+            card.classList.toggle("hidden", !match);
+            if (match) shown++;
+          });
+          countEl.textContent = shown + " / " + cards.length + " sections";
+        });
+      }
+    })();
+  </script>
 </body>
 </html>

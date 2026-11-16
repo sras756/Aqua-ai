@@ -442,4 +442,61 @@ class ExampleRobolectricTest {
         assertEquals(85, sample.batteryPercent)
         assertEquals(48, sample.ramUsedPercent)
     }
+
+    @Test
+    fun `aqua local preferences persist pinned conversations and custom aliases`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = AquaLocalPreferences(context, "conv_user_test")
+
+        assertTrue(prefs.togglePinnedConversation("conv_a"))
+        assertEquals(setOf("conv_a"), prefs.pinnedConversationIds.value)
+        assertFalse(prefs.togglePinnedConversation("conv_a"))
+        assertTrue(prefs.pinnedConversationIds.value.isEmpty())
+
+        prefs.setConversationAlias("conv_a", "Q4 Security Audit")
+        assertEquals("Q4 Security Audit", prefs.conversationAliases.value["conv_a"])
+        prefs.setConversationAlias("conv_a", "")
+        assertFalse(prefs.conversationAliases.value.containsKey("conv_a"))
+    }
+
+    @Test
+    fun `session stats json export and diagnostic report exporter generate structured output`() {
+        val messages = listOf(
+            ChatMessage(id = "u1", conversationId = "c9", role = "user", content = "Audit my app setup"),
+            ChatMessage(
+                id = "m1",
+                conversationId = "c9",
+                role = "model",
+                content = "Checked config:\n```kotlin\nval x = 42\n```\nAll green.",
+                modelUsed = "gemini-3.8-flash",
+                toolActionsJson = """[{"tool":"device_get_telemetry","status":"completed","detail":"92%"}]"""
+            )
+        )
+        val stats = ConversationMarkdownExporter.computeSessionStats(messages)
+        assertEquals(2, stats.totalMessages)
+        assertEquals(1, stats.userMessages)
+        assertEquals(1, stats.assistantMessages)
+        assertEquals(1, stats.codeBlockCount)
+        assertEquals(1, stats.toolCallCount)
+        assertTrue(stats.estimatedWords >= 8)
+
+        val json = ConversationMarkdownExporter.formatConversationAsJson("Audit Session", messages)
+        assertTrue(json.contains("\"title\": \"Audit Session\""))
+        assertTrue(json.contains("\"codeBlockCount\": 1"))
+        assertTrue(json.contains("\"device_get_telemetry\""))
+
+        val diag = com.example.ai.DiagnosticReportExporter.buildSystemDiagnosticMarkdown(
+            telemetry = DeviceTelemetry(91, true, true, "Wi-Fi", 70, true, false, true),
+            storage = com.example.device.StorageAndMemoryStats(12000L, 64000L, 4200L, 8192L, false),
+            samples = listOf(TelemetrySample(1000L, 91, 48, true, true)),
+            installedAppsCount = 24,
+            activeModel = "gemini-3.8-flash",
+            activePersona = AquaPersona.DEEP_ANALYST,
+            foregroundServiceActive = true
+        )
+        assertTrue(diag.contains("Battery:** 91% (Charging)"))
+        assertTrue(diag.contains("Discovered Launchable Apps:** 24"))
+        assertTrue(diag.contains("Deep Analyst"))
+        assertTrue(diag.contains("Active (Persistent Notification)"))
+    }
 }
