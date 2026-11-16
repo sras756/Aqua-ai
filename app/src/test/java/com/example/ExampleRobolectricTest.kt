@@ -6,13 +6,16 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import androidx.test.core.app.ApplicationProvider
+import com.example.ai.AquaToolCatalog
 import com.example.ai.ContextManager
 import com.example.ai.ConversationMarkdownExporter
 import com.example.ai.MessageSegment
 import com.example.browser.AquaBrowserController
 import com.example.browser.BrowserLink
+import com.example.data.local.AiFreedomConfig
 import com.example.data.local.AquaLocalPreferences
 import com.example.data.local.AquaPersona
+import com.example.data.local.ElevenLabsConfig
 import com.example.data.local.TelemetrySample
 import com.example.data.model.AquaRoutine
 import com.example.data.model.AquaSkill
@@ -29,6 +32,7 @@ import com.example.device.DeviceTelemetry
 import com.example.network.AquaWebClient
 import com.example.skills.SkillParserAndValidator
 import com.example.voice.AquaWakeWordService
+import com.example.voice.ElevenLabsClient
 import com.example.wallet.FlashWalletConnector
 import com.example.wallet.QrCodeGenerator
 import org.junit.Assert.assertEquals
@@ -498,5 +502,137 @@ class ExampleRobolectricTest {
         assertTrue(diag.contains("Discovered Launchable Apps:** 24"))
         assertTrue(diag.contains("Deep Analyst"))
         assertTrue(diag.contains("Active (Persistent Notification)"))
+    }
+
+    @Test
+    fun `aqua local preferences persist ai freedom config elevenlabs config and setup flag`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = AquaLocalPreferences(context, "freedom_test_user")
+
+        assertFalse(prefs.hasCompletedAiSetup.value)
+        prefs.setAiSetupCompleted(true)
+        assertTrue(prefs.hasCompletedAiSetup.value)
+
+        prefs.setAiFreedomConfig(
+            AiFreedomConfig(
+                autonomyLevel = AiFreedomConfig.AUTONOMY_UNRESTRICTED,
+                temperature = 3.5f, // should clamp to 2.0f
+                topP = 0.01f,       // should clamp to 0.1f
+                maxOutputTokens = 99999, // should clamp to 8192
+                maxAgentSteps = 42, // should clamp to 15
+                enableAllToolsAlways = true,
+                customModelOverride = "gemini-2.5-pro",
+                responseStyle = AiFreedomConfig.STYLE_TECHNICAL
+            )
+        )
+        val reloaded = AquaLocalPreferences(context, "freedom_test_user")
+        assertEquals(AiFreedomConfig.AUTONOMY_UNRESTRICTED, reloaded.aiFreedomConfig.value.autonomyLevel)
+        assertEquals(2.0f, reloaded.aiFreedomConfig.value.temperature, 0.001f)
+        assertEquals(0.1f, reloaded.aiFreedomConfig.value.topP, 0.001f)
+        assertEquals(8192, reloaded.aiFreedomConfig.value.maxOutputTokens)
+        assertEquals(15, reloaded.aiFreedomConfig.value.maxAgentSteps)
+        assertTrue(reloaded.aiFreedomConfig.value.enableAllToolsAlways)
+        assertEquals("gemini-2.5-pro", reloaded.aiFreedomConfig.value.customModelOverride)
+        assertEquals(AiFreedomConfig.STYLE_TECHNICAL, reloaded.aiFreedomConfig.value.responseStyle)
+
+        reloaded.setElevenLabsConfig(
+            ElevenLabsConfig(
+                enabled = true,
+                voiceName = "Custom Studio Voice",
+                modelId = ElevenLabsConfig.MODEL_FLASH_V2_5,
+                stability = 0.65f,
+                similarityBoost = 0.85f
+            )
+        )
+        val reloadedVoice = AquaLocalPreferences(context, "freedom_test_user").elevenLabsConfig.value
+        assertTrue(reloadedVoice.enabled)
+        assertEquals("Custom Studio Voice", reloadedVoice.voiceName)
+        assertEquals(ElevenLabsConfig.MODEL_FLASH_V2_5, reloadedVoice.modelId)
+        assertEquals(0.65f, reloadedVoice.stability, 0.001f)
+        assertEquals(0.85f, reloadedVoice.similarityBoost, 0.001f)
+    }
+
+    @Test
+    fun `elevenlabs and ai studio rest json parsers extract real structures safely`() {
+        val voicesJson = """
+            {
+              "voices": [
+                {
+                  "voice_id": "v_abc123",
+                  "name": "Rachel",
+                  "category": "premade",
+                  "labels": {"accent": "american", "use_case": "narration"}
+                },
+                {
+                  "voice_id": "",
+                  "name": "Invalid"
+                }
+              ]
+            }
+        """.trimIndent()
+        val voices = ElevenLabsClient.parseVoicesJson(voicesJson)
+        assertEquals(1, voices.size)
+        assertEquals("v_abc123", voices.first().voiceId)
+        assertEquals("Rachel", voices.first().name)
+        assertEquals("american", voices.first().accent)
+
+        val subJson = """{"tier":"creator","character_count":2500,"character_limit":100000}"""
+        val sub = ElevenLabsClient.parseSubscriptionJson(subJson)
+        assertEquals("creator", sub.tier)
+        assertEquals(97500L, sub.remainingCharacters)
+
+        val aiModelsJson = """
+            {
+              "models": [
+                {"name": "models/gemini-2.5-flash", "supportedGenerationMethods": ["generateContent"]},
+                {"name": "models/embedding-001", "supportedGenerationMethods": ["embedContent"]},
+                {"name": "models/gemini-2.5-pro", "supportedGenerationMethods": ["generateContent", "countTokens"]}
+              ]
+            }
+        """.trimIndent()
+        val models = ElevenLabsClient.parseAiStudioModelsJson(aiModelsJson)
+        assertEquals(listOf("gemini-2.5-flash", "gemini-2.5-pro"), models)
+    }
+
+    @Test
+    fun `aqua tool catalog unlocks all tools when requested and context manager reflects freedom state`() {
+        val restricted = AquaToolCatalog.buildRestFunctionDeclarationsJson(
+            settings = UserSettings(fullInternetAccessEnabled = true, aiWalletAccessEnabled = true),
+            promptHint = "hello",
+            unlockAllTools = false
+        )
+        val unlocked = AquaToolCatalog.buildRestFunctionDeclarationsJson(
+            settings = UserSettings(fullInternetAccessEnabled = true, aiWalletAccessEnabled = true),
+            promptHint = "hello",
+            unlockAllTools = true
+        )
+        assertTrue(unlocked.length() > restricted.length())
+
+        val declNames = (0 until unlocked.length()).map { unlocked.getJSONObject(it).getString("name") }.toSet()
+        assertTrue(declNames.contains("get_ai_freedom_config"))
+        assertTrue(declNames.contains("speak_with_elevenlabs"))
+        assertTrue(declNames.contains("web_search"))
+
+        val prompt = ContextManager.buildSystemInstruction(
+            settings = UserSettings(useCustomDirectApiKey = true),
+            memories = emptyList(),
+            enabledSkills = emptyList(),
+            activeWallet = null,
+            telemetry = DeviceTelemetry(88, true, true, "Wi-Fi", 45, true, false, false),
+            browserUrl = "",
+            browserTitle = "",
+            freedomConfig = AiFreedomConfig(
+                autonomyLevel = AiFreedomConfig.AUTONOMY_UNRESTRICTED,
+                maxAgentSteps = 14,
+                customModelOverride = "gemini-2.5-flash",
+                responseStyle = AiFreedomConfig.STYLE_TECHNICAL
+            ),
+            usingPersonalAiStudioKey = true,
+            elevenLabsActive = true
+        )
+        assertTrue(prompt.contains("Google AI Studio"))
+        assertTrue(prompt.contains("UNRESTRICTED"))
+        assertTrue(prompt.contains("gemini-2.5-flash"))
+        assertTrue(prompt.contains("ElevenLabs"))
     }
 }

@@ -53,6 +53,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.AssistChip
@@ -86,6 +87,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.local.AiFreedomConfig
 import com.example.data.local.AquaPersona
 import com.example.data.model.AquaCoreState
 import com.example.ui.AquaMainViewModel
@@ -139,6 +141,11 @@ fun HomeScreen(
     val personaId by viewModel.personaId.collectAsStateWithLifecycle()
     val routines by viewModel.routines.collectAsStateWithLifecycle()
     val pinnedIds by viewModel.pinnedRoutineIds.collectAsStateWithLifecycle()
+    val freedomConfig by viewModel.aiFreedomConfig.collectAsStateWithLifecycle()
+    val elevenConfig by viewModel.elevenLabsConfig.collectAsStateWithLifecycle()
+
+    val usingPersonalKey = viewModel.isUsingPersonalAiStudioKey()
+    val elevenLabsReady = viewModel.isElevenLabsActive()
 
     val activePersona = AquaPersona.fromId(personaId)
     val pinnedRoutines = remember(routines, pinnedIds) {
@@ -397,6 +404,63 @@ fun HomeScreen(
                                     }
                                 }
                             )
+                        }
+
+                        // Active AI Engine, Voice & Freedom Studio Strip
+                        item {
+                            val engineLabel = if (usingPersonalKey) "AI Studio Key" else "Firebase AI"
+                            val voiceLabel = when {
+                                elevenLabsReady -> elevenConfig.voiceName.ifBlank { "ElevenLabs" }
+                                settings.useGeminiTts -> "Gemini TTS"
+                                else -> "Android TTS"
+                            }
+                            val autonomyLabel = when (freedomConfig.autonomyLevel) {
+                                AiFreedomConfig.AUTONOMY_UNRESTRICTED -> "Unrestricted"
+                                AiFreedomConfig.AUTONOMY_ADVISORY -> "Advisory"
+                                else -> "Balanced"
+                            }
+                            Surface(
+                                color = c.cardSurface.copy(alpha = 0.92f),
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .border(1.dp, c.accentCyan.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .clickable { viewModel.openAiSetupWizard() }
+                                    .testTag("home_ai_setup_status_chip")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Tune,
+                                            contentDescription = "Configure AI Engine and Voice",
+                                            tint = c.accentCyan,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Text(
+                                            text = "$engineLabel • $voiceLabel • $autonomyLabel (${freedomConfig.maxAgentSteps} steps)",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = c.textPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    Text(
+                                        text = "Setup",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = c.accentCyan,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
                         }
 
                         // AI Persona Mode Switcher

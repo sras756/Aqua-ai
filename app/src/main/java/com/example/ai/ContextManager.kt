@@ -1,5 +1,6 @@
 package com.example.ai
 
+import com.example.data.local.AiFreedomConfig
 import com.example.data.local.AquaPersona
 import com.example.data.model.AquaSkill
 import com.example.data.model.MemoryItem
@@ -22,15 +23,32 @@ object ContextManager {
         nativeWalletOverview: String? = null,
         launcherOverview: String? = null,
         personaId: String = AquaPersona.AUTONOMOUS.id,
-        customDirective: String = ""
+        customDirective: String = "",
+        freedomConfig: AiFreedomConfig = AiFreedomConfig(),
+        usingPersonalAiStudioKey: Boolean = false,
+        elevenLabsActive: Boolean = false
     ): String = buildString {
         val persona = AquaPersona.fromId(personaId)
+        val activeModelLabel = freedomConfig.customModelOverride.ifBlank { settings.preferredModel }
         appendLine("You are AQUA AI, an intelligent, futuristic, voice-enabled autonomous personal AI assistant built exclusively for Android.")
         appendLine("Current Local Time: ${DateFormat.getDateTimeInstance().format(Date())}")
         appendLine("Wake Word: '${settings.wakeWordPhrase}' | Voice Language: ${settings.voiceLanguage} | Active Persona: ${persona.label}")
+        appendLine("AI Engine: ${if (usingPersonalAiStudioKey) "User Google AI Studio Key" else "Managed Firebase AI Logic"} | Model: $activeModelLabel | Voice Output: ${if (elevenLabsActive) "ElevenLabs Custom Voice" else if (settings.useGeminiTts) "Gemini Native TTS" else "Android TTS"}")
         appendLine()
-        appendLine("## Active Response Persona (${persona.label})")
+        appendLine("## Active Response Persona (${persona.label}) & AI Freedom Mode")
         appendLine(persona.promptGuidance)
+        appendLine("- Autonomy Level: ${freedomConfig.autonomyLevel} | Max Tool Steps: ${freedomConfig.maxAgentSteps} | Style: ${freedomConfig.responseStyle} | All Tools Unlocked: ${freedomConfig.enableAllToolsAlways}")
+        when (freedomConfig.responseStyle) {
+            AiFreedomConfig.STYLE_CONCISE -> appendLine("- Keep replies crisp, direct, and minimal unless code or data tables are required.")
+            AiFreedomConfig.STYLE_TECHNICAL -> appendLine("- Deliver engineering-grade precision, architecture breakdowns, exact commands, and verifiable sources.")
+            AiFreedomConfig.STYLE_CREATIVE -> appendLine("- Think broadly across unconventional angles, rich synthesis, and multi-domain tool chaining.")
+            else -> Unit
+        }
+        if (freedomConfig.autonomyLevel == AiFreedomConfig.AUTONOMY_UNRESTRICTED) {
+            appendLine("- UNRESTRICTED TOOLS MODE: Proactively chain web search, page fetches, HTTP GET APIs, clipboard, launcher, workspace read, and wallet read tools to solve multi-step tasks autonomously without hesitating (still honoring confirmation gates for irreversible sends, writes, calls, and financial transfers).")
+        } else if (freedomConfig.autonomyLevel == AiFreedomConfig.AUTONOMY_ADVISORY) {
+            appendLine("- ADVISORY MODE: Prioritize clear explanations and confirm before executing device or web mutations.")
+        }
         if (customDirective.isNotBlank()) {
             appendLine("User Custom Directive: ${customDirective.trim()}")
         }

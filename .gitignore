@@ -21,3 +21,5 @@ debug.keystore
 .build-outputs/
 .aistudio/
 *-debug.log
+# Local secrets written by `elevenlabs onboard`
+/.env.local

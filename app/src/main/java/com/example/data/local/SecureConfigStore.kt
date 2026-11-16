@@ -12,7 +12,7 @@ import javax.crypto.spec.GCMParameterSpec
 
 /**
  * Hardware-backed Android Keystore AES-GCM encrypted storage for sensitive
- * user-supplied configuration (such as an optional personal Gemini API key).
+ * user-supplied configuration (personal Google AI Studio API key, optional ElevenLabs API key & Voice ID).
  * Never stores wallet private keys or seed phrases. Never logs secrets.
  */
 class SecureConfigStore(context: Context) {
@@ -21,10 +21,60 @@ class SecureConfigStore(context: Context) {
         Context.MODE_PRIVATE
     )
 
-    fun saveGeminiApiKey(apiKey: String) {
-        val trimmed = apiKey.trim()
+    // --- Google AI Studio / Gemini API Key ---
+
+    fun saveGeminiApiKey(apiKey: String) = saveEncryptedString(KEY_ENCRYPTED_GEMINI, apiKey)
+
+    fun getGeminiApiKey(): String? = getDecryptedString(KEY_ENCRYPTED_GEMINI)
+
+    fun hasGeminiApiKey(): Boolean = !getGeminiApiKey().isNullOrBlank()
+
+    fun getMaskedGeminiApiKey(): String = maskSecret(getGeminiApiKey())
+
+    fun clearGeminiApiKey() {
+        prefs.edit().remove(KEY_ENCRYPTED_GEMINI).apply()
+    }
+
+    // --- Optional ElevenLabs API Key & Voice ID ---
+
+    fun saveElevenLabsApiKey(apiKey: String) = saveEncryptedString(KEY_ENCRYPTED_ELEVENLABS_KEY, apiKey)
+
+    fun getElevenLabsApiKey(): String? = getDecryptedString(KEY_ENCRYPTED_ELEVENLABS_KEY)
+
+    fun hasElevenLabsApiKey(): Boolean = !getElevenLabsApiKey().isNullOrBlank()
+
+    fun getMaskedElevenLabsApiKey(): String = maskSecret(getElevenLabsApiKey())
+
+    fun clearElevenLabsApiKey() {
+        prefs.edit().remove(KEY_ENCRYPTED_ELEVENLABS_KEY).apply()
+    }
+
+    fun saveElevenLabsVoiceId(voiceId: String) = saveEncryptedString(KEY_ENCRYPTED_ELEVENLABS_VOICE, voiceId)
+
+    fun getElevenLabsVoiceId(): String = getDecryptedString(KEY_ENCRYPTED_ELEVENLABS_VOICE).orEmpty()
+
+    fun hasElevenLabsVoiceId(): Boolean = getElevenLabsVoiceId().isNotBlank()
+
+    fun clearElevenLabsVoiceId() {
+        prefs.edit().remove(KEY_ENCRYPTED_ELEVENLABS_VOICE).apply()
+    }
+
+    fun clearElevenLabsAll() {
+        prefs.edit()
+            .remove(KEY_ENCRYPTED_ELEVENLABS_KEY)
+            .remove(KEY_ENCRYPTED_ELEVENLABS_VOICE)
+            .apply()
+    }
+
+    private fun maskSecret(secret: String?): String {
+        val value = secret ?: return ""
+        return if (value.length <= 8) "••••••••" else "${value.take(4)}••••${value.takeLast(4)}"
+    }
+
+    private fun saveEncryptedString(prefKey: String, rawValue: String) {
+        val trimmed = rawValue.trim()
         if (trimmed.isEmpty()) {
-            clearGeminiApiKey()
+            prefs.edit().remove(prefKey).apply()
             return
         }
         val cipher = Cipher.getInstance(TRANSFORMATION)
@@ -36,12 +86,12 @@ class SecureConfigStore(context: Context) {
         System.arraycopy(iv, 0, combined, 1, iv.size)
         System.arraycopy(ciphertext, 0, combined, 1 + iv.size, ciphertext.size)
         prefs.edit()
-            .putString(KEY_ENCRYPTED_GEMINI, Base64.encodeToString(combined, Base64.NO_WRAP))
+            .putString(prefKey, Base64.encodeToString(combined, Base64.NO_WRAP))
             .apply()
     }
 
-    fun getGeminiApiKey(): String? {
-        val encoded = prefs.getString(KEY_ENCRYPTED_GEMINI, null) ?: return null
+    private fun getDecryptedString(prefKey: String): String? {
+        val encoded = prefs.getString(prefKey, null) ?: return null
         return try {
             val combined = Base64.decode(encoded, Base64.NO_WRAP)
             val ivSize = combined[0].toInt() and 0xFF
@@ -53,17 +103,6 @@ class SecureConfigStore(context: Context) {
         } catch (_: Exception) {
             null
         }
-    }
-
-    fun hasGeminiApiKey(): Boolean = !getGeminiApiKey().isNullOrBlank()
-
-    fun getMaskedGeminiApiKey(): String {
-        val key = getGeminiApiKey() ?: return ""
-        return if (key.length <= 8) "••••••••" else "${key.take(4)}••••${key.takeLast(4)}"
-    }
-
-    fun clearGeminiApiKey() {
-        prefs.edit().remove(KEY_ENCRYPTED_GEMINI).apply()
     }
 
     private fun getOrCreateSecretKey(): SecretKey {
@@ -92,6 +131,8 @@ class SecureConfigStore(context: Context) {
         const val KEY_ALIAS = "aqua_ai_secure_config_aes"
         const val PREFS_NAME = "aqua_secure_config_prefs"
         const val KEY_ENCRYPTED_GEMINI = "enc_gemini_api_key"
+        const val KEY_ENCRYPTED_ELEVENLABS_KEY = "enc_elevenlabs_api_key"
+        const val KEY_ENCRYPTED_ELEVENLABS_VOICE = "enc_elevenlabs_voice_id"
         const val TRANSFORMATION = "AES/GCM/NoPadding"
     }
 }

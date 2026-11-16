@@ -59,6 +59,7 @@ import com.example.data.repository.GoogleDriveHistoryRepository
 import com.example.data.repository.GoogleWorkspaceRepository
 import com.example.device.AndroidDeviceController
 import com.example.ui.AquaMainViewModel
+import com.example.ui.components.AiSetupSheet
 import com.example.ui.components.AuthorizationModal
 import com.example.ui.components.CommandPaletteSheet
 import com.example.ui.screens.AuthScreen
@@ -187,6 +188,7 @@ private fun AuthenticatedAquaShell(
     val navEvent by viewModel.navigateToTabEvent.collectAsStateWithLifecycle()
     val routines by viewModel.routines.collectAsStateWithLifecycle()
     val personaId by viewModel.personaId.collectAsStateWithLifecycle()
+    val aiSetupVisible by viewModel.aiSetupSheetVisible.collectAsStateWithLifecycle()
 
     var currentTab by rememberSaveable { mutableStateOf("home") }
     var showCommandPalette by remember { mutableStateOf(false) }
@@ -379,6 +381,18 @@ private fun AuthenticatedAquaShell(
                     onUnlockWithBiometric = { viewModel.walletCoordinator.unlockWithBiometric() },
                     onApprove = { viewModel.resolvePendingAuthorization(true) },
                     onDeny = { viewModel.resolvePendingAuthorization(false) }
+                )
+            }
+
+            if (aiSetupVisible) {
+                AiSetupSheet(
+                    viewModel = viewModel,
+                    onOpenBrowserUrl = { url ->
+                        viewModel.dismissAiSetupWizard(markCompleted = false)
+                        viewModel.navigateBrowser(url)
+                        currentTab = "browser"
+                    },
+                    onDismiss = { viewModel.dismissAiSetupWizard(markCompleted = true) }
                 )
             }
         }

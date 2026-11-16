@@ -17,10 +17,12 @@ import com.example.ai.ToolCallingEngine
 import com.example.browser.AquaBrowserController
 import com.example.browser.BrowserLink
 import com.example.browser.BrowserPageState
+import com.example.data.local.AiFreedomConfig
 import com.example.data.local.AquaCacheDatabase
 import com.example.data.local.AquaLocalPreferences
 import com.example.data.local.AquaPersona
 import com.example.data.local.DeviceActionLogEntity
+import com.example.data.local.ElevenLabsConfig
 import com.example.data.local.SecureConfigStore
 import com.example.data.local.TelemetrySample
 import com.example.data.model.AgentStepTrace
@@ -57,6 +59,8 @@ import com.example.device.DeviceTelemetry
 import com.example.device.StorageAndMemoryStats
 import com.example.skills.SkillParserAndValidator
 import com.example.voice.AquaWakeWordService
+import com.example.voice.ElevenLabsSubscription
+import com.example.voice.ElevenLabsVoice
 import com.example.voice.VoiceAssistantManager
 import com.example.wallet.FlashWalletConnector
 import com.example.wallet.PreparedTransferRequest
@@ -116,11 +120,14 @@ class AquaMainViewModel(
     val pinnedRoutineIds: StateFlow<Set<String>> = localPrefs.pinnedRoutineIds
     val pinnedConversationIds: StateFlow<Set<String>> = localPrefs.pinnedConversationIds
     val conversationAliases: StateFlow<Map<String, String>> = localPrefs.conversationAliases
+    val aiFreedomConfig: StateFlow<AiFreedomConfig> = localPrefs.aiFreedomConfig
+    val elevenLabsConfig: StateFlow<ElevenLabsConfig> = localPrefs.elevenLabsConfig
+    val hasCompletedAiSetup: StateFlow<Boolean> = localPrefs.hasCompletedAiSetup
 
     val launcherEngine: AquaLauncherEngine = AquaLauncherEngine.getInstance(appContext)
     val launcherAiController: LauncherAiController = LauncherAiController(launcherEngine)
 
-    private val toolCallingEngine = ToolCallingEngine(
+    private val toolCallingEngine: ToolCallingEngine = ToolCallingEngine(
         deviceController = deviceController,
         browserController = browserController,
         walletConnector = walletConnector,
@@ -129,19 +136,35 @@ class AquaMainViewModel(
         workspaceRepo = workspaceRepo,
         aiWalletBridge = walletCoordinator.aiBridge,
         onWalletMutated = { viewModelScope.launch { walletCoordinator.reloadAll() } },
-        launcherEngine = launcherEngine
+        launcherEngine = launcherEngine,
+        freedomConfigProvider = { localPrefs.aiFreedomConfig.value },
+        aiStatusProvider = { buildAiEngineStatusSummary() },
+        onSpeakWithElevenLabs = { textToSpeak ->
+            voiceManager.speak(
+                text = textToSpeak,
+                settings = settings.value,
+                scope = viewModelScope,
+                elevenLabsConfig = localPrefs.elevenLabsConfig.value
+            )
+            if (isElevenLabsActive()) {
+                "Synthesizing speech via ElevenLabs Voice (${localPrefs.elevenLabsConfig.value.voiceName.ifBlank { secureConfigStore.getElevenLabsVoiceId().take(8) }})."
+            } else {
+                "ElevenLabs Voice ID/Key is not configured (optional); speaking via ${if (settings.value.useGeminiTts) "Gemini Native TTS" else "Android TTS"}."
+            }
+        }
     )
 
-    private val geminiProvider = GeminiProvider(
+    private val geminiProvider: GeminiProvider = GeminiProvider(
         secureConfigStore = secureConfigStore,
         fileImportRepository = fileImportRepository,
         toolCallingEngine = toolCallingEngine
     )
 
-    val voiceManager = VoiceAssistantManager(
+    val voiceManager: VoiceAssistantManager = VoiceAssistantManager(
         context = appContext,
         geminiProvider = geminiProvider,
-        toolCallingEngine = toolCallingEngine
+        toolCallingEngine = toolCallingEngine,
+        secureConfigStore = secureConfigStore
     )
 
     val settings: StateFlow<UserSettings> = firestoreRepo.observeSettings()
@@ -246,6 +269,29 @@ class AquaMainViewModel(
 
     private val _preparedTransfer = MutableStateFlow<PreparedTransferRequest?>(null)
     val preparedTransfer: StateFlow<PreparedTransferRequest?> = _preparedTransfer.asStateFlow()
+
+    val activeVoiceEngine: StateFlow<String> = voiceManager.activeVoiceEngine
+
+    private val _aiSetupSheetVisible = MutableStateFlow(!localPrefs.hasCompletedAiSetup.value)
+    val aiSetupSheetVisible: StateFlow<Boolean> = _aiSetupSheetVisible.asStateFlow()
+
+    private val _verifiedAiStudioModels = MutableStateFlow<List<String>>(emptyList())
+    val verifiedAiStudioModels: StateFlow<List<String>> = _verifiedAiStudioModels.asStateFlow()
+
+    private val _aiKeyVerificationStatus = MutableStateFlow<String?>(null)
+    val aiKeyVerificationStatus: StateFlow<String?> = _aiKeyVerificationStatus.asStateFlow()
+
+    private val _elevenLabsVoices = MutableStateFlow<List<ElevenLabsVoice>>(emptyList())
+    val elevenLabsVoices: StateFlow<List<ElevenLabsVoice>> = _elevenLabsVoices.asStateFlow()
+
+    private val _elevenLabsSubscription = MutableStateFlow<ElevenLabsSubscription?>(null)
+    val elevenLabsSubscription: StateFlow<ElevenLabsSubscription?> = _elevenLabsSubscription.asStateFlow()
+
+    private val _elevenLabsStatus = MutableStateFlow<String?>(null)
+    val elevenLabsStatus: StateFlow<String?> = _elevenLabsStatus.asStateFlow()
+
+    private val _elevenLabsBusy = MutableStateFlow(false)
+    val elevenLabsBusy: StateFlow<Boolean> = _elevenLabsBusy.asStateFlow()
 
     private val _bannerMessage = MutableStateFlow<String?>(null)
     val bannerMessage: StateFlow<String?> = _bannerMessage.asStateFlow()
@@ -507,6 +553,231 @@ class AquaMainViewModel(
         return deviceController.readClipboardText().getOrDefault("")
     }
 
+    fun isUsingPersonalAiStudioKey(): Boolean =
+        settings.value.useCustomDirectApiKey && secureConfigStore.hasGeminiApiKey()
+
+    fun isElevenLabsActive(): Boolean =
+        localPrefs.elevenLabsConfig.value.enabled &&
+            secureConfigStore.hasElevenLabsApiKey() &&
+            secureConfigStore.hasElevenLabsVoiceId()
+
+    private fun buildAiEngineStatusSummary(): String {
+        val s = settings.value
+        val cfg = localPrefs.aiFreedomConfig.value
+        val elCfg = localPrefs.elevenLabsConfig.value
+        val activeModel = if (isUsingPersonalAiStudioKey() && cfg.customModelOverride.isNotBlank()) {
+            cfg.customModelOverride
+        } else {
+            s.preferredModel
+        }
+        return buildString {
+            appendLine("AI Engine Provider: ${if (isUsingPersonalAiStudioKey()) "Personal Google AI Studio Key" else "Managed Firebase AI Logic"}")
+            appendLine("Active Model: $activeModel")
+            appendLine("Autonomy Level: ${cfg.autonomyLevel} | Max Tool Steps: ${cfg.maxAgentSteps} | All Tools Unlocked: ${cfg.enableAllToolsAlways}")
+            appendLine("Sampling: temperature=${cfg.temperature}, topP=${cfg.topP}, maxOutputTokens=${cfg.maxOutputTokens}, style=${cfg.responseStyle}")
+            append(
+                if (isElevenLabsActive()) {
+                    "ElevenLabs Voice: Active (${elCfg.voiceName.ifBlank { secureConfigStore.getElevenLabsVoiceId().take(10) }}, model=${elCfg.modelId})"
+                } else {
+                    "ElevenLabs Voice: Optional / Not Active (using ${if (s.useGeminiTts) "Gemini Native TTS" else "Android TTS"})"
+                }
+            )
+        }
+    }
+
+    fun openAiSetupWizard() {
+        _aiSetupSheetVisible.value = true
+    }
+
+    fun dismissAiSetupWizard(markCompleted: Boolean = true) {
+        if (markCompleted) {
+            localPrefs.setAiSetupCompleted(true)
+        }
+        _aiSetupSheetVisible.value = false
+    }
+
+    fun updateAiFreedomConfig(config: AiFreedomConfig) {
+        localPrefs.setAiFreedomConfig(config)
+    }
+
+    fun updateElevenLabsConfig(config: ElevenLabsConfig) {
+        localPrefs.setElevenLabsConfig(config)
+    }
+
+    fun verifyGoogleAiStudioKey(overrideApiKey: String? = null) {
+        val key = (overrideApiKey?.trim()?.takeIf { it.isNotEmpty() })
+            ?: secureConfigStore.getGeminiApiKey().orEmpty()
+        if (key.isBlank()) {
+            _aiKeyVerificationStatus.value = "Enter a Google AI Studio API key to verify."
+            return
+        }
+        viewModelScope.launch {
+            _aiKeyVerificationStatus.value = "Verifying Google AI Studio key..."
+            voiceManager.elevenLabsClient.verifyGoogleAiStudioKey(key)
+                .onSuccess { models ->
+                    _verifiedAiStudioModels.value = models
+                    _aiKeyVerificationStatus.value = if (models.isEmpty()) {
+                        "Key verified, but no generateContent Gemini models were listed."
+                    } else {
+                        "Verified! Loaded ${models.size} Gemini model(s) from Google AI Studio."
+                    }
+                }
+                .onFailure { err ->
+                    _aiKeyVerificationStatus.value = err.localizedMessage ?: "Google AI Studio verification failed."
+                }
+        }
+    }
+
+    fun saveGoogleAiStudioKey(apiKey: String, enableDirectRouting: Boolean = true) {
+        val trimmed = apiKey.trim()
+        if (trimmed.isNotEmpty()) {
+            secureConfigStore.saveGeminiApiKey(trimmed)
+        }
+        val hasKey = secureConfigStore.hasGeminiApiKey()
+        updateSettings(settings.value.copy(useCustomDirectApiKey = enableDirectRouting && hasKey))
+        _bannerMessage.value = if (hasKey) {
+            "Encrypted & saved Google AI Studio API key."
+        } else {
+            "Cleared personal Google AI Studio API key."
+        }
+    }
+
+    fun clearGoogleAiStudioKey() {
+        secureConfigStore.clearGeminiApiKey()
+        _verifiedAiStudioModels.value = emptyList()
+        _aiKeyVerificationStatus.value = null
+        updateSettings(settings.value.copy(useCustomDirectApiKey = false))
+        _bannerMessage.value = "Removed personal Google AI Studio API key (using Firebase AI Logic)."
+    }
+
+    fun saveElevenLabsCredentials(apiKey: String, voiceId: String, voiceName: String = "") {
+        if (apiKey.isNotBlank()) {
+            secureConfigStore.saveElevenLabsApiKey(apiKey)
+        }
+        if (voiceId.isNotBlank()) {
+            secureConfigStore.saveElevenLabsVoiceId(voiceId)
+        }
+        if (voiceName.isNotBlank()) {
+            localPrefs.setElevenLabsConfig(localPrefs.elevenLabsConfig.value.copy(voiceName = voiceName.trim()))
+        }
+        val configured = secureConfigStore.hasElevenLabsApiKey() && secureConfigStore.hasElevenLabsVoiceId()
+        _elevenLabsStatus.value = if (configured) {
+            "ElevenLabs Voice configured (${voiceName.ifBlank { secureConfigStore.getElevenLabsVoiceId().take(10) }})."
+        } else {
+            "Optional ElevenLabs credentials updated."
+        }
+        _bannerMessage.value = _elevenLabsStatus.value
+    }
+
+    fun clearElevenLabsCredentials() {
+        secureConfigStore.clearElevenLabsAll()
+        _elevenLabsVoices.value = emptyList()
+        _elevenLabsSubscription.value = null
+        _elevenLabsStatus.value = "Optional ElevenLabs credentials cleared."
+        localPrefs.setElevenLabsConfig(localPrefs.elevenLabsConfig.value.copy(voiceName = ""))
+        _bannerMessage.value = "Cleared ElevenLabs API key & Voice ID."
+    }
+
+    fun fetchElevenLabsVoicesAndQuota(overrideApiKey: String? = null) {
+        val key = (overrideApiKey?.trim()?.takeIf { it.isNotEmpty() })
+            ?: secureConfigStore.getElevenLabsApiKey().orEmpty()
+        if (key.isBlank()) {
+            _elevenLabsStatus.value = "ElevenLabs is optional — enter an ElevenLabs API key to load your voices."
+            return
+        }
+        viewModelScope.launch {
+            _elevenLabsBusy.value = true
+            _elevenLabsStatus.value = "Loading your ElevenLabs voices & quota..."
+            val voicesRes = voiceManager.elevenLabsClient.fetchAvailableVoices(key)
+            val subRes = voiceManager.elevenLabsClient.fetchSubscription(key)
+            subRes.onSuccess { _elevenLabsSubscription.value = it }
+            voicesRes
+                .onSuccess { voices ->
+                    _elevenLabsVoices.value = voices
+                    _elevenLabsStatus.value = "Loaded ${voices.size} ElevenLabs voice(s) from your account."
+                }
+                .onFailure { err ->
+                    _elevenLabsStatus.value = err.localizedMessage ?: "Failed to load ElevenLabs voices."
+                }
+            _elevenLabsBusy.value = false
+        }
+    }
+
+    fun testElevenLabsVoice(
+        overrideApiKey: String? = null,
+        overrideVoiceId: String? = null
+    ) {
+        val key = (overrideApiKey?.trim()?.takeIf { it.isNotEmpty() })
+            ?: secureConfigStore.getElevenLabsApiKey().orEmpty()
+        val voiceId = (overrideVoiceId?.trim()?.takeIf { it.isNotEmpty() })
+            ?: secureConfigStore.getElevenLabsVoiceId()
+        if (key.isBlank() || voiceId.isBlank()) {
+            _elevenLabsStatus.value = "Enter both ElevenLabs API key and Voice ID to preview speech."
+            return
+        }
+        viewModelScope.launch {
+            _elevenLabsBusy.value = true
+            _elevenLabsStatus.value = "Synthesizing ElevenLabs voice preview..."
+            voiceManager.testElevenLabsSpeech(
+                sampleText = "Aqua AI voice core ready. Your custom ElevenLabs voice is active.",
+                apiKey = key,
+                voiceId = voiceId,
+                elevenLabsConfig = localPrefs.elevenLabsConfig.value
+            ).onSuccess { msg ->
+                _elevenLabsStatus.value = msg
+            }.onFailure { err ->
+                _elevenLabsStatus.value = err.localizedMessage ?: "ElevenLabs preview failed."
+                _bannerMessage.value = _elevenLabsStatus.value
+            }
+            _elevenLabsBusy.value = false
+        }
+    }
+
+    fun completePostLoginAiSetup(
+        googleAiStudioKey: String,
+        useGoogleAiStudioKey: Boolean,
+        preferredModel: String,
+        elevenLabsKey: String,
+        elevenLabsVoiceId: String,
+        elevenLabsVoiceName: String,
+        elevenLabsModelId: String,
+        enableElevenLabs: Boolean,
+        freedomConfig: AiFreedomConfig
+    ) {
+        if (googleAiStudioKey.isNotBlank()) {
+            secureConfigStore.saveGeminiApiKey(googleAiStudioKey)
+        }
+        if (elevenLabsKey.isNotBlank()) {
+            secureConfigStore.saveElevenLabsApiKey(elevenLabsKey)
+        }
+        if (elevenLabsVoiceId.isNotBlank()) {
+            secureConfigStore.saveElevenLabsVoiceId(elevenLabsVoiceId)
+        }
+        localPrefs.setAiFreedomConfig(freedomConfig)
+        localPrefs.setElevenLabsConfig(
+            localPrefs.elevenLabsConfig.value.copy(
+                enabled = enableElevenLabs,
+                voiceName = elevenLabsVoiceName.trim(),
+                modelId = elevenLabsModelId.ifBlank { ElevenLabsConfig.MODEL_MULTILINGUAL_V2 }
+            )
+        )
+        val effectiveDirect = useGoogleAiStudioKey && secureConfigStore.hasGeminiApiKey()
+        updateSettings(
+            settings.value.copy(
+                preferredModel = preferredModel.ifBlank { settings.value.preferredModel },
+                useCustomDirectApiKey = effectiveDirect
+            )
+        )
+        localPrefs.setAiSetupCompleted(true)
+        _aiSetupSheetVisible.value = false
+        _bannerMessage.value = buildString {
+            append("AI Setup saved (")
+            append(if (effectiveDirect) "Google AI Studio Key" else "Managed Firebase AI")
+            if (isElevenLabsActive()) append(" + ElevenLabs Voice")
+            append(").")
+        }
+    }
+
     fun openStandaloneLauncher() {
         runCatching {
             val intent = Intent(appContext, AquaLauncherActivity::class.java).apply {
@@ -666,6 +937,7 @@ class AquaMainViewModel(
             var taskOutcomeSummary = ""
 
             try {
+                val currentFreedom = localPrefs.aiFreedomConfig.value
                 val nativeWalletOverview = runCatching { walletCoordinator.aiBridge.getPublicOverviewText() }.getOrNull()
                 val sysInstruction = ContextManager.buildSystemInstruction(
                     settings = currentSettings,
@@ -678,7 +950,10 @@ class AquaMainViewModel(
                     nativeWalletOverview = nativeWalletOverview,
                     launcherOverview = buildLauncherOverviewText(),
                     personaId = localPrefs.personaId.value,
-                    customDirective = localPrefs.customDirective.value
+                    customDirective = localPrefs.customDirective.value,
+                    freedomConfig = currentFreedom,
+                    usingPersonalAiStudioKey = isUsingPersonalAiStudioKey(),
+                    elevenLabsActive = isElevenLabsActive()
                 )
 
                 val result = geminiProvider.executeAgentTurn(
@@ -688,6 +963,7 @@ class AquaMainViewModel(
                     settings = currentSettings,
                     systemInstructionText = sysInstruction,
                     activeWallet = wallets.value.firstOrNull(),
+                    freedomConfig = currentFreedom,
                     onNavigateToBrowser = { _ -> _navigateToTabEvent.value = "browser" },
                     requestAuthorization = { req -> requestUserAuthorization(req) },
                     onStreamChunk = { partial -> _streamingReply.value = partial },
@@ -745,7 +1021,12 @@ class AquaMainViewModel(
                     taskOutcomeSummary = "Completed: ${exec.text.take(80)}"
                     onCompletedSummary?.invoke(exec.text)
                     if (speakReply) {
-                        voiceManager.speak(exec.text, currentSettings, viewModelScope)
+                        voiceManager.speak(
+                            text = exec.text,
+                            settings = currentSettings,
+                            scope = viewModelScope,
+                            elevenLabsConfig = localPrefs.elevenLabsConfig.value
+                        )
                     }
                 }.onFailure { err ->
                     _coreState.value = AquaCoreState.ERROR
@@ -787,7 +1068,12 @@ class AquaMainViewModel(
         }
     }
 
-    fun speakMessage(text: String) = voiceManager.speak(text, settings.value, viewModelScope)
+    fun speakMessage(text: String) = voiceManager.speak(
+        text = text,
+        settings = settings.value,
+        scope = viewModelScope,
+        elevenLabsConfig = localPrefs.elevenLabsConfig.value
+    )
 
     fun stopSpeaking() = voiceManager.stopSpeaking()
 
@@ -811,6 +1097,7 @@ class AquaMainViewModel(
         }
         refreshTelemetry()
         val currentSettings = settings.value
+        val currentFreedom = localPrefs.aiFreedomConfig.value
         viewModelScope.launch {
             val nativeWalletOverview = runCatching { walletCoordinator.aiBridge.getPublicOverviewText() }.getOrNull()
             val sysInstruction = ContextManager.buildSystemInstruction(
@@ -824,7 +1111,10 @@ class AquaMainViewModel(
                 nativeWalletOverview = nativeWalletOverview,
                 launcherOverview = buildLauncherOverviewText(),
                 personaId = localPrefs.personaId.value,
-                customDirective = localPrefs.customDirective.value
+                customDirective = localPrefs.customDirective.value,
+                freedomConfig = currentFreedom,
+                usingPersonalAiStudioKey = isUsingPersonalAiStudioKey(),
+                elevenLabsActive = isElevenLabsActive()
             )
             voiceManager.startLiveConversation(
                 scope = viewModelScope,

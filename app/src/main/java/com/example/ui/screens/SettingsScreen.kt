@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -41,10 +42,12 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BrightnessMedium
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
@@ -54,8 +57,11 @@ import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SettingsApplications
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -93,7 +99,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.local.AiFreedomConfig
 import com.example.data.local.AquaPersona
+import com.example.data.local.ElevenLabsConfig
 import com.example.data.model.UserSettings
 import com.example.ui.AquaMainViewModel
 import com.example.ui.auth.signOutUser
@@ -102,6 +110,7 @@ import com.example.ui.components.AquaGlassCard
 import com.example.ui.theme.AquaTheme
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -119,6 +128,14 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
     val automationKeepAlive by viewModel.automationKeepAliveActive.collectAsStateWithLifecycle()
     val activePersonaId by viewModel.personaId.collectAsStateWithLifecycle()
     val savedDirective by viewModel.customDirective.collectAsStateWithLifecycle()
+    val freedomConfig by viewModel.aiFreedomConfig.collectAsStateWithLifecycle()
+    val elevenConfig by viewModel.elevenLabsConfig.collectAsStateWithLifecycle()
+    val verifiedAiModels by viewModel.verifiedAiStudioModels.collectAsStateWithLifecycle()
+    val aiKeyStatus by viewModel.aiKeyVerificationStatus.collectAsStateWithLifecycle()
+    val elevenVoices by viewModel.elevenLabsVoices.collectAsStateWithLifecycle()
+    val elevenSub by viewModel.elevenLabsSubscription.collectAsStateWithLifecycle()
+    val elevenStatus by viewModel.elevenLabsStatus.collectAsStateWithLifecycle()
+    val elevenBusy by viewModel.elevenLabsBusy.collectAsStateWithLifecycle()
 
     var wakePhraseInput by remember(settings.wakeWordPhrase) { mutableStateOf(settings.wakeWordPhrase) }
     var directiveInput by remember(savedDirective) { mutableStateOf(savedDirective) }
@@ -126,6 +143,12 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
     var apiKeyInput by remember { mutableStateOf("") }
     var hasStoredKey by remember { mutableStateOf(viewModel.secureConfigStore.hasGeminiApiKey()) }
     var maskedKey by remember { mutableStateOf(viewModel.secureConfigStore.getMaskedGeminiApiKey()) }
+
+    var elevenKeyInput by remember { mutableStateOf("") }
+    var elevenVoiceIdInput by remember { mutableStateOf(viewModel.secureConfigStore.getElevenLabsVoiceId()) }
+    var hasStoredElevenKey by remember { mutableStateOf(viewModel.secureConfigStore.hasElevenLabsApiKey()) }
+    var maskedElevenKey by remember { mutableStateOf(viewModel.secureConfigStore.getMaskedElevenLabsApiKey()) }
+    var customModelInput by remember(freedomConfig.customModelOverride) { mutableStateOf(freedomConfig.customModelOverride) }
 
     var modelExpanded by remember { mutableStateOf(false) }
     val models = listOf(
@@ -419,7 +442,7 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                     }
                 }
 
-                // Personal Gemini API Key (Android Keystore Encrypted)
+                // Personal Google AI Studio API Key (Android Keystore Encrypted)
                 item {
                     AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
                         Column(
@@ -429,11 +452,11 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Filled.Key, contentDescription = null, tint = c.amber)
                                 Spacer(Modifier.width(8.dp))
-                                Text("User-Configurable Gemini API Key", style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
+                                Text("Google AI Studio API Key", style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
                             }
                             Text(
                                 text = if (hasStoredKey) "Stored securely in Android Keystore AES-GCM ($maskedKey)."
-                                else "Using managed Firebase AI Logic by default. Optionally supply your own Gemini API key below.",
+                                else "Using managed Firebase AI Logic by default. Optionally supply your personal Google AI Studio key below.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = c.textMuted
                             )
@@ -441,7 +464,7 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                             OutlinedTextField(
                                 value = apiKeyInput,
                                 onValueChange = { apiKeyInput = it },
-                                label = { Text("Personal Gemini API Key (Optional)") },
+                                label = { Text("Google AI Studio API Key (Optional)") },
                                 visualTransformation = PasswordVisualTransformation(),
                                 singleLine = true,
                                 colors = fieldColors,
@@ -453,7 +476,7 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(
                                     onClick = {
-                                        viewModel.secureConfigStore.saveGeminiApiKey(apiKeyInput)
+                                        viewModel.saveGoogleAiStudioKey(apiKeyInput, enableDirectRouting = true)
                                         apiKeyInput = ""
                                         hasStoredKey = viewModel.secureConfigStore.hasGeminiApiKey()
                                         maskedKey = viewModel.secureConfigStore.getMaskedGeminiApiKey()
@@ -462,26 +485,78 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                                     colors = ButtonDefaults.buttonColors(containerColor = c.accentCyan, contentColor = c.canvas),
                                     modifier = Modifier
                                         .weight(1f)
+                                        .heightIn(min = 48.dp)
                                         .testTag("settings_save_api_key_button")
                                 ) {
-                                    Text("Encrypt & Save Key", fontWeight = FontWeight.Bold)
+                                    Text("Encrypt & Save", fontWeight = FontWeight.Bold)
+                                }
+                                OutlinedButton(
+                                    onClick = { viewModel.verifyGoogleAiStudioKey(apiKeyInput) },
+                                    enabled = apiKeyInput.isNotBlank() || hasStoredKey,
+                                    modifier = Modifier
+                                        .heightIn(min = 48.dp)
+                                        .testTag("settings_verify_api_key_button")
+                                ) {
+                                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Verify", color = c.accentCyan)
                                 }
                                 if (hasStoredKey) {
                                     OutlinedButton(
                                         onClick = {
-                                            viewModel.secureConfigStore.clearGeminiApiKey()
+                                            viewModel.clearGoogleAiStudioKey()
                                             hasStoredKey = false
                                             maskedKey = ""
-                                            viewModel.updateSettings(settings.copy(useCustomDirectApiKey = false))
-                                        }
+                                        },
+                                        modifier = Modifier.heightIn(min = 48.dp)
                                     ) {
-                                        Text("Clear Key", color = c.error)
+                                        Text("Clear", color = c.error)
+                                    }
+                                }
+                            }
+
+                            if (!aiKeyStatus.isNullOrBlank()) {
+                                Text(
+                                    text = aiKeyStatus.orEmpty(),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (aiKeyStatus?.startsWith("Verified") == true) c.success else c.amber
+                                )
+                            }
+
+                            if (verifiedAiModels.isNotEmpty()) {
+                                Text(
+                                    text = "Verified Google AI Studio Models (Tap to apply):",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = c.textMuted
+                                )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    verifiedAiModels.forEach { modelId ->
+                                        val selected = freedomConfig.customModelOverride == modelId || settings.preferredModel == modelId
+                                        FilterChip(
+                                            selected = selected,
+                                            onClick = {
+                                                customModelInput = modelId
+                                                viewModel.updateAiFreedomConfig(freedomConfig.copy(customModelOverride = modelId))
+                                                viewModel.updateSettings(settings.copy(preferredModel = modelId))
+                                            },
+                                            label = { Text(modelId) },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = c.accentCyan.copy(alpha = 0.22f),
+                                                selectedLabelColor = c.accentCyan,
+                                                labelColor = c.textMuted
+                                            )
+                                        )
                                     }
                                 }
                             }
 
                             SettingSwitchRow(
-                                title = "Prefer Personal Gemini API Key",
+                                title = "Prefer Personal Google AI Studio Key",
                                 subtitle = "Route Gemini requests through your stored personal key when present.",
                                 checked = settings.useCustomDirectApiKey && hasStoredKey,
                                 onCheckedChange = { enabled ->
@@ -489,6 +564,402 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                                     viewModel.updateSettings(settings.copy(useCustomDirectApiKey = enabled))
                                 }
                             )
+
+                            OutlinedButton(
+                                onClick = { viewModel.openAiSetupWizard() },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .testTag("settings_open_setup_wizard_button")
+                            ) {
+                                Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Open Post-Login AI Setup Studio", color = c.accentCyan)
+                            }
+                        }
+                    }
+                }
+
+                // ElevenLabs Voice Studio (Optional • Not Compulsory)
+                item {
+                    AquaGlassCard(
+                        borderColor = c.accentTeal.copy(alpha = 0.45f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = c.accentTeal)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("ElevenLabs Voice Studio", style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
+                                }
+                                Surface(
+                                    color = c.accentTeal.copy(alpha = 0.16f),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(
+                                        text = "OPTIONAL",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = c.accentTeal,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                            Text(
+                                text = if (hasStoredElevenKey && elevenVoiceIdInput.isNotBlank()) {
+                                    "Encrypted key ($maskedElevenKey) • Voice: ${elevenConfig.voiceName.ifBlank { elevenVoiceIdInput.take(12) }}"
+                                } else {
+                                    "Completely optional — configure only if you want your custom ElevenLabs Voice ID. Otherwise Gemini/Android TTS handles voice automatically."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = c.textMuted
+                            )
+
+                            OutlinedTextField(
+                                value = elevenKeyInput,
+                                onValueChange = { elevenKeyInput = it },
+                                label = { Text("ElevenLabs API Key (Optional)") },
+                                placeholder = { Text(if (hasStoredElevenKey) maskedElevenKey else "xi-api-key...") },
+                                visualTransformation = PasswordVisualTransformation(),
+                                singleLine = true,
+                                colors = fieldColors,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("settings_elevenlabs_key_input")
+                            )
+
+                            OutlinedTextField(
+                                value = elevenVoiceIdInput,
+                                onValueChange = { elevenVoiceIdInput = it },
+                                label = { Text("ElevenLabs Voice ID (Optional)") },
+                                placeholder = { Text("Enter Voice ID or load from your account") },
+                                singleLine = true,
+                                colors = fieldColors,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("settings_elevenlabs_voice_input")
+                            )
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = {
+                                        viewModel.saveElevenLabsCredentials(
+                                            apiKey = elevenKeyInput,
+                                            voiceId = elevenVoiceIdInput,
+                                            voiceName = elevenConfig.voiceName
+                                        )
+                                        elevenKeyInput = ""
+                                        hasStoredElevenKey = viewModel.secureConfigStore.hasElevenLabsApiKey()
+                                        maskedElevenKey = viewModel.secureConfigStore.getMaskedElevenLabsApiKey()
+                                    },
+                                    enabled = elevenKeyInput.isNotBlank() || elevenVoiceIdInput.isNotBlank(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = c.accentTeal, contentColor = c.canvas),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 48.dp)
+                                        .testTag("settings_save_elevenlabs_button")
+                                ) {
+                                    Text("Save Voice", fontWeight = FontWeight.Bold)
+                                }
+                                OutlinedButton(
+                                    onClick = { viewModel.fetchElevenLabsVoicesAndQuota(elevenKeyInput) },
+                                    enabled = !elevenBusy && (elevenKeyInput.isNotBlank() || hasStoredElevenKey),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 48.dp)
+                                        .testTag("settings_load_elevenlabs_voices_button")
+                                ) {
+                                    if (elevenBusy) {
+                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = c.accentTeal)
+                                    } else {
+                                        Text("Load Voices", color = c.accentTeal)
+                                    }
+                                }
+                            }
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(
+                                    onClick = { viewModel.testElevenLabsVoice(elevenKeyInput, elevenVoiceIdInput) },
+                                    enabled = !elevenBusy && (elevenKeyInput.isNotBlank() || hasStoredElevenKey) && elevenVoiceIdInput.isNotBlank(),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 48.dp)
+                                        .testTag("settings_test_elevenlabs_button")
+                                ) {
+                                    Icon(Icons.Filled.VolumeUp, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Test Voice", color = c.accentCyan)
+                                }
+                                if (hasStoredElevenKey || elevenVoiceIdInput.isNotBlank()) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            viewModel.clearElevenLabsCredentials()
+                                            elevenKeyInput = ""
+                                            elevenVoiceIdInput = ""
+                                            hasStoredElevenKey = false
+                                            maskedElevenKey = ""
+                                        },
+                                        modifier = Modifier.heightIn(min = 48.dp)
+                                    ) {
+                                        Text("Clear", color = c.error)
+                                    }
+                                }
+                            }
+
+                            elevenSub?.let { sub ->
+                                Text(
+                                    text = "Quota: ${sub.remainingCharacters} chars left (${sub.characterCount}/${sub.characterLimit}) • Tier: ${sub.tier.uppercase()}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = c.success
+                                )
+                            }
+
+                            if (!elevenStatus.isNullOrBlank()) {
+                                Text(
+                                    text = elevenStatus.orEmpty(),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = c.textMuted
+                                )
+                            }
+
+                            if (elevenVoices.isNotEmpty()) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    elevenVoices.forEach { voice ->
+                                        FilterChip(
+                                            selected = elevenVoiceIdInput.trim() == voice.voiceId,
+                                            onClick = {
+                                                elevenVoiceIdInput = voice.voiceId
+                                                viewModel.saveElevenLabsCredentials(
+                                                    apiKey = elevenKeyInput,
+                                                    voiceId = voice.voiceId,
+                                                    voiceName = voice.name
+                                                )
+                                                viewModel.updateElevenLabsConfig(elevenConfig.copy(enabled = true, voiceName = voice.name))
+                                            },
+                                            label = { Text("${voice.name} (${voice.category})") },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = c.accentTeal.copy(alpha = 0.22f),
+                                                selectedLabelColor = c.accentTeal,
+                                                labelColor = c.textMuted
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+
+                            Text("ElevenLabs Synthesis Model:", style = MaterialTheme.typography.labelSmall, color = c.textMuted)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                ElevenLabsConfig.SUPPORTED_MODELS.forEach { (id, label) ->
+                                    FilterChip(
+                                        selected = elevenConfig.modelId == id,
+                                        onClick = { viewModel.updateElevenLabsConfig(elevenConfig.copy(modelId = id)) },
+                                        label = { Text(label) }
+                                    )
+                                }
+                            }
+
+                            SettingSwitchRow(
+                                title = "Enable ElevenLabs Voice",
+                                subtitle = "Use your configured ElevenLabs Voice ID for spoken responses when present.",
+                                checked = elevenConfig.enabled,
+                                onCheckedChange = { viewModel.updateElevenLabsConfig(elevenConfig.copy(enabled = it)) }
+                            )
+
+                            Text("Voice Stability: ${String.format("%.2f", elevenConfig.stability)}", style = MaterialTheme.typography.labelMedium, color = c.textPrimary)
+                            Slider(
+                                value = elevenConfig.stability,
+                                onValueChange = { viewModel.updateElevenLabsConfig(elevenConfig.copy(stability = it)) },
+                                valueRange = 0f..1f,
+                                colors = SliderDefaults.colors(thumbColor = c.accentTeal, activeTrackColor = c.accentTeal)
+                            )
+
+                            Text("Similarity Boost: ${String.format("%.2f", elevenConfig.similarityBoost)}", style = MaterialTheme.typography.labelMedium, color = c.textPrimary)
+                            Slider(
+                                value = elevenConfig.similarityBoost,
+                                onValueChange = { viewModel.updateElevenLabsConfig(elevenConfig.copy(similarityBoost = it)) },
+                                valueRange = 0f..1f,
+                                colors = SliderDefaults.colors(thumbColor = c.accentCyan, activeTrackColor = c.accentCyan)
+                            )
+                        }
+                    }
+                }
+
+                // AI Dependency & Freedom Lab
+                item {
+                    AquaGlassCard(
+                        borderColor = c.amber.copy(alpha = 0.45f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Tune, contentDescription = null, tint = c.amber)
+                                Spacer(Modifier.width(8.dp))
+                                Text("AI Dependency & Freedom Lab", style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
+                            }
+                            Text(
+                                text = "Grant Aqua AI fuller tool dependency, deeper autonomous chaining, custom model selection, and live sampling parameters.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = c.textMuted
+                            )
+
+                            Text("Autonomy Policy:", style = MaterialTheme.typography.labelSmall, color = c.textMuted)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                listOf(
+                                    AiFreedomConfig.AUTONOMY_ADVISORY to "Advisory (Confirm All)",
+                                    AiFreedomConfig.AUTONOMY_BALANCED to "Balanced",
+                                    AiFreedomConfig.AUTONOMY_UNRESTRICTED to "Unrestricted Tools"
+                                ).forEach { (level, label) ->
+                                    FilterChip(
+                                        selected = freedomConfig.autonomyLevel == level,
+                                        onClick = { viewModel.updateAiFreedomConfig(freedomConfig.copy(autonomyLevel = level)) },
+                                        label = { Text(label) },
+                                        modifier = Modifier.testTag("settings_autonomy_${level.lowercase()}")
+                                    )
+                                }
+                            }
+
+                            Text("Response Style:", style = MaterialTheme.typography.labelSmall, color = c.textMuted)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                listOf(
+                                    AiFreedomConfig.STYLE_ADAPTIVE to "Adaptive",
+                                    AiFreedomConfig.STYLE_CONCISE to "Concise",
+                                    AiFreedomConfig.STYLE_TECHNICAL to "Technical",
+                                    AiFreedomConfig.STYLE_CREATIVE to "Creative"
+                                ).forEach { (styleId, label) ->
+                                    FilterChip(
+                                        selected = freedomConfig.responseStyle == styleId,
+                                        onClick = { viewModel.updateAiFreedomConfig(freedomConfig.copy(responseStyle = styleId)) },
+                                        label = { Text(label) }
+                                    )
+                                }
+                            }
+
+                            SettingSwitchRow(
+                                title = "Unlock All 50+ Tools Always",
+                                subtitle = "Give the AI access to Device, Web, Browser, Launcher, Wallet & Workspace tools simultaneously without keyword gating.",
+                                checked = freedomConfig.enableAllToolsAlways,
+                                onCheckedChange = { viewModel.updateAiFreedomConfig(freedomConfig.copy(enableAllToolsAlways = it)) }
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = customModelInput,
+                                    onValueChange = { customModelInput = it },
+                                    label = { Text("Custom Gemini Model Override") },
+                                    placeholder = { Text("e.g. gemini-2.5-flash") },
+                                    singleLine = true,
+                                    colors = fieldColors,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Button(
+                                    onClick = {
+                                        viewModel.updateAiFreedomConfig(freedomConfig.copy(customModelOverride = customModelInput.trim()))
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = c.amber, contentColor = c.canvas),
+                                    modifier = Modifier.heightIn(min = 48.dp)
+                                ) {
+                                    Text("Apply", fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            Text(
+                                text = "Temperature: ${String.format("%.2f", freedomConfig.temperature)}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = c.textPrimary
+                            )
+                            Slider(
+                                value = freedomConfig.temperature,
+                                onValueChange = { viewModel.updateAiFreedomConfig(freedomConfig.copy(temperature = it)) },
+                                valueRange = 0f..2f,
+                                colors = SliderDefaults.colors(thumbColor = c.accentCyan, activeTrackColor = c.accentCyan)
+                            )
+
+                            Text(
+                                text = "Top-P Sampling: ${String.format("%.2f", freedomConfig.topP)}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = c.textPrimary
+                            )
+                            Slider(
+                                value = freedomConfig.topP,
+                                onValueChange = { viewModel.updateAiFreedomConfig(freedomConfig.copy(topP = it)) },
+                                valueRange = 0.1f..1f,
+                                colors = SliderDefaults.colors(thumbColor = c.accentTeal, activeTrackColor = c.accentTeal)
+                            )
+
+                            Text(
+                                text = "Max Output Tokens: ${freedomConfig.maxOutputTokens}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = c.textPrimary
+                            )
+                            Slider(
+                                value = freedomConfig.maxOutputTokens.toFloat(),
+                                onValueChange = { viewModel.updateAiFreedomConfig(freedomConfig.copy(maxOutputTokens = it.roundToInt().coerceIn(512, 8192))) },
+                                valueRange = 512f..8192f,
+                                colors = SliderDefaults.colors(thumbColor = c.accentCyan, activeTrackColor = c.accentCyan)
+                            )
+
+                            Text(
+                                text = "Max Autonomous Agent Steps: ${freedomConfig.maxAgentSteps}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = c.textPrimary
+                            )
+                            Slider(
+                                value = freedomConfig.maxAgentSteps.toFloat(),
+                                onValueChange = { viewModel.updateAiFreedomConfig(freedomConfig.copy(maxAgentSteps = it.roundToInt().coerceIn(2, 15))) },
+                                valueRange = 2f..15f,
+                                steps = 12,
+                                colors = SliderDefaults.colors(thumbColor = c.amber, activeTrackColor = c.amber)
+                            )
+
+                            OutlinedButton(
+                                onClick = {
+                                    customModelInput = ""
+                                    viewModel.updateAiFreedomConfig(AiFreedomConfig())
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .testTag("settings_reset_freedom_button")
+                            ) {
+                                Text("Reset AI Freedom Defaults", color = c.textMuted)
+                            }
                         }
                     }
                 }

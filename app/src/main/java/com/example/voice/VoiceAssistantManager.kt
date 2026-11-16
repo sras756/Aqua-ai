@@ -6,6 +6,7 @@ import android.content.Intent
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import android.media.MediaPlayer
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -17,6 +18,8 @@ import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import com.example.ai.GeminiProvider
 import com.example.ai.ToolCallingEngine
+import com.example.data.local.ElevenLabsConfig
+import com.example.data.local.SecureConfigStore
 import com.example.data.model.AgentStepTrace
 import com.example.data.model.PendingAuthorization
 import com.example.data.model.UserSettings
@@ -33,21 +36,26 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import java.io.File
 import java.util.Locale
 import java.util.UUID
 
 class VoiceAssistantManager(
     private val context: Context,
     private val geminiProvider: GeminiProvider,
-    private val toolCallingEngine: ToolCallingEngine
+    private val toolCallingEngine: ToolCallingEngine,
+    private val secureConfigStore: SecureConfigStore,
+    val elevenLabsClient: ElevenLabsClient = ElevenLabsClient()
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var speechRecognizer: SpeechRecognizer? = null
     private var tts: TextToSpeech? = null
     private var ttsReady = false
     private var currentAudioTrack: AudioTrack? = null
+    private var currentMediaPlayer: MediaPlayer? = null
     @OptIn(PublicPreviewAPI::class)
     private var liveSession: LiveSession? = null
     private var liveJob: Job? = null
@@ -69,6 +77,9 @@ class VoiceAssistantManager(
 
     private val _voiceError = MutableStateFlow<String?>(null)
     val voiceError: StateFlow<String?> = _voiceError.asStateFlow()
+
+    private val _activeVoiceEngine = MutableStateFlow("Android TTS")
+    val activeVoiceEngine: StateFlow<String> = _activeVoiceEngine.asStateFlow()
 
     init {
         initAndroidTts()
@@ -188,15 +199,45 @@ class VoiceAssistantManager(
     fun speak(
         text: String,
         settings: UserSettings,
-        scope: CoroutineScope
+        scope: CoroutineScope,
+        elevenLabsConfig: ElevenLabsConfig = ElevenLabsConfig()
     ) {
         val clean = text.replace(Regex("[*_`#>]"), " ").trim()
         if (clean.isEmpty()) return
         stopSpeaking()
 
+        val elevenKey = secureConfigStore.getElevenLabsApiKey()
+        val elevenVoiceId = secureConfigStore.getElevenLabsVoiceId()
+
+        if (elevenLabsConfig.enabled && !elevenKey.isNullOrBlank() && elevenVoiceId.isNotBlank()) {
+            scope.launch(Dispatchers.IO) {
+                _isSpeaking.value = true
+                _activeVoiceEngine.value = "ElevenLabs (${elevenLabsConfig.voiceName.ifBlank { elevenVoiceId.take(8) }})"
+                val outFile = File(context.cacheDir, "aqua_eleven_${System.currentTimeMillis()}.mp3")
+                val res = elevenLabsClient.synthesizeSpeechToFile(
+                    apiKey = elevenKey,
+                    voiceId = elevenVoiceId,
+                    text = clean,
+                    modelId = elevenLabsConfig.modelId,
+                    stability = elevenLabsConfig.stability,
+                    similarityBoost = elevenLabsConfig.similarityBoost,
+                    outputFile = outFile
+                )
+                res.onSuccess { mp3File ->
+                    playMp3File(mp3File)
+                }.onFailure { err ->
+                    Log.w(TAG, "ElevenLabs TTS failed, falling back: ${err.message}")
+                    _voiceError.value = err.message
+                    fallbackSpeakAfterElevenLabs(clean, settings)
+                }
+            }
+            return
+        }
+
         if (settings.useGeminiTts) {
             scope.launch(Dispatchers.IO) {
                 _isSpeaking.value = true
+                _activeVoiceEngine.value = "Gemini Native TTS"
                 val audioRes = geminiProvider.synthesizeGeminiTtsAudio(
                     text = clean,
                     languageCode = settings.voiceLanguage
@@ -205,11 +246,94 @@ class VoiceAssistantManager(
                     playPcmAudio(pcmBytes)
                 }.onFailure { err ->
                     Log.w(TAG, "Gemini TTS fallback to Android TTS: ${err.message}")
+                    _activeVoiceEngine.value = "Android TTS"
                     speakWithAndroidTts(clean, settings)
                 }
             }
         } else {
+            _activeVoiceEngine.value = "Android TTS"
             speakWithAndroidTts(clean, settings)
+        }
+    }
+
+    suspend fun testElevenLabsSpeech(
+        sampleText: String,
+        apiKey: String,
+        voiceId: String,
+        elevenLabsConfig: ElevenLabsConfig
+    ): Result<String> = withContext(Dispatchers.IO) {
+        stopSpeaking()
+        _isSpeaking.value = true
+        val outFile = File(context.cacheDir, "aqua_eleven_test_${System.currentTimeMillis()}.mp3")
+        val res = elevenLabsClient.synthesizeSpeechToFile(
+            apiKey = apiKey,
+            voiceId = voiceId,
+            text = sampleText,
+            modelId = elevenLabsConfig.modelId,
+            stability = elevenLabsConfig.stability,
+            similarityBoost = elevenLabsConfig.similarityBoost,
+            outputFile = outFile
+        )
+        res.fold(
+            onSuccess = { file ->
+                _activeVoiceEngine.value = "ElevenLabs (${elevenLabsConfig.voiceName.ifBlank { voiceId.take(8) }})"
+                playMp3File(file)
+                Result.success("Playing ElevenLabs sample audio.")
+            },
+            onFailure = { err ->
+                _isSpeaking.value = false
+                Result.failure(err)
+            }
+        )
+    }
+
+    private suspend fun fallbackSpeakAfterElevenLabs(clean: String, settings: UserSettings) {
+        if (settings.useGeminiTts) {
+            _activeVoiceEngine.value = "Gemini Native TTS"
+            val audioRes = geminiProvider.synthesizeGeminiTtsAudio(
+                text = clean,
+                languageCode = settings.voiceLanguage
+            )
+            audioRes.onSuccess { pcmBytes ->
+                playPcmAudio(pcmBytes)
+                return
+            }
+        }
+        _activeVoiceEngine.value = "Android TTS"
+        speakWithAndroidTts(clean, settings)
+    }
+
+    private fun playMp3File(file: File) {
+        try {
+            val player = MediaPlayer().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build()
+                )
+                setDataSource(file.absolutePath)
+                setOnCompletionListener { mp ->
+                    runCatching { mp.release() }
+                    if (currentMediaPlayer === mp) currentMediaPlayer = null
+                    _isSpeaking.value = false
+                    runCatching { file.delete() }
+                }
+                setOnErrorListener { mp, _, _ ->
+                    runCatching { mp.release() }
+                    if (currentMediaPlayer === mp) currentMediaPlayer = null
+                    _isSpeaking.value = false
+                    runCatching { file.delete() }
+                    true
+                }
+                prepare()
+                start()
+            }
+            currentMediaPlayer = player
+        } catch (e: Exception) {
+            Log.e(TAG, "ElevenLabs MP3 playback failed", e)
+            _isSpeaking.value = false
+            runCatching { file.delete() }
         }
     }
 
@@ -273,6 +397,14 @@ class VoiceAssistantManager(
     fun stopSpeaking() {
         _isSpeaking.value = false
         tts?.stop()
+        try {
+            currentMediaPlayer?.let { mp ->
+                if (mp.isPlaying) mp.stop()
+                mp.release()
+            }
+        } catch (_: Exception) {
+        }
+        currentMediaPlayer = null
         try {
             currentAudioTrack?.pause()
             currentAudioTrack?.flush()

@@ -56,8 +56,61 @@ data class TelemetrySample(
 )
 
 /**
+ * Granular AI dependency & autonomy configuration giving users full control over
+ * model sampling parameters, multi-step chaining depth, unrestricted tool access,
+ * custom model overrides from Google AI Studio, and response style.
+ */
+data class AiFreedomConfig(
+    val autonomyLevel: String = AUTONOMY_BALANCED,
+    val temperature: Float = 0.7f,
+    val topP: Float = 0.95f,
+    val maxOutputTokens: Int = 4096,
+    val maxAgentSteps: Int = 10,
+    val enableAllToolsAlways: Boolean = true,
+    val customModelOverride: String = "",
+    val responseStyle: String = STYLE_ADAPTIVE
+) {
+    companion object {
+        const val AUTONOMY_ADVISORY = "ADVISORY"
+        const val AUTONOMY_BALANCED = "BALANCED"
+        const val AUTONOMY_UNRESTRICTED = "UNRESTRICTED"
+
+        const val STYLE_ADAPTIVE = "ADAPTIVE"
+        const val STYLE_CONCISE = "CONCISE"
+        const val STYLE_TECHNICAL = "TECHNICAL"
+        const val STYLE_CREATIVE = "CREATIVE"
+    }
+}
+
+/**
+ * Optional ElevenLabs voice synthesis preferences (non-compulsory).
+ */
+data class ElevenLabsConfig(
+    val enabled: Boolean = true,
+    val voiceName: String = "",
+    val modelId: String = MODEL_MULTILINGUAL_V2,
+    val stability: Float = 0.50f,
+    val similarityBoost: Float = 0.75f
+) {
+    companion object {
+        const val MODEL_MULTILINGUAL_V2 = "eleven_multilingual_v2"
+        const val MODEL_FLASH_V2_5 = "eleven_flash_v2_5"
+        const val MODEL_TURBO_V2_5 = "eleven_turbo_v2_5"
+        const val MODEL_MONOLINGUAL_V1 = "eleven_monolingual_v1"
+
+        val SUPPORTED_MODELS = listOf(
+            MODEL_MULTILINGUAL_V2 to "Multilingual v2 (Expressive)",
+            MODEL_FLASH_V2_5 to "Flash v2.5 (Ultra Low-Latency)",
+            MODEL_TURBO_V2_5 to "Turbo v2.5 (Balanced Real-Time)",
+            MODEL_MONOLINGUAL_V1 to "English Monolingual v1"
+        )
+    }
+}
+
+/**
  * Local per-user preferences for features layered seamlessly atop Firestore settings
- * without altering Firestore security rule schemas (AI persona, custom directive, pinned routines).
+ * without altering Firestore security rule schemas (AI persona, custom directive, pinned routines,
+ * AI Freedom parameters, ElevenLabs voice tuning, and post-login setup completion).
  */
 class AquaLocalPreferences(
     context: Context,
@@ -82,6 +135,15 @@ class AquaLocalPreferences(
 
     private val _conversationAliases = MutableStateFlow(loadConversationAliases())
     val conversationAliases: StateFlow<Map<String, String>> = _conversationAliases.asStateFlow()
+
+    private val _aiFreedomConfig = MutableStateFlow(loadAiFreedomConfig())
+    val aiFreedomConfig: StateFlow<AiFreedomConfig> = _aiFreedomConfig.asStateFlow()
+
+    private val _elevenLabsConfig = MutableStateFlow(loadElevenLabsConfig())
+    val elevenLabsConfig: StateFlow<ElevenLabsConfig> = _elevenLabsConfig.asStateFlow()
+
+    private val _hasCompletedAiSetup = MutableStateFlow(loadHasCompletedAiSetup())
+    val hasCompletedAiSetup: StateFlow<Boolean> = _hasCompletedAiSetup.asStateFlow()
 
     private fun key(suffix: String): String = "${userId.ifBlank { "default" }}_$suffix"
 
@@ -111,6 +173,47 @@ class AquaLocalPreferences(
         }.getOrDefault(emptyMap())
     }
 
+    private fun loadAiFreedomConfig(): AiFreedomConfig {
+        val raw = prefs.getString(key(KEY_AI_FREEDOM), "").orEmpty()
+        if (raw.isBlank()) return AiFreedomConfig()
+        return runCatching {
+            val obj = org.json.JSONObject(raw)
+            AiFreedomConfig(
+                autonomyLevel = obj.optString("autonomyLevel", AiFreedomConfig.AUTONOMY_BALANCED)
+                    .takeIf { it in setOf(AiFreedomConfig.AUTONOMY_ADVISORY, AiFreedomConfig.AUTONOMY_BALANCED, AiFreedomConfig.AUTONOMY_UNRESTRICTED) }
+                    ?: AiFreedomConfig.AUTONOMY_BALANCED,
+                temperature = obj.optDouble("temperature", 0.7).toFloat().coerceIn(0f, 2f),
+                topP = obj.optDouble("topP", 0.95).toFloat().coerceIn(0.1f, 1f),
+                maxOutputTokens = obj.optInt("maxOutputTokens", 4096).coerceIn(512, 8192),
+                maxAgentSteps = obj.optInt("maxAgentSteps", 10).coerceIn(2, 15),
+                enableAllToolsAlways = obj.optBoolean("enableAllToolsAlways", true),
+                customModelOverride = obj.optString("customModelOverride", "").trim().take(120),
+                responseStyle = obj.optString("responseStyle", AiFreedomConfig.STYLE_ADAPTIVE)
+                    .takeIf { it in setOf(AiFreedomConfig.STYLE_ADAPTIVE, AiFreedomConfig.STYLE_CONCISE, AiFreedomConfig.STYLE_TECHNICAL, AiFreedomConfig.STYLE_CREATIVE) }
+                    ?: AiFreedomConfig.STYLE_ADAPTIVE
+            )
+        }.getOrDefault(AiFreedomConfig())
+    }
+
+    private fun loadElevenLabsConfig(): ElevenLabsConfig {
+        val raw = prefs.getString(key(KEY_ELEVENLABS_CONFIG), "").orEmpty()
+        if (raw.isBlank()) return ElevenLabsConfig()
+        return runCatching {
+            val obj = org.json.JSONObject(raw)
+            ElevenLabsConfig(
+                enabled = obj.optBoolean("enabled", true),
+                voiceName = obj.optString("voiceName", "").trim().take(80),
+                modelId = obj.optString("modelId", ElevenLabsConfig.MODEL_MULTILINGUAL_V2)
+                    .ifBlank { ElevenLabsConfig.MODEL_MULTILINGUAL_V2 },
+                stability = obj.optDouble("stability", 0.50).toFloat().coerceIn(0f, 1f),
+                similarityBoost = obj.optDouble("similarityBoost", 0.75).toFloat().coerceIn(0f, 1f)
+            )
+        }.getOrDefault(ElevenLabsConfig())
+    }
+
+    private fun loadHasCompletedAiSetup(): Boolean =
+        prefs.getBoolean(key(KEY_AI_SETUP_DONE), false)
+
     fun setPersonaId(id: String) {
         val resolved = AquaPersona.fromId(id).id
         prefs.edit().putString(key(KEY_PERSONA), resolved).apply()
@@ -121,6 +224,51 @@ class AquaLocalPreferences(
         val clean = directive.trim().take(1200)
         prefs.edit().putString(key(KEY_DIRECTIVE), clean).apply()
         _customDirective.value = clean
+    }
+
+    fun setAiFreedomConfig(config: AiFreedomConfig) {
+        val normalized = config.copy(
+            temperature = config.temperature.coerceIn(0f, 2f),
+            topP = config.topP.coerceIn(0.1f, 1f),
+            maxOutputTokens = config.maxOutputTokens.coerceIn(512, 8192),
+            maxAgentSteps = config.maxAgentSteps.coerceIn(2, 15),
+            customModelOverride = config.customModelOverride.trim().take(120)
+        )
+        val obj = org.json.JSONObject().apply {
+            put("autonomyLevel", normalized.autonomyLevel)
+            put("temperature", normalized.temperature.toDouble())
+            put("topP", normalized.topP.toDouble())
+            put("maxOutputTokens", normalized.maxOutputTokens)
+            put("maxAgentSteps", normalized.maxAgentSteps)
+            put("enableAllToolsAlways", normalized.enableAllToolsAlways)
+            put("customModelOverride", normalized.customModelOverride)
+            put("responseStyle", normalized.responseStyle)
+        }
+        prefs.edit().putString(key(KEY_AI_FREEDOM), obj.toString()).apply()
+        _aiFreedomConfig.value = normalized
+    }
+
+    fun setElevenLabsConfig(config: ElevenLabsConfig) {
+        val normalized = config.copy(
+            voiceName = config.voiceName.trim().take(80),
+            modelId = config.modelId.trim().ifBlank { ElevenLabsConfig.MODEL_MULTILINGUAL_V2 },
+            stability = config.stability.coerceIn(0f, 1f),
+            similarityBoost = config.similarityBoost.coerceIn(0f, 1f)
+        )
+        val obj = org.json.JSONObject().apply {
+            put("enabled", normalized.enabled)
+            put("voiceName", normalized.voiceName)
+            put("modelId", normalized.modelId)
+            put("stability", normalized.stability.toDouble())
+            put("similarityBoost", normalized.similarityBoost.toDouble())
+        }
+        prefs.edit().putString(key(KEY_ELEVENLABS_CONFIG), obj.toString()).apply()
+        _elevenLabsConfig.value = normalized
+    }
+
+    fun setAiSetupCompleted(completed: Boolean) {
+        prefs.edit().putBoolean(key(KEY_AI_SETUP_DONE), completed).apply()
+        _hasCompletedAiSetup.value = completed
     }
 
     fun togglePinnedRoutine(routineId: String): Boolean {
@@ -175,5 +323,8 @@ class AquaLocalPreferences(
         const val KEY_PINNED_ROUTINES = "pinned_routine_ids"
         const val KEY_PINNED_CONVERSATIONS = "pinned_conversation_ids"
         const val KEY_CONV_ALIASES = "conversation_aliases_json"
+        const val KEY_AI_FREEDOM = "ai_freedom_config_json"
+        const val KEY_ELEVENLABS_CONFIG = "elevenlabs_config_json"
+        const val KEY_AI_SETUP_DONE = "ai_setup_completed"
     }
 }

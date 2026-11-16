@@ -1,7 +1,9 @@
 package com.example.ai
 
 import android.graphics.Bitmap
+import android.util.Base64
 import android.util.Log
+import com.example.data.local.AiFreedomConfig
 import com.example.data.local.SecureConfigStore
 import com.example.data.model.AgentStepTrace
 import com.example.data.model.ChatMessage
@@ -15,6 +17,7 @@ import com.google.firebase.ai.GenerativeModel
 import com.google.firebase.ai.LiveGenerativeModel
 import com.google.firebase.ai.ai
 import com.google.firebase.ai.type.Content
+import com.google.firebase.ai.type.FunctionCallPart
 import com.google.firebase.ai.type.FunctionResponsePart
 import com.google.firebase.ai.type.GenerativeBackend
 import com.google.firebase.ai.type.InlineDataPart
@@ -38,6 +41,8 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -71,11 +76,15 @@ class GeminiProvider(
         enableSearchGrounding: Boolean = false,
         enableMapsGrounding: Boolean = false,
         userLatLng: Pair<Double, Double>? = null,
-        promptHint: String = ""
+        promptHint: String = "",
+        freedomConfig: AiFreedomConfig = AiFreedomConfig()
     ): GenerativeModel {
         val resolvedModel = normalizeSupportedModel(modelName)
         val useDeepThinking = resolvedModel == UserSettings.MODEL_ARGON && settings.thinkingEnabled
         val config = generationConfig {
+            temperature = freedomConfig.temperature.coerceIn(0f, 2f)
+            topP = freedomConfig.topP.coerceIn(0.1f, 1f)
+            maxOutputTokens = freedomConfig.maxOutputTokens.coerceIn(512, 8192)
             if (useDeepThinking) {
                 thinkingConfig = thinkingConfig {
                     thinkingLevel = ThinkingLevel.HIGH
@@ -85,7 +94,13 @@ class GeminiProvider(
 
         val tools = mutableListOf<Tool>()
         if (enableFunctionTools) {
-            tools.add(toolCallingEngine.buildToolDeclarations(settings = settings, promptHint = promptHint))
+            tools.add(
+                toolCallingEngine.buildToolDeclarations(
+                    settings = settings,
+                    promptHint = promptHint,
+                    unlockAllTools = freedomConfig.enableAllToolsAlways
+                )
+            )
         }
         if (enableSearchGrounding && !enableFunctionTools && settings.fullInternetAccessEnabled) {
             tools.add(Tool.googleSearch())
@@ -170,48 +185,71 @@ class GeminiProvider(
         systemInstructionText: String,
         activeWallet: WalletConfig?,
         userLatLng: Pair<Double, Double>? = null,
+        freedomConfig: AiFreedomConfig = AiFreedomConfig(),
         onNavigateToBrowser: (String) -> Unit,
         requestAuthorization: suspend (PendingAuthorization) -> Boolean,
         onStreamChunk: (String) -> Unit,
         onTrace: (AgentStepTrace) -> Unit
     ): Result<AgentExecutionResult> {
-        val selectedModel = selectOptimalModel(userPrompt, attachment, settings)
+        val selectedModel = selectOptimalModel(userPrompt, attachment, settings, freedomConfig)
         val promptHint = (history.takeLast(2).map { it.content } + userPrompt).joinToString(" ")
         val traces = mutableListOf<AgentStepTrace>()
         val groundingSources = mutableListOf<String>()
 
-        // Optional direct API key path if user explicitly configured & enabled their own Gemini API key
+        // Personal Google AI Studio API Key path (with full multimodal + multi-step function calling)
         val customKey = secureConfigStore.getGeminiApiKey()
-        if (settings.useCustomDirectApiKey && !customKey.isNullOrBlank() && attachment == null) {
-            val directPrimary = executeDirectRestFallback(
+        if (settings.useCustomDirectApiKey && !customKey.isNullOrBlank()) {
+            val directModel = freedomConfig.customModelOverride.trim().ifBlank { selectedModel }
+            val directPrimary = executeDirectRestAgentTurn(
                 apiKey = customKey,
-                modelName = selectedModel,
+                modelName = directModel,
                 systemInstruction = systemInstructionText,
                 history = history,
                 userPrompt = userPrompt,
-                enableSearchGrounding = settings.fullInternetAccessEnabled && settings.searchGroundingEnabled,
-                onStreamChunk = onStreamChunk
+                attachment = attachment,
+                settings = settings,
+                activeWallet = activeWallet,
+                promptHint = promptHint,
+                freedomConfig = freedomConfig,
+                traces = traces,
+                groundingSources = groundingSources,
+                onNavigateToBrowser = onNavigateToBrowser,
+                requestAuthorization = requestAuthorization,
+                onStreamChunk = onStreamChunk,
+                onTrace = onTrace
             )
             if (directPrimary.isSuccess) return directPrimary
 
             val primaryErr = directPrimary.exceptionOrNull()
-            Log.w(TAG, "Direct Gemini REST failed on $selectedModel: ${primaryErr?.message}")
+            Log.w(TAG, "Direct Google AI Studio REST failed on $directModel: ${primaryErr?.message}")
             if (primaryErr != null && isRateLimitOrQuotaError(primaryErr)) {
-                delay(1000L)
-                val retryModel = if (selectedModel != UserSettings.MODEL_FLASH_LITE) UserSettings.MODEL_FLASH_LITE else selectedModel
-                val directRetry = executeDirectRestFallback(
+                delay(900L)
+                val retryModel = if (directModel != UserSettings.MODEL_FLASH_LITE) UserSettings.MODEL_FLASH_LITE else directModel
+                traces.clear()
+                groundingSources.clear()
+                val directRetry = executeDirectRestAgentTurn(
                     apiKey = customKey,
                     modelName = retryModel,
                     systemInstruction = systemInstructionText,
                     history = history,
                     userPrompt = userPrompt,
-                    enableSearchGrounding = settings.fullInternetAccessEnabled && settings.searchGroundingEnabled,
-                    onStreamChunk = onStreamChunk
+                    attachment = attachment,
+                    settings = settings,
+                    activeWallet = activeWallet,
+                    promptHint = promptHint,
+                    freedomConfig = freedomConfig,
+                    traces = traces,
+                    groundingSources = groundingSources,
+                    onNavigateToBrowser = onNavigateToBrowser,
+                    requestAuthorization = requestAuthorization,
+                    onStreamChunk = onStreamChunk,
+                    onTrace = onTrace
                 )
                 if (directRetry.isSuccess) return directRetry
-                Log.w(TAG, "Direct Gemini REST retry on $retryModel failed; falling back to Firebase AI Logic")
+                Log.w(TAG, "Direct REST retry failed; falling back to Firebase AI Logic")
             }
-            // Seamless fallback to Firebase AI Logic (supports function calling & separate quota)
+            traces.clear()
+            groundingSources.clear()
             return executeFirebaseAiWithResilience(
                 primaryModel = selectedModel,
                 userPrompt = userPrompt,
@@ -222,6 +260,7 @@ class GeminiProvider(
                 activeWallet = activeWallet,
                 userLatLng = userLatLng,
                 promptHint = promptHint,
+                freedomConfig = freedomConfig,
                 traces = traces,
                 groundingSources = groundingSources,
                 onNavigateToBrowser = onNavigateToBrowser,
@@ -242,6 +281,7 @@ class GeminiProvider(
             activeWallet = activeWallet,
             userLatLng = userLatLng,
             promptHint = promptHint,
+            freedomConfig = freedomConfig,
             traces = traces,
             groundingSources = groundingSources,
             onNavigateToBrowser = onNavigateToBrowser,
@@ -262,6 +302,7 @@ class GeminiProvider(
         activeWallet: WalletConfig?,
         userLatLng: Pair<Double, Double>?,
         promptHint: String,
+        freedomConfig: AiFreedomConfig,
         traces: MutableList<AgentStepTrace>,
         groundingSources: MutableList<String>,
         onNavigateToBrowser: (String) -> Unit,
@@ -281,6 +322,7 @@ class GeminiProvider(
                 activeWallet = activeWallet,
                 userLatLng = userLatLng,
                 promptHint = promptHint,
+                freedomConfig = freedomConfig,
                 traces = traces,
                 groundingSources = groundingSources,
                 onNavigateToBrowser = onNavigateToBrowser,
@@ -301,6 +343,7 @@ class GeminiProvider(
                 activeWallet = activeWallet,
                 userLatLng = userLatLng,
                 promptHint = promptHint,
+                freedomConfig = freedomConfig,
                 traces = traces,
                 groundingSources = groundingSources,
                 onNavigateToBrowser = onNavigateToBrowser,
@@ -325,6 +368,7 @@ class GeminiProvider(
                     activeWallet = activeWallet,
                     userLatLng = userLatLng,
                     promptHint = promptHint,
+                    freedomConfig = freedomConfig,
                     traces = traces,
                     groundingSources = groundingSources,
                     onNavigateToBrowser = onNavigateToBrowser,
@@ -350,6 +394,7 @@ class GeminiProvider(
         activeWallet: WalletConfig?,
         userLatLng: Pair<Double, Double>?,
         promptHint: String,
+        freedomConfig: AiFreedomConfig,
         traces: MutableList<AgentStepTrace>,
         groundingSources: MutableList<String>,
         onNavigateToBrowser: (String) -> Unit,
@@ -373,6 +418,7 @@ class GeminiProvider(
                 activeWallet = activeWallet,
                 userLatLng = userLatLng,
                 promptHint = promptHint,
+                freedomConfig = freedomConfig,
                 traces = traces,
                 groundingSources = groundingSources,
                 onNavigateToBrowser = onNavigateToBrowser,
@@ -390,7 +436,7 @@ class GeminiProvider(
             if (isRateLimitOrQuotaError(fallbackErr) || isRateLimitOrQuotaError(rootCause)) {
                 Result.failure(
                     IllegalStateException(
-                        "Gemini rate limit reached (HTTP 429) on both $failedModel and $fallbackModel. Please wait 30–60 seconds before retrying, or verify your quota/Direct API key in Settings -> Gemini Intelligence."
+                        "Gemini rate limit reached (HTTP 429) on both $failedModel and $fallbackModel. Please wait 30–60 seconds before retrying, or verify your Google AI Studio API key in Settings."
                     )
                 )
             } else {
@@ -420,6 +466,7 @@ class GeminiProvider(
         activeWallet: WalletConfig?,
         userLatLng: Pair<Double, Double>?,
         promptHint: String,
+        freedomConfig: AiFreedomConfig,
         traces: MutableList<AgentStepTrace>,
         groundingSources: MutableList<String>,
         onNavigateToBrowser: (String) -> Unit,
@@ -436,12 +483,13 @@ class GeminiProvider(
             enableSearchGrounding = settings.fullInternetAccessEnabled && settings.searchGroundingEnabled && useGroundingInsteadOfTools,
             enableMapsGrounding = settings.fullInternetAccessEnabled && settings.mapsGroundingEnabled && useGroundingInsteadOfTools,
             userLatLng = userLatLng,
-            promptHint = promptHint
+            promptHint = promptHint,
+            freedomConfig = freedomConfig
         )
 
         val historyContents = history
             .filter { it.role == "user" || it.role == "model" }
-            .takeLast(10)
+            .takeLast(12)
             .map { msg ->
                 content(role = msg.role) { text(msg.content) }
             }
@@ -472,16 +520,16 @@ class GeminiProvider(
             return Result.success(AgentExecutionResult(finalText, modelToUse, traces, groundingSources))
         }
 
-        // Streamed autonomous multi-step function-calling loop (low TTFT, prevents unary 60s hang)
+        val maxSteps = freedomConfig.maxAgentSteps.coerceIn(2, 15)
         val chat = model.startChat(history = historyContents)
         var nextTurnContent: Content = userContent
         val aggregatedText = StringBuilder()
         var loopCount = 0
 
-        while (loopCount < MAX_AGENT_STEPS) {
+        while (loopCount < maxSteps) {
             loopCount++
             val turnText = StringBuilder()
-            val pendingCalls = mutableListOf<com.google.firebase.ai.type.FunctionCallPart>()
+            val pendingCalls = mutableListOf<FunctionCallPart>()
 
             withTimeout(60_000L) {
                 chat.sendMessageStream(nextTurnContent).collect { chunk ->
@@ -537,7 +585,8 @@ class GeminiProvider(
     private fun selectOptimalModel(
         prompt: String,
         attachment: ImportedAttachment?,
-        settings: UserSettings
+        settings: UserSettings,
+        freedomConfig: AiFreedomConfig = AiFreedomConfig()
     ): String {
         val preferred = normalizeSupportedModel(settings.preferredModel)
         if (attachment != null && (attachment.isImage || attachment.isVideo)) {
@@ -615,62 +664,139 @@ class GeminiProvider(
         }
     }
 
-    private suspend fun executeDirectRestFallback(
+    private suspend fun executeDirectRestAgentTurn(
         apiKey: String,
         modelName: String,
         systemInstruction: String,
         history: List<ChatMessage>,
         userPrompt: String,
-        enableSearchGrounding: Boolean,
-        onStreamChunk: (String) -> Unit
+        attachment: ImportedAttachment?,
+        settings: UserSettings,
+        activeWallet: WalletConfig?,
+        promptHint: String,
+        freedomConfig: AiFreedomConfig,
+        traces: MutableList<AgentStepTrace>,
+        groundingSources: MutableList<String>,
+        onNavigateToBrowser: (String) -> Unit,
+        requestAuthorization: suspend (PendingAuthorization) -> Boolean,
+        onStreamChunk: (String) -> Unit,
+        onTrace: (AgentStepTrace) -> Unit
     ): Result<AgentExecutionResult> = withContext(Dispatchers.IO) {
         runCatching {
+            val useGroundingInsteadOfTools = shouldUseWebOrMapsGrounding(userPrompt, settings)
             val contents = JSONArray()
-            history.filter { it.role == "user" || it.role == "model" }.takeLast(10).forEach { msg ->
+            history.filter { it.role == "user" || it.role == "model" }.takeLast(12).forEach { msg ->
                 contents.put(JSONObject().apply {
                     put("role", msg.role)
                     put("parts", JSONArray().put(JSONObject().put("text", msg.content)))
                 })
             }
+
+            val userParts = JSONArray()
+            if (attachment != null) {
+                val bytes = attachment.rawBytes
+                if (bytes != null && (attachment.isImage || attachment.isVideo || attachment.isAudio || attachment.mimeType == "application/pdf")) {
+                    userParts.put(
+                        JSONObject().put(
+                            "inline_data",
+                            JSONObject().apply {
+                                put("mime_type", attachment.mimeType)
+                                put("data", Base64.encodeToString(bytes, Base64.NO_WRAP))
+                            }
+                        )
+                    )
+                } else {
+                    userParts.put(
+                        JSONObject().put(
+                            "text",
+                            "[Imported File: ${attachment.displayName} (${attachment.mimeType})]\n${attachment.extractedTextPreview}\n\n"
+                        )
+                    )
+                }
+            }
+            userParts.put(JSONObject().put("text", userPrompt.ifBlank { "Analyze the attached content and summarize key insights." }))
             contents.put(JSONObject().apply {
                 put("role", "user")
-                put("parts", JSONArray().put(JSONObject().put("text", userPrompt)))
+                put("parts", userParts)
             })
 
-            val bodyJson = JSONObject().apply {
-                put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", systemInstruction))))
-                put("contents", contents)
-                if (enableSearchGrounding) {
-                    put("tools", JSONArray().put(JSONObject().put("google_search", JSONObject())))
+            val toolsArray = JSONArray()
+            if (useGroundingInsteadOfTools && settings.fullInternetAccessEnabled) {
+                toolsArray.put(JSONObject().put("google_search", JSONObject()))
+            } else if (attachment == null) {
+                val fnDecls = toolCallingEngine.buildRestToolDeclarations(
+                    settings = settings,
+                    promptHint = promptHint,
+                    unlockAllTools = freedomConfig.enableAllToolsAlways
+                )
+                if (fnDecls.length() > 0) {
+                    toolsArray.put(JSONObject().put("functionDeclarations", fnDecls))
                 }
-            }.toString()
+            }
 
+            val genConfig = JSONObject().apply {
+                put("temperature", freedomConfig.temperature.coerceIn(0f, 2f).toDouble())
+                put("topP", freedomConfig.topP.coerceIn(0.1f, 1f).toDouble())
+                put("maxOutputTokens", freedomConfig.maxOutputTokens.coerceIn(512, 8192))
+            }
+
+            val maxSteps = freedomConfig.maxAgentSteps.coerceIn(2, 15)
+            val aggregatedText = StringBuilder()
             val url = "https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent"
-            val req = Request.Builder()
-                .url(url)
-                .header("x-goog-api-key", apiKey)
-                .post(bodyJson.toRequestBody("application/json".toMediaType()))
-                .build()
 
-            httpClient.newCall(req).execute().use { resp ->
-                val rawBody = resp.body?.string().orEmpty()
-                if (!resp.isSuccessful) {
-                    val serverMsg = runCatching {
-                        JSONObject(rawBody).optJSONObject("error")?.optString("message", "")
-                    }.getOrNull().orEmpty()
-                    val detail = if (serverMsg.isNotBlank()) "HTTP ${resp.code}: $serverMsg" else "HTTP ${resp.code}"
-                    throw IllegalStateException("Direct Gemini API returned $detail.")
+            var step = 0
+            while (step < maxSteps) {
+                step++
+                val bodyJson = JSONObject().apply {
+                    put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", systemInstruction))))
+                    put("contents", contents)
+                    put("generationConfig", genConfig)
+                    if (toolsArray.length() > 0) {
+                        put("tools", toolsArray)
+                    }
+                }.toString()
+
+                val req = Request.Builder()
+                    .url(url)
+                    .header("x-goog-api-key", apiKey)
+                    .post(bodyJson.toRequestBody("application/json".toMediaType()))
+                    .build()
+
+                val respJson = httpClient.newCall(req).execute().use { resp ->
+                    val rawBody = resp.body?.string().orEmpty()
+                    if (!resp.isSuccessful) {
+                        val serverMsg = runCatching {
+                            JSONObject(rawBody).optJSONObject("error")?.optString("message", "")
+                        }.getOrNull().orEmpty()
+                        val detail = if (serverMsg.isNotBlank()) "HTTP ${resp.code}: $serverMsg" else "HTTP ${resp.code}"
+                        throw IllegalStateException("Direct Google AI Studio API returned $detail.")
+                    }
+                    JSONObject(rawBody.ifBlank { "{}" })
                 }
-                val respJson = JSONObject(rawBody.ifBlank { "{}" })
+
                 val firstCand = respJson.optJSONArray("candidates")?.optJSONObject(0)
-                val text = firstCand
-                    ?.optJSONObject("content")
-                    ?.optJSONArray("parts")
-                    ?.optJSONObject(0)
-                    ?.optString("text", "")
-                    .orEmpty()
-                if (text.isBlank()) throw IllegalStateException("Direct Gemini API returned an empty response.")
-                val sources = mutableListOf<String>()
+                val modelContent = firstCand?.optJSONObject("content")
+                val parts = modelContent?.optJSONArray("parts") ?: JSONArray()
+
+                val stepText = StringBuilder()
+                val functionCalls = mutableListOf<Pair<String, JSONObject>>()
+
+                for (i in 0 until parts.length()) {
+                    val part = parts.optJSONObject(i) ?: continue
+                    val partText = part.optString("text", "")
+                    if (partText.isNotEmpty()) {
+                        stepText.append(partText)
+                    }
+                    val fc = part.optJSONObject("functionCall")
+                    if (fc != null) {
+                        val fnName = fc.optString("name", "")
+                        val fnArgs = fc.optJSONObject("args") ?: JSONObject()
+                        if (fnName.isNotBlank()) {
+                            functionCalls.add(fnName to fnArgs)
+                        }
+                    }
+                }
+
                 val chunks = firstCand?.optJSONObject("groundingMetadata")?.optJSONArray("groundingChunks")
                 if (chunks != null) {
                     for (i in 0 until chunks.length()) {
@@ -678,17 +804,68 @@ class GeminiProvider(
                         val title = web.optString("title", "")
                         val uri = web.optString("uri", "")
                         val label = listOf(title, uri).filter { it.isNotBlank() }.joinToString(" — ")
-                        if (label.isNotBlank() && label !in sources) sources.add(label)
+                        if (label.isNotBlank() && label !in groundingSources) groundingSources.add(label)
                     }
                 }
-                onStreamChunk(text)
-                AgentExecutionResult(text, modelName, emptyList(), sources)
+
+                if (stepText.isNotBlank()) {
+                    if (aggregatedText.isNotEmpty()) aggregatedText.append("\n")
+                    aggregatedText.append(stepText)
+                    onStreamChunk(aggregatedText.toString())
+                }
+
+                if (functionCalls.isEmpty()) break
+
+                if (modelContent != null) {
+                    contents.put(modelContent)
+                }
+
+                val fnResponseParts = JSONArray()
+                for ((fnName, fnArgsJson) in functionCalls) {
+                    val kArgs = runCatching {
+                        Json.parseToJsonElement(fnArgsJson.toString()).jsonObject
+                    }.getOrDefault(kotlinx.serialization.json.JsonObject(emptyMap()))
+                    val fnResult = toolCallingEngine.executeFunctionCall(
+                        call = FunctionCallPart(fnName, kArgs),
+                        settings = settings,
+                        activeWallet = activeWallet,
+                        onNavigateToBrowser = onNavigateToBrowser,
+                        requestAuthorization = requestAuthorization,
+                        onTrace = { trace ->
+                            traces.add(trace)
+                            onTrace(trace)
+                        }
+                    )
+                    val responseObj = runCatching { JSONObject(fnResult.toString()) }
+                        .getOrDefault(JSONObject().put("message", fnResult.toString()))
+                    fnResponseParts.put(
+                        JSONObject().put(
+                            "functionResponse",
+                            JSONObject().apply {
+                                put("name", fnName)
+                                put("response", responseObj)
+                            }
+                        )
+                    )
+                }
+                contents.put(
+                    JSONObject().apply {
+                        put("role", "user")
+                        put("parts", fnResponseParts)
+                    }
+                )
             }
+
+            val finalText = aggregatedText.toString().trim().ifBlank {
+                if (traces.isNotEmpty()) "Task execution finished (${traces.size} tool step(s))."
+                else throw IllegalStateException("Direct Google AI Studio API returned an empty response.")
+            }
+            onStreamChunk(finalText)
+            AgentExecutionResult(finalText, modelName, traces.toList(), groundingSources.toList())
         }
     }
 
     private companion object {
         const val TAG = "GeminiProvider"
-        const val MAX_AGENT_STEPS = 6
     }
 }
