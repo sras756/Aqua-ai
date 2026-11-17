@@ -101,7 +101,7 @@
   <main class="wrap">
     <section class="card">
       <h1>Privacy Policy for Aqua AI</h1>
-      <p style="margin-bottom:4px;"><strong>Effective Date:</strong> November 16, 2026 &nbsp;|&nbsp; <strong>App Package:</strong> <code>com.aistudio.aquaai.vqrzmn</code></p>
+      <p style="margin-bottom:4px;"><strong>Effective Date:</strong> November 17, 2026 &nbsp;|&nbsp; <strong>App Package:</strong> <code>com.aistudio.aquaai.vqrzmn</code></p>
       <p style="margin:0;"><strong>Developer Contact:</strong> <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a></p>
     </section>
 
@@ -115,6 +115,7 @@
       <h2>1. Information We Access and Process</h2>
       <ul>
         <li><strong>Account Information:</strong> Google Sign-In via Firebase Authentication provides your UID, display name, email, and avatar solely to scope your account.</li>
+        <li><strong>Age Tier &amp; Optional Gender Profile:</strong> Optional age (validated 13+) and optional gender preference stored inside your user-scoped Firestore settings solely to enforce Teen Mode guardrails and adapt pronoun style.</li>
         <li><strong>AI Prompts &amp; Attachments:</strong> Messages, voice transcripts, images, and SAF files you submit are sent to Gemini / Firebase AI Logic when you trigger a request.</li>
         <li><strong>Live Web Requests:</strong> Queries and public URLs fetched when <em>Full Internet Access</em> is enabled carry zero ad trackers.</li>
         <li><strong>On-Device Session Telemetry:</strong> Real battery % and RAM % metrics plotted in Core/Hub remain strictly local to your active session.</li>
@@ -122,16 +123,16 @@
     </article>
 
     <article class="card clause">
-      <h2>2. AI Personas, Custom Keys, ElevenLabs Voice &amp; Freedom Controls</h2>
-      <p>Personal Google AI Studio keys and optional (non-compulsory) ElevenLabs API keys &amp; Voice IDs remain encrypted locally in Android Keystore AES-GCM. Personas, directives, and AI Freedom tuning parameters are stored locally per user on-device.</p>
+      <h2>2. AI Personas, Age Guardrails, Custom Keys &amp; ElevenLabs Voice</h2>
+      <p>Personal Google AI Studio keys and optional (non-compulsory) ElevenLabs API keys &amp; Voice IDs remain encrypted locally in Android Keystore AES-GCM. Personas, directives, and AI Freedom tuning parameters are stored locally per user on-device; Teen Mode (13–17) caps autonomy at Balanced automatically.</p>
     </article>
 
     <article class="card clause">
-      <h2>3. Permissions, Aqua Launcher &amp; Foreground Service</h2>
+      <h2>3. Permissions &amp; Foreground Service</h2>
       <ul>
         <li><strong>Runtime Permissions:</strong> Opt-in <code>RECORD_AUDIO</code>, <code>CAMERA</code>, <code>USE_BIOMETRIC</code>, <code>ACCESS_COARSE_LOCATION</code>, and alarms.</li>
         <li><strong>Zero Broad Storage Scans:</strong> Uses Android Photo Picker and SAF rather than broad media-library storage permissions.</li>
-        <li><strong>Foreground Service &amp; Launcher:</strong> Persistent notification appears whenever background wake-word or prioritization is active; discovered installed apps stay on-device.</li>
+        <li><strong>Foreground Service &amp; Local App Query:</strong> Persistent notification appears whenever background wake-word or prioritization is active; Aqua Launcher has been removed and Command Palette app lookups remain device-only.</li>
       </ul>
     </article>
 
@@ -165,8 +166,8 @@
     </article>
 
     <article class="card clause">
-      <h2>8. Retention, Deletion, Children &amp; Updates</h2>
-      <p>Delete chats, memories, or local wallets anytime, revoke OAuth in your Google Account, or email <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a> for full account deletion. Not intended for children under 13.</p>
+      <h2>8. Retention, Deletion, Children (13+) &amp; Updates</h2>
+      <p>Delete chats, memories, or local wallets anytime, update or clear your Age/Gender profile in Settings, revoke OAuth in your Google Account, or email <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a> for full account deletion. Strictly prohibited for users under 13 (blocked on-device).</p>
     </article>
   </main>
   <script>

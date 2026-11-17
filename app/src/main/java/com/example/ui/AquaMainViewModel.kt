@@ -66,11 +66,12 @@ import com.example.wallet.FlashWalletConnector
 import com.example.wallet.PreparedTransferRequest
 import com.example.wallet.WalletBalanceSnapshot
 import com.example.wallet.WalletIntegrationDiscovery
+import com.example.domain.AgeTier
+import com.example.domain.UserGender
+import com.example.domain.UserProfilePolicy
 import com.example.wallet.core.AquaWalletCoordinator
 import com.example.wallet.core.AquaWalletEngine
 import com.example.wallet.security.WalletSecurityVault
-import com.example.launcher.engine.AquaLauncherEngine
-import com.example.launcher.engine.LauncherAiController
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -124,9 +125,6 @@ class AquaMainViewModel(
     val elevenLabsConfig: StateFlow<ElevenLabsConfig> = localPrefs.elevenLabsConfig
     val hasCompletedAiSetup: StateFlow<Boolean> = localPrefs.hasCompletedAiSetup
 
-    val launcherEngine: AquaLauncherEngine = AquaLauncherEngine.getInstance(appContext)
-    val launcherAiController: LauncherAiController = LauncherAiController(launcherEngine)
-
     private val toolCallingEngine: ToolCallingEngine = ToolCallingEngine(
         deviceController = deviceController,
         browserController = browserController,
@@ -136,8 +134,7 @@ class AquaMainViewModel(
         workspaceRepo = workspaceRepo,
         aiWalletBridge = walletCoordinator.aiBridge,
         onWalletMutated = { viewModelScope.launch { walletCoordinator.reloadAll() } },
-        launcherEngine = launcherEngine,
-        freedomConfigProvider = { localPrefs.aiFreedomConfig.value },
+        freedomConfigProvider = { UserProfilePolicy.clampFreedomForAge(localPrefs.aiFreedomConfig.value, settings.value) },
         aiStatusProvider = { buildAiEngineStatusSummary() },
         onSpeakWithElevenLabs = { textToSpeak ->
             voiceManager.speak(
@@ -424,22 +421,6 @@ class AquaMainViewModel(
                     .onSuccess { _driveBackups.value = it }
             }
         }
-        launcherEngine.attachCloudPushCallback { json ->
-            firestoreRepo.saveLauncherSync(json)
-        }
-        viewModelScope.launch {
-            firestoreRepo.observeLauncherSync()
-                .catch { /* Non-fatal if offline or uninitialized */ }
-                .collect { record ->
-                    if (record != null && launcherEngine.state.value.cloudSyncEnabled) {
-                        val remoteTs = record.updatedAt?.toDate()?.time ?: 0L
-                        val localTs = launcherEngine.state.value.lastCloudSyncMs
-                        if (remoteTs > localTs && record.configJson.isNotBlank()) {
-                            launcherEngine.applySyncedCloudPreferences(record.configJson, remoteTs)
-                        }
-                    }
-                }
-        }
     }
 
     fun refreshTelemetry() {
@@ -542,7 +523,7 @@ class AquaMainViewModel(
             telemetry = _telemetry.value,
             storage = _storageAndMemory.value,
             samples = _telemetryHistory.value,
-            installedAppsCount = launcherEngine.installedApps.value.size,
+            installedAppsCount = deviceController.getInstalledLaunchableApps().size,
             activeModel = settings.value.preferredModel,
             activePersona = AquaPersona.fromId(personaId.value),
             foregroundServiceActive = activeFgs
@@ -597,7 +578,36 @@ class AquaMainViewModel(
     }
 
     fun updateAiFreedomConfig(config: AiFreedomConfig) {
-        localPrefs.setAiFreedomConfig(config)
+        val clamped = UserProfilePolicy.clampFreedomForAge(config, settings.value)
+        if (clamped.autonomyLevel != config.autonomyLevel) {
+            _bannerMessage.value = "Teen Guardrails (13–17): Unrestricted Tools mode is limited to Balanced Autonomy."
+        }
+        localPrefs.setAiFreedomConfig(clamped)
+    }
+
+    fun updateUserProfile(ageYears: Int, genderId: String) {
+        val normalized = UserProfilePolicy.normalizeSettingsProfile(
+            settings = settings.value,
+            ageYears = ageYears,
+            genderId = genderId
+        )
+        val clampedFreedom = UserProfilePolicy.clampFreedomForAge(localPrefs.aiFreedomConfig.value, normalized)
+        if (clampedFreedom != localPrefs.aiFreedomConfig.value) {
+            localPrefs.setAiFreedomConfig(clampedFreedom)
+        }
+        updateSettings(normalized)
+        val tier = UserProfilePolicy.resolveTier(normalized)
+        val gender = UserGender.fromId(normalized.gender)
+        _bannerMessage.value = when (tier) {
+            AgeTier.UNDER_13_BLOCKED ->
+                "Age ${normalized.ageYears} saved — Aqua AI requires users to be at least 13 years old."
+            AgeTier.TEEN_13_17 ->
+                "Profile updated: Teen Mode (13–17) + Teen Guardrails active • Gender: ${gender.label}."
+            AgeTier.ADULT_18_PLUS ->
+                "Profile updated: Adult Mode (18+) • Gender: ${gender.label}."
+            AgeTier.UNSET ->
+                "Profile updated: Age unset • Gender: ${gender.label}."
+        }
     }
 
     fun updateElevenLabsConfig(config: ElevenLabsConfig) {
@@ -742,7 +752,9 @@ class AquaMainViewModel(
         elevenLabsVoiceName: String,
         elevenLabsModelId: String,
         enableElevenLabs: Boolean,
-        freedomConfig: AiFreedomConfig
+        freedomConfig: AiFreedomConfig,
+        ageYears: Int = settings.value.ageYears,
+        genderId: String = settings.value.gender
     ) {
         if (googleAiStudioKey.isNotBlank()) {
             secureConfigStore.saveGeminiApiKey(googleAiStudioKey)
@@ -753,7 +765,13 @@ class AquaMainViewModel(
         if (elevenLabsVoiceId.isNotBlank()) {
             secureConfigStore.saveElevenLabsVoiceId(elevenLabsVoiceId)
         }
-        localPrefs.setAiFreedomConfig(freedomConfig)
+        val profileSettings = UserProfilePolicy.normalizeSettingsProfile(
+            settings = settings.value,
+            ageYears = ageYears,
+            genderId = genderId
+        )
+        val clampedFreedom = UserProfilePolicy.clampFreedomForAge(freedomConfig, profileSettings)
+        localPrefs.setAiFreedomConfig(clampedFreedom)
         localPrefs.setElevenLabsConfig(
             localPrefs.elevenLabsConfig.value.copy(
                 enabled = enableElevenLabs,
@@ -763,53 +781,21 @@ class AquaMainViewModel(
         )
         val effectiveDirect = useGoogleAiStudioKey && secureConfigStore.hasGeminiApiKey()
         updateSettings(
-            settings.value.copy(
-                preferredModel = preferredModel.ifBlank { settings.value.preferredModel },
+            profileSettings.copy(
+                preferredModel = preferredModel.ifBlank { profileSettings.preferredModel },
                 useCustomDirectApiKey = effectiveDirect
             )
         )
         localPrefs.setAiSetupCompleted(true)
         _aiSetupSheetVisible.value = false
+        val tier = UserProfilePolicy.resolveTier(profileSettings)
         _bannerMessage.value = buildString {
             append("AI Setup saved (")
             append(if (effectiveDirect) "Google AI Studio Key" else "Managed Firebase AI")
             if (isElevenLabsActive()) append(" + ElevenLabs Voice")
+            if (tier != AgeTier.UNSET) append(" • ${tier.shortBadge}")
             append(").")
         }
-    }
-
-    fun openStandaloneLauncher() {
-        runCatching {
-            val intent = Intent(appContext, AquaLauncherActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            }
-            appContext.startActivity(intent)
-        }.onFailure { err ->
-            _bannerMessage.value = "Could not open standalone launcher: ${err.localizedMessage}"
-        }
-    }
-
-    fun pushLauncherCloudSyncNow() {
-        viewModelScope.launch {
-            val json = launcherEngine.state.value.toCloudSyncJson()
-            firestoreRepo.saveLauncherSync(json)
-                .onSuccess {
-                    launcherEngine.postBanner("Synced Aqua Launcher theme, wallpaper & gesture preferences to cloud.")
-                }
-                .onFailure { err ->
-                    launcherEngine.postBanner("Cloud sync failed: ${err.localizedMessage}")
-                }
-        }
-    }
-
-    private fun buildLauncherOverviewText(): String {
-        val st = launcherEngine.state.value
-        val appCount = launcherEngine.installedApps.value.size
-        val defaultHome = launcherEngine.isDefaultLauncher.value
-        return "- Discovered Installed Apps: $appCount | Default System Home Active: $defaultHome\n" +
-            "- Theme Preset: ${st.theme.presetId} | Grid: ${st.theme.gridColumns}x${st.theme.gridRows} | Pages: ${st.pageCount}\n" +
-            "- Wallpaper: ${st.wallpaper.label} (${st.wallpaper.typeId}) | Gaming Mode: ${st.gamingModeActive}\n" +
-            "- Tools: launcher_get_overview, launcher_search_apps, launcher_set_theme_or_wallpaper, launcher_manage_layout, launcher_execute_command"
     }
 
     fun clearBanner() {
@@ -868,6 +854,11 @@ class AquaMainViewModel(
         val trimmed = promptText.trim()
         val attachment = _pendingAttachment.value
         if (trimmed.isEmpty() && attachment == null) return
+        if (UserProfilePolicy.isUnderAgeBlocked(settings.value)) {
+            _coreState.value = AquaCoreState.ERROR
+            _bannerMessage.value = "Aqua AI requires users to be at least 13 years old. Update your age in Settings -> Profile & Safety."
+            return
+        }
 
         viewModelScope.launch {
             if (attachment != null && !_attachmentAuthorizedForAi.value) {
@@ -937,7 +928,7 @@ class AquaMainViewModel(
             var taskOutcomeSummary = ""
 
             try {
-                val currentFreedom = localPrefs.aiFreedomConfig.value
+                val currentFreedom = UserProfilePolicy.clampFreedomForAge(localPrefs.aiFreedomConfig.value, currentSettings)
                 val nativeWalletOverview = runCatching { walletCoordinator.aiBridge.getPublicOverviewText() }.getOrNull()
                 val sysInstruction = ContextManager.buildSystemInstruction(
                     settings = currentSettings,
@@ -948,7 +939,6 @@ class AquaMainViewModel(
                     browserUrl = browserPageState.value.currentUrl,
                     browserTitle = browserPageState.value.currentTitle,
                     nativeWalletOverview = nativeWalletOverview,
-                    launcherOverview = buildLauncherOverviewText(),
                     personaId = localPrefs.personaId.value,
                     customDirective = localPrefs.customDirective.value,
                     freedomConfig = currentFreedom,
@@ -1084,6 +1074,11 @@ class AquaMainViewModel(
             AquaWakeWordService.setExternalMicActive(appContext, false)
             return
         }
+        if (UserProfilePolicy.isUnderAgeBlocked(settings.value)) {
+            _liveStatus.value = "Live voice restricted (13+ age policy)"
+            _bannerMessage.value = "Aqua AI requires users to be at least 13 years old. Update your age in Settings -> Profile & Safety."
+            return
+        }
         // Keep foreground microphone service active so Live audio continues even if user minimizes the app or locks screen
         if (AquaWakeWordService.isRunning.value) {
             AquaWakeWordService.setExternalMicActive(appContext, true)
@@ -1097,7 +1092,7 @@ class AquaMainViewModel(
         }
         refreshTelemetry()
         val currentSettings = settings.value
-        val currentFreedom = localPrefs.aiFreedomConfig.value
+        val currentFreedom = UserProfilePolicy.clampFreedomForAge(localPrefs.aiFreedomConfig.value, currentSettings)
         viewModelScope.launch {
             val nativeWalletOverview = runCatching { walletCoordinator.aiBridge.getPublicOverviewText() }.getOrNull()
             val sysInstruction = ContextManager.buildSystemInstruction(
@@ -1109,7 +1104,6 @@ class AquaMainViewModel(
                 browserUrl = browserPageState.value.currentUrl,
                 browserTitle = browserPageState.value.currentTitle,
                 nativeWalletOverview = nativeWalletOverview,
-                launcherOverview = buildLauncherOverviewText(),
                 personaId = localPrefs.personaId.value,
                 customDirective = localPrefs.customDirective.value,
                 freedomConfig = currentFreedom,
@@ -2033,7 +2027,6 @@ class AquaMainViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        launcherEngine.attachCloudPushCallback(null)
         voiceManager.release()
     }
 }

@@ -310,10 +310,10 @@
       <h1>Privacy Policy for Aqua AI</h1>
       <p style="margin:0;color:var(--muted);">
         This Privacy Policy explains how Aqua AI collects, processes, protects, and lets you export or delete information
-        across AI conversations, Aqua Launcher, optional Google Workspace integrations, and the self-custodial crypto wallet.
+        across AI conversations, profile safety (Age 13+ &amp; optional gender preferences), optional Google Workspace integrations, and the self-custodial crypto wallet.
       </p>
       <div class="meta-chips">
-        <span class="meta-chip"><strong>Effective Date:</strong> November 16, 2026</span>
+        <span class="meta-chip"><strong>Effective Date:</strong> November 17, 2026</span>
         <span class="meta-chip"><strong>App Package:</strong> com.aistudio.aquaai.vqrzmn</span>
         <span class="meta-chip"><strong>Contact:</strong> <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a></span>
         <button class="icon-btn" type="button" id="copyEmailBtn">Copy Support Email</button>
@@ -330,8 +330,8 @@
         <p>Workspace and Drive scopes run only upon explicit consent and never feed ads, brokers, or model training.</p>
       </div>
       <div class="summary-card">
-        <div class="label">LAUNCHER PRIVACY</div>
-        <p>Installed package lists and session RAM/battery metrics remain local on your device—never synced to cloud.</p>
+        <div class="label">AGE 13+ &amp; PROFILE</div>
+        <p>Under-13 prompts are blocked on-device; Teen Mode (13–17) enforces guardrails; gender preference is optional.</p>
       </div>
       <div class="summary-card">
         <div class="label">PORTABILITY &amp; DELETE</div>
@@ -343,8 +343,8 @@
       <aside class="toc" aria-label="Table of Contents">
         <p class="toc-title">On This Page</p>
         <a href="#sec-1">1. Information We Process</a>
-        <a href="#sec-2">2. AI Personas &amp; Prompts</a>
-        <a href="#sec-3">3. Permissions &amp; Launcher</a>
+        <a href="#sec-2">2. AI Personas, Age &amp; Gender</a>
+        <a href="#sec-3">3. Permissions &amp; Foreground Service</a>
         <a href="#sec-4">4. Google API Limited Use</a>
         <a href="#sec-5">5. Self-Custodial Wallet</a>
         <a href="#sec-6">6. Storage &amp; Data Exports</a>
@@ -363,6 +363,7 @@
           <h2>1. Information We Access and Process</h2>
           <ul>
             <li><strong>Account Information:</strong> When you sign in with Google via Firebase Authentication, Aqua AI receives your Firebase UID, display name, email address, and profile photo URL solely to authenticate your session and isolate your Firestore workspace.</li>
+            <li><strong>Age Tier &amp; Optional Gender Profile:</strong> You may provide your age (validated 13+) and an optional gender identity/pronoun preference (Female, Male, Non-binary, Prefer not to say, or Unspecified) in Post-Login Setup or Settings. These values are stored inside your user-scoped Firestore settings document (<code>users/{uid}/settings/preferences</code>) solely to enforce 13+ safety guardrails and adapt conversational tone.</li>
             <li><strong>User-Initiated Prompts &amp; Attachments:</strong> Text messages, voice transcripts, documents, and images selected via Android Photo Picker or Storage Access Framework (SAF) are processed only when you submit them to generate AI responses.</li>
             <li><strong>Live Web &amp; Network Access:</strong> When <em>Full Internet Access</em> is enabled, search queries and public URLs you ask Aqua AI to inspect are retrieved over HTTPS without ad-tech cookies or cross-site tracking SDKs.</li>
             <li><strong>Session Telemetry (On-Device):</strong> Live battery level, charging state, Wi-Fi state, and RAM utilization displayed in the Core/Hub sparkline come from local Android system managers during your active session and are not uploaded as background telemetry profiles.</li>
@@ -370,21 +371,21 @@
         </article>
 
         <article class="clause-card" id="sec-2">
-          <h2>2. AI Personas, Custom Keys, ElevenLabs Voice &amp; Freedom Controls</h2>
+          <h2>2. AI Personas, Age Guardrails, Custom Keys &amp; ElevenLabs Voice</h2>
           <ul>
             <li><strong>AI Intelligence Provider (BYOK Supported):</strong> Assistant reasoning uses managed Firebase AI Logic by default, or your own optional personal <strong>Google AI Studio API key</strong> entered during Post-Login Setup or Settings and encrypted on-device via Android Keystore AES-256-GCM.</li>
             <li><strong>Optional ElevenLabs Voice Studio (Non-Compulsory):</strong> If you choose to supply an optional <strong>ElevenLabs API key and Voice ID</strong>, both are encrypted locally in Android Keystore and only submitted text phrases you speak or preview are sent to ElevenLabs (<code>api.elevenlabs.io</code>) for synthesis. Otherwise Gemini or Android TTS handles voice locally.</li>
-            <li><strong>Personas, Directives &amp; AI Freedom Parameters:</strong> Your AI Persona, custom system directive, pinned routines, sampling temperature/Top-P/step limits, and autonomy policy stay saved locally per user in <code>AquaLocalPreferences</code> and govern only prompts you submit.</li>
+            <li><strong>Personas, Directives &amp; AI Freedom Parameters:</strong> Your AI Persona, custom system directive, pinned routines, sampling temperature/Top-P/step limits, and autonomy policy stay saved locally per user in <code>AquaLocalPreferences</code> and govern only prompts you submit. In Teen Mode (ages 13–17), autonomy is capped at <em>Balanced</em> and safety guardrails are injected into the prompt context.</li>
           </ul>
         </article>
 
         <article class="clause-card" id="sec-3">
-          <h2>3. Android Permissions, Aqua Launcher &amp; Foreground Service</h2>
+          <h2>3. Android Permissions &amp; Foreground Service</h2>
           <ul>
             <li><strong>Least-Privilege Runtime Permissions:</strong> Microphone (<code>RECORD_AUDIO</code> for push-to-talk, Gemini Live, or optional wake-word listening), Camera (QR scanning and visual capture), Biometrics (local wallet unlock/signing), Coarse Location (opt-in local map context), and Alarms (only on explicit user request).</li>
             <li><strong>Zero Broad Storage Scanning:</strong> Aqua AI uses Android's zero-permission Photo Picker and Storage Access Framework (<code>OpenDocument</code> / <code>CreateDocument</code>) rather than broad media-library storage permissions.</li>
             <li><strong>Foreground Priority Service Transparency:</strong> When you enable background wake-word listening or background task prioritization, Android runs a visible persistent notification (<code>AquaWakeWordService</code>, type <code>microphone|dataSync</code>) with one-tap pause and stop controls.</li>
-            <li><strong>Aqua Launcher Package Visibility:</strong> When using Aqua Launcher, discovered launchable apps from Android <code>PackageManager</code> stay strictly on-device and are excluded from Firebase cloud launcher layout sync.</li>
+            <li><strong>No Home Launcher &amp; Local Package Lookup:</strong> Aqua AI no longer ships a custom Android Home launcher or live wallpaper service. Standard Android <code>PackageManager</code> queries used solely by the in-app Command Palette or explicit AI app-launch commands remain strictly on-device and are never synced to Firebase.</li>
           </ul>
         </article>
 
@@ -427,8 +428,8 @@
         <article class="clause-card" id="sec-8">
           <h2>8. Retention, Data Deletion, Children's Privacy &amp; Contact</h2>
           <ul>
-            <li><strong>Deletion &amp; Revocation:</strong> You can delete conversations, memories, skills, routines, or local wallets directly inside Aqua AI, revoke Google OAuth permissions in your Google Account Security panel, or request complete cloud account and data deletion by emailing <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a>.</li>
-            <li><strong>Children's Privacy:</strong> Aqua AI is not directed to children under age 13 (or the minimum digital consent age in your jurisdiction), and we do not knowingly collect personal information from children.</li>
+            <li><strong>Deletion &amp; Revocation:</strong> You can delete conversations, memories, skills, routines, or local wallets directly inside Aqua AI, reset or change your Age/Gender profile inside Settings, revoke Google OAuth permissions in your Google Account Security panel, or request complete cloud account and data deletion by emailing <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a>.</li>
+            <li><strong>Children's Privacy (13+ Gate &amp; Teen Mode):</strong> Aqua AI is strictly restricted to users aged 13 and older (or the minimum digital consent age in your jurisdiction). If an age below 13 is entered, on-device policy blocks chat and live voice execution immediately. Users aged 13–17 operate under automatic Teen Mode guardrails.</li>
             <li><strong>Policy Updates:</strong> Material updates will be reflected by an updated Effective Date and version summary on this portal.</li>
           </ul>
         </article>
@@ -436,7 +437,7 @@
     </div>
 
     <footer>
-      <span>&copy; 2026 Aqua AI • Privacy Policy (Effective Nov 16, 2026)</span>
+      <span>&copy; 2026 Aqua AI • Privacy Policy (Effective Nov 17, 2026)</span>
       <span><a href="terms.html">Read Terms &amp; Conditions →</a></span>
     </footer>
   </main>

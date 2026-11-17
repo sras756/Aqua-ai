@@ -63,8 +63,6 @@ class MainActivity : FragmentActivity() {
         }
         if (intent.hasExtra(AquaWakeWordService.EXTRA_WAKE_COMMAND)) {
             wakeCommand = intent.getStringExtra(AquaWakeWordService.EXTRA_WAKE_COMMAND) ?: ""
-        } else if (intent.hasExtra("aqua_launcher_prompt")) {
-            wakeCommand = intent.getStringExtra("aqua_launcher_prompt") ?: ""
         }
         if (intent.hasExtra("aqua_browser_query")) {
             val q = intent.getStringExtra("aqua_browser_query")

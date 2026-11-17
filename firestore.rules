@@ -52,7 +52,11 @@ service cloud.firestore {
              data.useGeminiTts is bool &&
              data.autonomousReversibleActions is bool &&
              data.darkThemeMode is string && data.darkThemeMode.size() >= 1 && data.darkThemeMode.size() <= 32 &&
-             data.useCustomDirectApiKey is bool;
+             data.useCustomDirectApiKey is bool &&
+             (!('ageYears' in data) || (data.ageYears is int && data.ageYears >= 0 && data.ageYears <= 120)) &&
+             (!('ageGroup' in data) || (data.ageGroup is string && data.ageGroup in ['unset', 'under_13_blocked', 'teen_13_17', 'adult_18_plus'])) &&
+             (!('gender' in data) || (data.gender is string && data.gender in ['unspecified', 'female', 'male', 'non_binary', 'prefer_not_to_say'])) &&
+             (!('ageGateConfirmed' in data) || data.ageGateConfirmed is bool);
     }
 
     function isValidConversation(data, userId) {
@@ -132,11 +136,6 @@ service cloud.firestore {
              data.lastRunSummary is string && data.lastRunSummary.size() <= 1000;
     }
 
-    function isValidLauncherSync(data, userId) {
-      return data.userId is string && data.userId == userId &&
-             data.configJson is string && data.configJson.size() >= 2 && data.configJson.size() <= 8000;
-    }
-
     match /users/{userId} {
       // Settings
       match /settings/{settingId} {
@@ -144,14 +143,14 @@ service cloud.firestore {
         allow list: if isOwner(userId);
         allow create: if isOwner(userId) && isValidId(settingId) &&
                          incoming().keys().hasAll(['userId', 'preferredModel', 'thinkingEnabled', 'searchGroundingEnabled', 'mapsGroundingEnabled', 'wakeWordEnabled', 'wakeWordPhrase', 'voiceLanguage', 'voiceSpeed', 'voicePitch', 'useGeminiTts', 'autonomousReversibleActions', 'darkThemeMode', 'useCustomDirectApiKey', 'createdAt', 'updatedAt']) &&
-                         incoming().keys().hasOnly(['userId', 'preferredModel', 'thinkingEnabled', 'searchGroundingEnabled', 'mapsGroundingEnabled', 'wakeWordEnabled', 'wakeWordPhrase', 'voiceLanguage', 'voiceSpeed', 'voicePitch', 'useGeminiTts', 'autonomousReversibleActions', 'darkThemeMode', 'useCustomDirectApiKey', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'preferredModel', 'thinkingEnabled', 'searchGroundingEnabled', 'mapsGroundingEnabled', 'wakeWordEnabled', 'wakeWordPhrase', 'voiceLanguage', 'voiceSpeed', 'voicePitch', 'useGeminiTts', 'autonomousReversibleActions', 'darkThemeMode', 'useCustomDirectApiKey', 'ageYears', 'ageGroup', 'gender', 'ageGateConfirmed', 'createdAt', 'updatedAt']) &&
                          isValidTimestampsOnCreate(incoming()) &&
                          isValidUserSettings(incoming(), userId);
         allow update: if isOwner(userId) && isValidId(settingId) &&
                          isValidUserSettings(incoming(), userId) &&
                          incoming().userId == existing().userId &&
                          isValidTimestampsOnUpdate(incoming()) &&
-                         incoming().diff(existing()).affectedKeys().hasOnly(['preferredModel', 'thinkingEnabled', 'searchGroundingEnabled', 'mapsGroundingEnabled', 'wakeWordEnabled', 'wakeWordPhrase', 'voiceLanguage', 'voiceSpeed', 'voicePitch', 'useGeminiTts', 'autonomousReversibleActions', 'darkThemeMode', 'useCustomDirectApiKey', 'updatedAt']);
+                         incoming().diff(existing()).affectedKeys().hasOnly(['preferredModel', 'thinkingEnabled', 'searchGroundingEnabled', 'mapsGroundingEnabled', 'wakeWordEnabled', 'wakeWordPhrase', 'voiceLanguage', 'voiceSpeed', 'voicePitch', 'useGeminiTts', 'autonomousReversibleActions', 'darkThemeMode', 'useCustomDirectApiKey', 'ageYears', 'ageGroup', 'gender', 'ageGateConfirmed', 'updatedAt']);
         allow delete: if isOwner(userId) && isValidId(settingId);
       }
 
@@ -275,22 +274,6 @@ service cloud.firestore {
         allow delete: if isOwner(userId) && isValidId(routineId);
       }
 
-      // Launcher Sync Configurations (non-sensitive theme/grid/gesture/wallpaper preferences only)
-      match /launcher_configs/{configId} {
-        allow get: if isOwner(userId) && isValidId(configId);
-        allow list: if isOwner(userId);
-        allow create: if isOwner(userId) && isValidId(configId) &&
-                         incoming().keys().hasAll(['userId', 'configJson', 'createdAt', 'updatedAt']) &&
-                         incoming().keys().hasOnly(['userId', 'configJson', 'createdAt', 'updatedAt']) &&
-                         isValidTimestampsOnCreate(incoming()) &&
-                         isValidLauncherSync(incoming(), userId);
-        allow update: if isOwner(userId) && isValidId(configId) &&
-                         isValidLauncherSync(incoming(), userId) &&
-                         incoming().userId == existing().userId &&
-                         isValidTimestampsOnUpdate(incoming()) &&
-                         incoming().diff(existing()).affectedKeys().hasOnly(['configJson', 'updatedAt']);
-        allow delete: if isOwner(userId) && isValidId(configId);
-      }
     }
   }
 }

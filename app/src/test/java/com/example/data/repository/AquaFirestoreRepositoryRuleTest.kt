@@ -239,19 +239,28 @@ class AquaFirestoreRepositoryRuleTest : FirestoreEmulatorTestBase() {
     }
 
     @Test
-    fun authenticatedUser_canSaveAndObserveLauncherCloudSyncPreferences() = runBlocking {
+    fun authenticatedUser_canSaveAndObserveAgeAndGenderSettings() = runBlocking {
         signInTestUser(ALICE_EMAIL)
         val repo = AquaFirestoreRepository(firestore)
 
         val saveRes = withTimeout(TIMEOUT_MS) {
-            repo.saveLauncherSync("""{"themePreset":"gaming","gridColumns":5}""")
+            repo.saveSettings(
+                UserSettings(
+                    preferredModel = UserSettings.MODEL_HYDROGEN,
+                    ageYears = 16,
+                    ageGroup = "teen_13_17",
+                    gender = "female",
+                    ageGateConfirmed = true
+                )
+            )
         }
         assertTrue(saveRes.isSuccess)
 
         val observed = withTimeout(FLOW_TIMEOUT_MS) {
-            repo.observeLauncherSync().first { it != null }
+            repo.observeSettings().first { it.ageGateConfirmed && it.ageYears == 16 }
         }
-        assertTrue(observed?.configJson?.contains("gaming") == true)
+        assertEquals("teen_13_17", observed.ageGroup)
+        assertEquals("female", observed.gender)
     }
 
     private companion object {

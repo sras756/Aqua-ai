@@ -29,6 +29,9 @@ import com.example.data.repository.GoogleWorkspaceRepository
 import com.example.data.repository.WorkspaceService
 import com.example.device.AndroidDeviceController
 import com.example.device.DeviceTelemetry
+import com.example.domain.AgeTier
+import com.example.domain.UserGender
+import com.example.domain.UserProfilePolicy
 import com.example.network.AquaWebClient
 import com.example.skills.SkillParserAndValidator
 import com.example.voice.AquaWakeWordService
@@ -634,5 +637,61 @@ class ExampleRobolectricTest {
         assertTrue(prompt.contains("UNRESTRICTED"))
         assertTrue(prompt.contains("gemini-2.5-flash"))
         assertTrue(prompt.contains("ElevenLabs"))
+    }
+
+    @Test
+    fun `user profile policy enforces age 13+ tiers clamps teen autonomy and injects gender context`() {
+        assertEquals(AgeTier.UNSET, UserProfilePolicy.resolveAgeTier(0, confirmed = false))
+        assertEquals(AgeTier.UNDER_13_BLOCKED, UserProfilePolicy.resolveAgeTier(12))
+        assertEquals(AgeTier.TEEN_13_17, UserProfilePolicy.resolveAgeTier(13))
+        assertEquals(AgeTier.TEEN_13_17, UserProfilePolicy.resolveAgeTier(17))
+        assertEquals(AgeTier.ADULT_18_PLUS, UserProfilePolicy.resolveAgeTier(18))
+
+        val normalizedUnder = UserProfilePolicy.normalizeSettingsProfile(
+            settings = UserSettings(),
+            ageYears = 11,
+            genderId = UserGender.PREFER_NOT_TO_SAY.id
+        )
+        assertTrue(UserProfilePolicy.isUnderAgeBlocked(normalizedUnder))
+        assertFalse(UserProfilePolicy.isTeenMode(normalizedUnder))
+        assertEquals(UserGender.PREFER_NOT_TO_SAY.id, normalizedUnder.gender)
+
+        val normalizedTeen = UserProfilePolicy.normalizeSettingsProfile(
+            settings = UserSettings(),
+            ageYears = 15,
+            genderId = UserGender.FEMALE.id
+        )
+        assertFalse(UserProfilePolicy.isUnderAgeBlocked(normalizedTeen))
+        assertTrue(UserProfilePolicy.isTeenMode(normalizedTeen))
+        assertEquals(AgeTier.TEEN_13_17.id, normalizedTeen.ageGroup)
+        assertEquals(UserGender.FEMALE.id, normalizedTeen.gender)
+
+        val unrestricted = AiFreedomConfig(autonomyLevel = AiFreedomConfig.AUTONOMY_UNRESTRICTED)
+        val clampedForTeen = UserProfilePolicy.clampFreedomForAge(unrestricted, normalizedTeen)
+        assertEquals(AiFreedomConfig.AUTONOMY_BALANCED, clampedForTeen.autonomyLevel)
+
+        val normalizedAdult = UserProfilePolicy.normalizeSettingsProfile(
+            settings = UserSettings(),
+            ageYears = 150, // coerced to MAX_VALID_AGE = 120
+            genderId = UserGender.NON_BINARY.id
+        )
+        assertEquals(UserProfilePolicy.MAX_VALID_AGE, normalizedAdult.ageYears)
+        assertEquals(AgeTier.ADULT_18_PLUS, UserProfilePolicy.resolveTier(normalizedAdult))
+        val unclampedForAdult = UserProfilePolicy.clampFreedomForAge(unrestricted, normalizedAdult)
+        assertEquals(AiFreedomConfig.AUTONOMY_UNRESTRICTED, unclampedForAdult.autonomyLevel)
+
+        val teenPrompt = ContextManager.buildSystemInstruction(
+            settings = normalizedTeen,
+            memories = emptyList(),
+            enabledSkills = emptyList(),
+            activeWallet = null,
+            telemetry = DeviceTelemetry(80, false, true, "Wi-Fi", 40, true, false, false),
+            browserUrl = "",
+            browserTitle = ""
+        )
+        assertTrue(teenPrompt.contains("[USER PROFILE & SAFETY POLICY]"))
+        assertTrue(teenPrompt.contains("TEEN GUARDRAILS ACTIVE"))
+        assertTrue(teenPrompt.contains("Female"))
+        assertTrue(teenPrompt.contains("she/her"))
     }
 }

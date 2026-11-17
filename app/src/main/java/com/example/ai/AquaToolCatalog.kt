@@ -115,45 +115,6 @@ internal object AquaToolCatalog {
             }
         } else emptyList()
 
-        val launcherCoreTools = listOf(
-            AquaToolSpec(
-                "launcher_search_apps",
-                "Searches real installed applications on Android by name, package, category, recent usage, or game filter.",
-                listOf(s("query", "Optional app search query or category filter."), b("gamesOnly", "True to list only discovered games."))
-            ),
-            AquaToolSpec(
-                "launcher_execute_command",
-                "Executes a natural-language Aqua Launcher command (opening apps/camera/downloads, checking recent apps, or requesting uninstall/default-home changes with confirmation).",
-                listOf(s("command", "Natural language launcher command."))
-            )
-        )
-
-        val launcherExtendedNeeded = includeAll || listOf(
-            "launcher", "home screen", "homescreen", "wallpaper", "theme", "dark mode", "icon",
-            "folder", "dock", "widget", "grid", "game", "gaming", "drawer", "hide", "uninstall",
-            "default home", "recent"
-        ).any { lower.contains(it) }
-
-        val launcherExtendedTools = if (launcherExtendedNeeded) {
-            listOf(
-                AquaToolSpec("launcher_get_overview", "Reads real Aqua Launcher status: default Home state, installed apps count, recent apps, games count, theme, and wallpaper mode."),
-                AquaToolSpec(
-                    "launcher_set_theme_or_wallpaper",
-                    "Changes Aqua Launcher visual theme preset or wallpaper mode, synced across standalone and integrated launcher.",
-                    listOf(
-                        s("themePresetId", "aqua_blue, midnight_dark, glassmorphism, minimal, gaming, or premium."),
-                        s("wallpaperTypeId", "animated_aurora, live_map, dynamic_gradient, gaming_cyber, or ai_generative."),
-                        b("gamingMode", "True/false for Aqua Gaming Mode.")
-                    )
-                ),
-                AquaToolSpec(
-                    "launcher_manage_layout",
-                    "Pins an installed app to Home/Dock, creates a home folder, or hides/unhides an app.",
-                    listOf(s("action", "pin_home, toggle_dock, create_folder, or hide_app."), s("packageNameOrLabel", "App name/package or folder name."), i("pageIndex", "Optional 0-based page index."))
-                )
-            )
-        } else emptyList()
-
         val walletDomainNeeded = includeAll || listOf(
             "wallet", "crypto", "balance", "portfolio", "tx", "transaction", "transfer", "send",
             "receive", "address", "bitcoin", "btc", "ethereum", "eth", "solana", "sol", "bnb",
@@ -239,8 +200,6 @@ internal object AquaToolCatalog {
         return coreDeviceTools +
             coreWebTools +
             extendedWebAndCommsTools +
-            launcherCoreTools +
-            launcherExtendedTools +
             walletTools +
             workspaceTools
     }

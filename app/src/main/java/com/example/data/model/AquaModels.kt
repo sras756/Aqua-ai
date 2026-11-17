@@ -26,6 +26,10 @@ data class UserSettings(
     val useCustomDirectApiKey: Boolean = false,
     val aiWalletAccessEnabled: Boolean = true,
     val aiWalletTransferPrepareEnabled: Boolean = true,
+    val ageYears: Int = 0,
+    val ageGroup: String = "unset",
+    val gender: String = "unspecified",
+    val ageGateConfirmed: Boolean = false,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
@@ -193,11 +197,3 @@ data class AgentStepTrace(
     val detail: String
 )
 
-@IgnoreExtraProperties
-data class LauncherCloudSyncRecord(
-    @DocumentId val id: String = "default",
-    val userId: String = "",
-    val configJson: String = "{}",
-    @ServerTimestamp val createdAt: Timestamp? = null,
-    @ServerTimestamp val updatedAt: Timestamp? = null
-)

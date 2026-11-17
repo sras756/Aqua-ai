@@ -12,10 +12,6 @@ import com.example.data.repository.GoogleDriveHistoryRepository
 import com.example.data.repository.GoogleWorkspaceRepository
 import com.example.data.repository.WorkspaceService
 import com.example.device.AndroidDeviceController
-import com.example.launcher.engine.AquaLauncherEngine
-import com.example.launcher.engine.LauncherAiController
-import com.example.launcher.model.LauncherThemePreset
-import com.example.launcher.model.WallpaperType
 import com.example.network.AquaWebClient
 import com.example.wallet.FlashWalletConnector
 import com.example.wallet.ai.AquaAiWalletBridge
@@ -42,7 +38,6 @@ class ToolCallingEngine(
     private val aiWalletBridge: AquaAiWalletBridge? = null,
     private val webClient: AquaWebClient = AquaWebClient(),
     private val onWalletMutated: () -> Unit = {},
-    private val launcherEngine: AquaLauncherEngine? = null,
     private val freedomConfigProvider: (() -> AiFreedomConfig)? = null,
     private val aiStatusProvider: (() -> String)? = null,
     private val onSpeakWithElevenLabs: ((String) -> String)? = null
@@ -1519,153 +1514,6 @@ class ToolCallingEngine(
                     }
                     onTrace(AgentStepTrace("Extract Links", name, "completed", "Found ${links.size} links"))
                     jsonResult(true, summary)
-                }
-
-                "launcher_get_overview" -> {
-                    val le = launcherEngine
-                        ?: return jsonResult(false, "Aqua Launcher engine is not initialized.")
-                    le.refreshDefaultLauncherStatus()
-                    val st = le.state.value
-                    val apps = le.installedApps.value
-                    val games = le.getGameApps(st, apps)
-                    val recent = le.getRecentApps(5)
-                    val msg = buildString {
-                        appendLine("Default Home Active: ${le.isDefaultLauncher.value} (System default: ${le.currentDefaultHomePackage.value ?: "Unknown"})")
-                        appendLine("Discovered Launchable Apps: ${apps.size} | Games: ${games.size} | Hidden: ${st.hiddenPackages.size}")
-                        appendLine("Active Theme: ${st.theme.presetId} (Grid ${st.theme.gridColumns}x${st.theme.gridRows}, Pages ${st.pageCount})")
-                        appendLine("Wallpaper: ${st.wallpaper.typeId} (${st.wallpaper.label})")
-                        if (recent.isNotEmpty()) {
-                            appendLine("Recent Apps: ${recent.joinToString { it.label }}")
-                        }
-                    }.trim()
-                    onTrace(AgentStepTrace("Launcher Overview", name, "completed", "${apps.size} apps"))
-                    jsonResult(true, msg)
-                }
-
-                "launcher_search_apps" -> {
-                    val le = launcherEngine
-                        ?: return jsonResult(false, "Aqua Launcher engine is not initialized.")
-                    val query = argStr("query").trim().lowercase()
-                    val gamesOnly = argBool("gamesOnly", false)
-                    val pool = if (gamesOnly) le.getGameApps() else le.installedApps.value
-                    val matched = pool.filter {
-                        query.isBlank() ||
-                            it.label.lowercase().contains(query) ||
-                            it.packageName.lowercase().contains(query) ||
-                            it.category.label.lowercase().contains(query)
-                    }
-                    val msg = if (matched.isEmpty()) {
-                        "No installed applications matched '$query'."
-                    } else {
-                        "Found ${matched.size} app(s):\n" + matched.take(15).joinToString("\n") {
-                            "- ${it.label} (${it.packageName}, ${it.category.label})"
-                        }
-                    }
-                    onTrace(AgentStepTrace("Search Apps", name, "completed", "${matched.size} found"))
-                    jsonResult(true, msg)
-                }
-
-                "launcher_set_theme_or_wallpaper" -> {
-                    val le = launcherEngine
-                        ?: return jsonResult(false, "Aqua Launcher engine is not initialized.")
-                    val themeId = argStr("themePresetId").trim()
-                    val wallId = argStr("wallpaperTypeId").trim()
-                    val notes = mutableListOf<String>()
-                    if (args.containsKey("gamingMode")) {
-                        val gm = argBool("gamingMode", false)
-                        le.toggleGamingMode(gm)
-                        notes.add("Gaming Mode -> ${if (gm) "ON" else "OFF"}")
-                    }
-                    if (themeId.isNotBlank()) {
-                        val preset = LauncherThemePreset.fromId(themeId)
-                        le.applyThemePreset(preset)
-                        notes.add("Theme -> ${preset.displayName}")
-                    }
-                    if (wallId.isNotBlank()) {
-                        val wt = WallpaperType.fromId(wallId)
-                        le.updateWallpaperConfig { it.copy(typeId = wt.id, label = wt.label) }
-                        notes.add("Wallpaper -> ${wt.label}")
-                    }
-                    val summary = if (notes.isEmpty()) "No launcher theme/wallpaper changes specified." else notes.joinToString(" • ")
-                    onTrace(AgentStepTrace("Customize Launcher", name, "completed", summary))
-                    jsonResult(true, summary)
-                }
-
-                "launcher_manage_layout" -> {
-                    val le = launcherEngine
-                        ?: return jsonResult(false, "Aqua Launcher engine is not initialized.")
-                    val action = argStr("action").trim().lowercase()
-                    val target = argStr("packageNameOrLabel").trim()
-                    val page = argInt("pageIndex", 0)
-                    val matchedApp = le.installedApps.value.firstOrNull {
-                        it.packageName.equals(target, ignoreCase = true) ||
-                            it.label.equals(target, ignoreCase = true) ||
-                            it.label.lowercase().contains(target.lowercase())
-                    }
-                    val msg = when (action) {
-                        "pin_home" -> {
-                            val app = matchedApp ?: return jsonResult(false, "No installed app matching '$target'.")
-                            le.addAppToHome(app, page)
-                            "Pinned ${app.label} to Aqua Launcher Home page ${page + 1}."
-                        }
-                        "toggle_dock" -> {
-                            val app = matchedApp ?: return jsonResult(false, "No installed app matching '$target'.")
-                            le.toggleDockApp(app.packageName)
-                            "Updated Aqua Launcher Dock for ${app.label}."
-                        }
-                        "create_folder" -> {
-                            require(target.isNotBlank()) { "Folder name is required." }
-                            le.createHomeFolder(target, emptyList(), page)
-                            "Created folder '$target' on Home page ${page + 1}."
-                        }
-                        "hide_app" -> {
-                            val app = matchedApp ?: return jsonResult(false, "No installed app matching '$target'.")
-                            le.toggleHiddenApp(app.packageName)
-                            "Toggled drawer visibility for ${app.label}."
-                        }
-                        else -> return jsonResult(false, "Unknown layout action '$action'.")
-                    }
-                    onTrace(AgentStepTrace("Launcher Layout", name, "completed", msg))
-                    jsonResult(true, msg)
-                }
-
-                "launcher_execute_command" -> {
-                    val le = launcherEngine
-                        ?: return jsonResult(false, "Aqua Launcher engine is not initialized.")
-                    val cmd = argStr("command")
-                    val aiCtrl = LauncherAiController(le)
-                    val outcome = aiCtrl.executeCommand(cmd)
-                    val proposal = outcome.pendingPermissionProposal
-                    val finalMsg = if (proposal != null) {
-                        val approved = requestAuthorization(
-                            PendingAuthorization(
-                                id = UUID.randomUUID().toString(),
-                                actionTitle = proposal.title,
-                                actionType = "Launcher System Action",
-                                description = proposal.description,
-                                parametersSummary = listOfNotNull(
-                                    "Action" to proposal.actionKind,
-                                    proposal.packageName?.let { "Package" to it }
-                                ),
-                                isFinancialOrSecurity = true,
-                                onApprove = {
-                                    aiCtrl.executeApprovedProposal(proposal)
-                                        .getOrElse { "Action failed: ${it.localizedMessage}" }
-                                },
-                                onDeny = { "Launcher system action cancelled by user." }
-                            )
-                        )
-                        if (approved) {
-                            aiCtrl.executeApprovedProposal(proposal)
-                                .getOrElse { "Action failed: ${it.localizedMessage}" }
-                        } else {
-                            "User declined '${proposal.title}'."
-                        }
-                    } else {
-                        outcome.message
-                    }
-                    onTrace(AgentStepTrace("Launcher AI Control", name, if (outcome.executed || proposal != null) "completed" else "info", finalMsg.take(120)))
-                    jsonResult(true, finalMsg)
                 }
 
                 "get_ai_freedom_config" -> {

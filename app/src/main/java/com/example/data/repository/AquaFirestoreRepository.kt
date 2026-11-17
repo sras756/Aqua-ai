@@ -7,7 +7,6 @@ import com.example.data.model.AquaSkill
 import com.example.data.model.BrowsingTab
 import com.example.data.model.ChatMessage
 import com.example.data.model.Conversation
-import com.example.data.model.LauncherCloudSyncRecord
 import com.example.data.model.MemoryItem
 import com.example.data.model.UserSettings
 import com.example.data.model.WalletConfig
@@ -116,6 +115,10 @@ class AquaFirestoreRepository(
                 "autonomousReversibleActions" to settings.autonomousReversibleActions,
                 "darkThemeMode" to settings.darkThemeMode.ifBlank { "aqua_abyss" }.take(32),
                 "useCustomDirectApiKey" to settings.useCustomDirectApiKey,
+                "ageYears" to settings.ageYears.coerceIn(0, 120),
+                "ageGroup" to settings.ageGroup.takeIf { it in VALID_AGE_GROUPS }.orEmpty().ifBlank { "unset" },
+                "gender" to settings.gender.takeIf { it in VALID_GENDERS }.orEmpty().ifBlank { "unspecified" },
+                "ageGateConfirmed" to settings.ageGateConfirmed,
                 "updatedAt" to FieldValue.serverTimestamp()
             )
             docRef.update(updates).await()
@@ -135,6 +138,10 @@ class AquaFirestoreRepository(
                 "autonomousReversibleActions" to settings.autonomousReversibleActions,
                 "darkThemeMode" to settings.darkThemeMode.ifBlank { "aqua_abyss" }.take(32),
                 "useCustomDirectApiKey" to settings.useCustomDirectApiKey,
+                "ageYears" to settings.ageYears.coerceIn(0, 120),
+                "ageGroup" to settings.ageGroup.takeIf { it in VALID_AGE_GROUPS }.orEmpty().ifBlank { "unset" },
+                "gender" to settings.gender.takeIf { it in VALID_GENDERS }.orEmpty().ifBlank { "unspecified" },
+                "ageGateConfirmed" to settings.ageGateConfirmed,
                 "createdAt" to FieldValue.serverTimestamp(),
                 "updatedAt" to FieldValue.serverTimestamp()
             )
@@ -832,55 +839,6 @@ class AquaFirestoreRepository(
             restoredConvs to restoredMemories
         }
 
-    // --- AQUA LAUNCHER PREFERENCE SYNC (NON-SENSITIVE PREFERENCES ONLY) ---
-
-    fun observeLauncherSync(configId: String = "default"): Flow<LauncherCloudSyncRecord?> = flow {
-        val uid = requireUserId()
-        val docRef = userRoot(uid).collection("launcher_configs").document(configId)
-        emitAll(
-            docRef.snapshots()
-                .map { snap ->
-                    if (snap.exists()) {
-                        snap.toObject(
-                            LauncherCloudSyncRecord::class.java,
-                            DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
-                        )
-                    } else null
-                }
-                .withFirestoreErrorLogging(uid, OperationType.GET, docRef.path)
-        )
-    }
-
-    suspend fun saveLauncherSync(configJson: String, configId: String = "default"): Result<Unit> = runCatching {
-        val uid = requireUserId()
-        val safeJson = configJson.ifBlank { "{}" }.take(8000)
-        val safeConfigId = configId.takeIf { VALID_ID_REGEX.matches(it) } ?: "default"
-        val docRef = userRoot(uid).collection("launcher_configs").document(safeConfigId)
-        val exists = docRef.get().await().exists()
-        if (exists) {
-            docRef.update(
-                mapOf(
-                    "configJson" to safeJson,
-                    "updatedAt" to FieldValue.serverTimestamp()
-                )
-            ).await()
-        } else {
-            docRef.set(
-                mapOf(
-                    "userId" to uid,
-                    "configJson" to safeJson,
-                    "createdAt" to FieldValue.serverTimestamp(),
-                    "updatedAt" to FieldValue.serverTimestamp()
-                )
-            ).await()
-        }
-        Unit
-    }.onFailure { e ->
-        if (e is CancellationException) throw e
-        val uid = auth.currentUser?.uid ?: "unauthenticated"
-        handleFirestoreError(e, OperationType.WRITE, "users/$uid/launcher_configs/$configId")
-    }
-
     private companion object {
         val VALID_ID_REGEX = Regex("^[a-zA-Z0-9_\\-]{1,128}$")
         val VALID_WALLET_METHODS = setOf("wallet_connect", "deep_link", "android_intent", "read_only_rpc", "unverified")
@@ -889,5 +847,7 @@ class AquaFirestoreRepository(
         val VALID_SKILL_FORMATS = setOf("json", "yaml", "markdown", "zip", "custom")
         val VALID_SECURITY_STATUSES = setOf("verified", "warning", "blocked")
         val VALID_MESSAGE_ROLES = setOf("user", "model", "agent", "tool")
+        val VALID_AGE_GROUPS = setOf("unset", "under_13_blocked", "teen_13_17", "adult_18_plus")
+        val VALID_GENDERS = setOf("unspecified", "female", "male", "non_binary", "prefer_not_to_say")
     }
 }

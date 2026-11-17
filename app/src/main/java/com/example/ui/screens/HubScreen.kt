@@ -1,9 +1,11 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,9 +27,10 @@ import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -38,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,16 +51,21 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.data.local.AquaPersona
+import com.example.domain.AgeTier
+import com.example.domain.UserGender
+import com.example.domain.UserProfilePolicy
 import com.example.ui.AquaMainViewModel
+import com.example.ui.components.AquaAnimatedEntrance
 import com.example.ui.components.AquaBackdropBox
 import com.example.ui.components.AquaGlassCard
+import com.example.ui.components.AquaProfileTierPill
 import com.example.ui.components.TelemetrySparklineCard
+import com.example.ui.components.aquaPressScale
 import com.example.ui.theme.AquaTheme
 
 @Composable
@@ -76,7 +85,10 @@ fun HubScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val personaId by viewModel.personaId.collectAsStateWithLifecycle()
     val persona = AquaPersona.fromId(personaId)
-    val installedCount = viewModel.launcherEngine.installedApps.collectAsStateWithLifecycle().value.size
+    val installedCount = remember { viewModel.deviceController.getInstalledLaunchableApps().size }
+
+    val ageTier = UserProfilePolicy.resolveTier(settings)
+    val gender = UserGender.fromId(settings.gender)
 
     AquaBackdropBox(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -125,183 +137,206 @@ fun HubScreen(
             ) {
                 // Hero Ecosystem Banner
                 item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(136.dp)
-                            .clip(RoundedCornerShape(24.dp))
-                            .border(1.dp, c.borderGlow, RoundedCornerShape(24.dp))
-                    ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.img_aqua_aurora_backdrop),
-                            contentDescription = "Aqua Ecosystem Neural Surface",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                    AquaAnimatedEntrance(index = 0) {
                         Box(
                             modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    Brush.horizontalGradient(
-                                        colors = listOf(
-                                            Color(0xFF030B16).copy(alpha = 0.88f),
-                                            Color(0xFF030B16).copy(alpha = 0.35f)
+                                .fillMaxWidth()
+                                .height(148.dp)
+                                .clip(RoundedCornerShape(24.dp))
+                                .border(1.dp, c.borderGlow, RoundedCornerShape(24.dp))
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.img_aqua_aurora_backdrop),
+                                contentDescription = "Aqua Ecosystem Neural Surface",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.horizontalGradient(
+                                            colors = listOf(
+                                                Color(0xFF030B16).copy(alpha = 0.90f),
+                                                Color(0xFF030B16).copy(alpha = 0.40f)
+                                            )
                                         )
                                     )
-                                )
-                        )
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(18.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(
-                                    text = "COMMAND SUITE",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = c.accentTeal
-                                )
-                                Text(
-                                    text = "Unified Android & AI Control",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    color = Color(0xFFEAF6FF)
-                                )
-                                Text(
-                                    text = "$installedCount installed apps • ${skills.count { it.enabled }} active skills • ${memories.size} memories",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFFB8D4EC)
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(18.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(
+                                        text = "COMMAND SUITE",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = c.accentTeal
+                                    )
+                                    Text(
+                                        text = "Unified Android & AI Control",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = Color(0xFFEAF6FF)
+                                    )
+                                    Text(
+                                        text = "$installedCount launchable apps • ${skills.count { it.enabled }} skills • ${memories.size} memories",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFFB8D4EC)
+                                    )
+                                    AquaProfileTierPill(
+                                        ageTier = ageTier,
+                                        gender = gender,
+                                        onClick = { onOpenTab("settings") },
+                                        modifier = Modifier.testTag("hub_profile_tier_pill")
+                                    )
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Image(
+                                    painter = painterResource(id = R.drawable.img_aqua_vault_emblem),
+                                    contentDescription = "Aqua Crystalline Emblem",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(72.dp)
+                                        .clip(RoundedCornerShape(18.dp))
+                                        .border(1.dp, c.accentCyan.copy(alpha = 0.5f), RoundedCornerShape(18.dp))
                                 )
                             }
-                            Spacer(Modifier.width(12.dp))
-                            Image(
-                                painter = painterResource(id = R.drawable.img_aqua_vault_emblem),
-                                contentDescription = "Aqua Crystalline Emblem",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .size(72.dp)
-                                    .clip(RoundedCornerShape(18.dp))
-                                    .border(1.dp, c.accentCyan.copy(alpha = 0.5f), RoundedCornerShape(18.dp))
+                        }
+                    }
+                }
+
+                // Bento Grid Row 1: Aqua Core & Routines
+                item {
+                    AquaAnimatedEntrance(index = 1) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            HubBentoTile(
+                                icon = Icons.Filled.GraphicEq,
+                                title = "Aqua Core",
+                                subtitle = "Orb, Chat & Live Voice",
+                                accent = c.accentCyan,
+                                tag = "hub_card_core",
+                                onClick = { onOpenTab("home") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            HubBentoTile(
+                                icon = Icons.Filled.AutoMode,
+                                title = "Routines",
+                                subtitle = "${routines.size} automation${if (routines.size == 1) "" else "s"}",
+                                accent = c.accentTeal,
+                                tag = "hub_card_routines",
+                                onClick = { onOpenTab("routines") },
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
                 }
 
-                // Bento Grid Row 1: Routines & Workspace
+                // Bento Grid Row 2: Workspace & Skills
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        HubBentoTile(
-                            icon = Icons.Filled.AutoMode,
-                            title = "Routines",
-                            subtitle = "${routines.size} automation${if (routines.size == 1) "" else "s"}",
-                            accent = c.accentCyan,
-                            tag = "hub_card_routines",
-                            onClick = { onOpenTab("routines") },
-                            modifier = Modifier.weight(1f)
-                        )
-                        HubBentoTile(
-                            icon = Icons.Filled.Apps,
-                            title = "Workspace",
-                            subtitle = "Gmail, Calendar & Sheets",
-                            accent = c.success,
-                            tag = "hub_card_workspace",
-                            onClick = { onOpenTab("workspace") },
-                            modifier = Modifier.weight(1f)
-                        )
+                    AquaAnimatedEntrance(index = 2) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            HubBentoTile(
+                                icon = Icons.Filled.Apps,
+                                title = "Workspace",
+                                subtitle = "Gmail, Calendar & Sheets",
+                                accent = c.success,
+                                tag = "hub_card_workspace",
+                                onClick = { onOpenTab("workspace") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            HubBentoTile(
+                                icon = Icons.Filled.Extension,
+                                title = "Skills Engine",
+                                subtitle = "${skills.count { it.enabled }} enabled • ${skills.size} total",
+                                accent = c.accentCyan,
+                                tag = "hub_card_skills",
+                                onClick = { onOpenTab("skills") },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
                 }
 
-                // Bento Grid Row 2: Skills & Memory
+                // Bento Grid Row 3: Memory & Browser
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        HubBentoTile(
-                            icon = Icons.Filled.Extension,
-                            title = "Skills Engine",
-                            subtitle = "${skills.count { it.enabled }} enabled • ${skills.size} total",
-                            accent = c.accentTeal,
-                            tag = "hub_card_skills",
-                            onClick = { onOpenTab("skills") },
-                            modifier = Modifier.weight(1f)
-                        )
-                        HubBentoTile(
-                            icon = Icons.Filled.Memory,
-                            title = "Memory & Logs",
-                            subtitle = "${conversations.size} chats • Drive sync",
-                            accent = c.accentAzure,
-                            tag = "hub_card_memory",
-                            onClick = { onOpenTab("memory") },
-                            modifier = Modifier.weight(1f)
-                        )
+                    AquaAnimatedEntrance(index = 3) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            HubBentoTile(
+                                icon = Icons.Filled.Memory,
+                                title = "Memory & Logs",
+                                subtitle = "${conversations.size} chats • Drive sync",
+                                accent = c.accentAzure,
+                                tag = "hub_card_memory",
+                                onClick = { onOpenTab("memory") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            HubBentoTile(
+                                icon = Icons.Filled.Language,
+                                title = "Aqua Browser",
+                                subtitle = "Reader & Web Agent",
+                                accent = c.accentAzure,
+                                tag = "hub_card_browser",
+                                onClick = { onOpenTab("browser") },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
                 }
 
-                // Bento Grid Row 3: Launcher, Browser, Wallet, Settings
+                // Bento Grid Row 4: Crypto Wallet & Profile/Settings
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        HubBentoTile(
-                            icon = Icons.Filled.Home,
-                            title = "Aqua Launcher",
-                            subtitle = "$installedCount Android apps",
-                            accent = c.accentCyan,
-                            tag = "hub_card_launcher",
-                            onClick = { onOpenTab("launcher") },
-                            modifier = Modifier.weight(1f)
-                        )
-                        HubBentoTile(
-                            icon = Icons.Filled.Settings,
-                            title = "Settings",
-                            subtitle = "Theme, Persona & Keys",
-                            accent = c.amber,
-                            tag = "hub_card_settings",
-                            onClick = { onOpenTab("settings") },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        HubBentoTile(
-                            icon = Icons.Filled.Language,
-                            title = "Aqua Browser",
-                            subtitle = "Reader & Web Agent",
-                            accent = c.accentAzure,
-                            tag = "hub_card_browser",
-                            onClick = { onOpenTab("browser") },
-                            modifier = Modifier.weight(1f)
-                        )
-                        HubBentoTile(
-                            icon = Icons.Filled.AccountBalanceWallet,
-                            title = "Crypto Wallet",
-                            subtitle = "Multi-chain Vaults",
-                            accent = c.accentTeal,
-                            tag = "hub_card_wallet",
-                            onClick = { onOpenTab("wallet") },
-                            modifier = Modifier.weight(1f)
-                        )
+                    AquaAnimatedEntrance(index = 4) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            HubBentoTile(
+                                icon = Icons.Filled.AccountBalanceWallet,
+                                title = "Crypto Wallet",
+                                subtitle = "Multi-chain Vaults",
+                                accent = c.accentTeal,
+                                tag = "hub_card_wallet",
+                                onClick = { onOpenTab("wallet") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            HubBentoTile(
+                                icon = if (ageTier == AgeTier.UNSET || ageTier == AgeTier.UNDER_13_BLOCKED) {
+                                    Icons.Filled.Person
+                                } else {
+                                    Icons.Filled.Settings
+                                },
+                                title = "Settings & Age",
+                                subtitle = "${ageTier.shortBadge} • ${gender.label}",
+                                accent = c.amber,
+                                tag = "hub_card_settings",
+                                onClick = { onOpenTab("settings") },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
                 }
 
                 // Live Session Device Telemetry Sparkline
                 item {
-                    TelemetrySparklineCard(
-                        telemetry = telemetry,
-                        stats = stats,
-                        samples = samples,
-                        onOpenSettingsSection = { section -> viewModel.deviceController.openAndroidSettings(section) }
-                    )
+                    AquaAnimatedEntrance(index = 5) {
+                        TelemetrySparklineCard(
+                            telemetry = telemetry,
+                            stats = stats,
+                            samples = samples,
+                            onOpenSettingsSection = { section -> viewModel.deviceController.openAndroidSettings(section) }
+                        )
+                    }
                 }
             }
         }
@@ -319,10 +354,12 @@ private fun HubBentoTile(
     modifier: Modifier = Modifier
 ) {
     val c = AquaTheme.colors
+    val interactionSource = remember { MutableInteractionSource() }
     AquaGlassCard(
         modifier = modifier
+            .aquaPressScale(interactionSource)
             .clip(RoundedCornerShape(22.dp))
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = interactionSource, indication = LocalIndication.current, onClick = onClick)
             .testTag(tag)
     ) {
         Column(

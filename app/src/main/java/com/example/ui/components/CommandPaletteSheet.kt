@@ -23,7 +23,6 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PlayArrow
@@ -66,14 +65,13 @@ private data class CommandModuleEntry(
 
 private val MODULE_ENTRIES = listOf(
     CommandModuleEntry("home", "Aqua Core", "AI orb, Gemini Live voice & conversation", Icons.Filled.GraphicEq),
-    CommandModuleEntry("launcher", "Aqua Launcher", "Home grid, widgets, wallpapers & themes", Icons.Filled.Home),
     CommandModuleEntry("routines", "Routines & Pulse", "Saved multi-step workflows & telemetry", Icons.Filled.AutoMode),
     CommandModuleEntry("workspace", "Google Workspace", "Gmail, Calendar, Contacts, Sheets & Chat", Icons.Filled.Apps),
     CommandModuleEntry("skills", "Skills Engine", "Import & manage verified declarative skills", Icons.Filled.Extension),
     CommandModuleEntry("browser", "Aqua Browser", "Live web viewer & AI page summarizer", Icons.Filled.Language),
     CommandModuleEntry("wallet", "Crypto Wallet", "Multi-chain vaults, swaps, telemetry & AI tools", Icons.Filled.AccountBalanceWallet),
     CommandModuleEntry("memory", "Memory & History", "Saved context, Drive backup & device logs", Icons.Filled.Memory),
-    CommandModuleEntry("settings", "Settings & Core", "Gemini models, persona, voice & permissions", Icons.Filled.Settings)
+    CommandModuleEntry("settings", "Settings & Core", "Profile, age & gender, Gemini, voice & privacy", Icons.Filled.Settings)
 )
 
 @OptIn(ExperimentalMaterial3Api::class)

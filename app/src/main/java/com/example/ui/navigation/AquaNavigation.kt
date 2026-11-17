@@ -2,6 +2,12 @@ package com.example.ui.navigation
 
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
@@ -14,7 +20,6 @@ import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Settings
@@ -72,7 +77,6 @@ import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.SkillsScreen
 import com.example.ui.screens.WalletScreen
 import com.example.ui.screens.WorkspaceScreen
-import com.example.ui.screens.launcher.LauncherDashboardScreen
 import com.example.ui.theme.AquaAiTheme
 import com.example.ui.theme.AquaTheme
 import com.example.wallet.FlashWalletConnector
@@ -90,7 +94,7 @@ private data class AquaTab(
 
 private val AQUA_TABS = listOf(
     AquaTab("home", "Core", Icons.Filled.GraphicEq),
-    AquaTab("launcher", "Launcher", Icons.Filled.Home),
+    AquaTab("routines", "Routines", Icons.Filled.AutoMode),
     AquaTab("browser", "Browser", Icons.Filled.Language),
     AquaTab("wallet", "Wallet", Icons.Filled.AccountBalanceWallet),
     AquaTab("hub", "Hub", Icons.Filled.Dashboard)
@@ -99,7 +103,6 @@ private val AQUA_TABS = listOf(
 private val AQUA_RAIL_TABS = listOf(
     AquaTab("home", "Core", Icons.Filled.GraphicEq),
     AquaTab("hub", "Hub", Icons.Filled.Dashboard),
-    AquaTab("launcher", "Launcher", Icons.Filled.Home),
     AquaTab("routines", "Routines", Icons.Filled.AutoMode),
     AquaTab("workspace", "Workspace", Icons.Filled.Apps),
     AquaTab("skills", "Skills", Icons.Filled.Extension),
@@ -247,9 +250,10 @@ private fun AuthenticatedAquaShell(
         }
     }
 
+    val hubSubRoutes = setOf("workspace", "skills", "memory", "settings")
     if (currentTab != "home") {
         BackHandler {
-            currentTab = if (currentTab in setOf("routines", "workspace", "skills", "memory", "settings")) {
+            currentTab = if (currentTab in hubSubRoutes) {
                 "hub"
             } else {
                 "home"
@@ -259,7 +263,6 @@ private fun AuthenticatedAquaShell(
 
     AquaAiTheme(darkThemeMode = settings.darkThemeMode) {
         val c = AquaTheme.colors
-        val hubSubRoutes = setOf("routines", "workspace", "skills", "memory", "settings")
 
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val useRail = maxWidth >= 700.dp
@@ -330,30 +333,38 @@ private fun AuthenticatedAquaShell(
                     }
 
                     Box(modifier = Modifier.weight(1f).fillMaxSize()) {
-                        when (currentTab) {
-                            "home" -> HomeScreen(
-                                viewModel = viewModel,
-                                onOpenTab = { currentTab = it },
-                                onOpenCommandPalette = { showCommandPalette = true }
-                            )
-                            "hub" -> HubScreen(
-                                viewModel = viewModel,
-                                onOpenTab = { currentTab = it },
-                                onOpenCommandPalette = { showCommandPalette = true }
-                            )
-                            "launcher" -> LauncherDashboardScreen(viewModel = viewModel, onOpenTab = { currentTab = it })
-                            "routines" -> RoutinesScreen(viewModel = viewModel)
-                            "workspace" -> WorkspaceScreen(viewModel = viewModel)
-                            "skills" -> SkillsScreen(viewModel = viewModel)
-                            "browser" -> BrowserScreen(viewModel = viewModel)
-                            "wallet" -> WalletScreen(viewModel = viewModel)
-                            "memory" -> MemoryAndHistoryScreen(viewModel = viewModel, onOpenHomeChat = { currentTab = "home" })
-                            "settings" -> SettingsScreen(viewModel = viewModel)
-                            else -> HomeScreen(
-                                viewModel = viewModel,
-                                onOpenTab = { currentTab = it },
-                                onOpenCommandPalette = { showCommandPalette = true }
-                            )
+                        AnimatedContent(
+                            targetState = currentTab,
+                            transitionSpec = {
+                                (fadeIn(tween(210)) + slideInVertically(tween(210)) { it / 28 })
+                                    .togetherWith(fadeOut(tween(150)))
+                            },
+                            label = "aqua_route_transition"
+                        ) { route ->
+                            when (route) {
+                                "home" -> HomeScreen(
+                                    viewModel = viewModel,
+                                    onOpenTab = { currentTab = it },
+                                    onOpenCommandPalette = { showCommandPalette = true }
+                                )
+                                "hub" -> HubScreen(
+                                    viewModel = viewModel,
+                                    onOpenTab = { currentTab = it },
+                                    onOpenCommandPalette = { showCommandPalette = true }
+                                )
+                                "routines" -> RoutinesScreen(viewModel = viewModel)
+                                "workspace" -> WorkspaceScreen(viewModel = viewModel)
+                                "skills" -> SkillsScreen(viewModel = viewModel)
+                                "browser" -> BrowserScreen(viewModel = viewModel)
+                                "wallet" -> WalletScreen(viewModel = viewModel)
+                                "memory" -> MemoryAndHistoryScreen(viewModel = viewModel, onOpenHomeChat = { currentTab = "home" })
+                                "settings" -> SettingsScreen(viewModel = viewModel)
+                                else -> HomeScreen(
+                                    viewModel = viewModel,
+                                    onOpenTab = { currentTab = it },
+                                    onOpenCommandPalette = { showCommandPalette = true }
+                                )
+                            }
                         }
                     }
                 }
