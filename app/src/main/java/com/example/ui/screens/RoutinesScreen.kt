@@ -90,10 +90,10 @@ private val ROUTINE_COMPOSER_STARTERS = listOf(
         prompt = "Check my battery, network, storage, and available RAM, and report any resource warnings."
     ),
     RoutineComposerStarter(
-        chipLabel = "Daily Briefing",
-        title = "Workspace Morning Briefing",
-        category = "workspace",
-        prompt = "Check my upcoming Google Calendar events and recent unread Gmail messages, then give me a prioritized action summary."
+        chipLabel = "Drive & SDK",
+        title = "Drive Vault & SDK Integrity",
+        category = "device",
+        prompt = "Inspect my Android SDK version, verify the Google Signature SHA-1 status, and check my Google Drive vault storage quota."
     ),
     RoutineComposerStarter(
         chipLabel = "Market Check",
@@ -377,7 +377,7 @@ fun RoutinesScreen(viewModel: AquaMainViewModel) {
                                     color = c.textPrimary
                                 )
                                 Text(
-                                    text = "Author reusable multi-step commands for Aqua to run across your Android device, Google Workspace, Browser, or Wallet with one tap.",
+                                    text = "Author reusable multi-step commands for Aqua to run across your Android device, Google Drive Vault, Android SDK, Browser, or Wallet with one tap.",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = c.textMuted
                                 )
@@ -536,7 +536,7 @@ private fun CreateRoutineDialog(
     var category by remember { mutableStateOf("productivity") }
     var speakResult by remember { mutableStateOf(false) }
 
-    val categories = listOf("productivity", "workspace", "device", "browser", "crypto", "custom")
+    val categories = listOf("productivity", "device", "browser", "crypto", "custom")
 
     AlertDialog(
         onDismissRequest = onDismiss,

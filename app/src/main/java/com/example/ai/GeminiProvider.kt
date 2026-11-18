@@ -614,8 +614,8 @@ class GeminiProvider(
         if (!settings.searchGroundingEnabled && !settings.mapsGroundingEnabled) return false
         val lower = prompt.lowercase()
 
-        // Any explicit URL, REST API call, or action combining web data with device/wallet/workspace stays in Function Calling
-        // where web_search, web_fetch_page, and web_http_request run alongside all Android/Workspace/Wallet tools.
+        // Any explicit URL, REST API call, or action combining web data with device/wallet/drive/sdk stays in Function Calling
+        // where web_search, web_fetch_page, and web_http_request run alongside all Android, Drive Vault, SDK, and Wallet tools.
         val requiresFunctionTools = listOf(
             "http://", "https://", ".com", ".org", ".io", ".ai", ".dev", "api.", "fetch ", "read page",
             "battery", "volume", "flashlight", "torch", "brightness", "alarm", "reminder",
@@ -629,8 +629,7 @@ class GeminiProvider(
             "custom network", "add token", "add network", "sign message", "verify signature",
             "payment uri", "testnet", "display currency", "seed", "mnemonic",
             "browser", "current page", "fill form", "remember", "save note", "memory",
-            "gmail", "email", "inbox", "calendar", "schedule", "event",
-            "sheet", "spreadsheet", "google form", "form response", "google chat", "space", "drive", "backup"
+            "drive", "backup", "quota", "sdk", "compileSdk", "targetSdk", "sha-1", "sha-256", "fingerprint"
         ).any { lower.contains(it) }
         if (requiresFunctionTools) return false
 

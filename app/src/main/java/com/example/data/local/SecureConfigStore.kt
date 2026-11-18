@@ -66,6 +66,20 @@ class SecureConfigStore(context: Context) {
             .apply()
     }
 
+    // --- Approved Google Drive API Key (AES-GCM Keystore encrypted) ---
+
+    fun saveGoogleDriveApiKey(apiKey: String) = saveEncryptedString(KEY_ENCRYPTED_DRIVE_API_KEY, apiKey)
+
+    fun getGoogleDriveApiKey(): String? = getDecryptedString(KEY_ENCRYPTED_DRIVE_API_KEY)
+
+    fun hasGoogleDriveApiKey(): Boolean = !getGoogleDriveApiKey().isNullOrBlank()
+
+    fun getMaskedGoogleDriveApiKey(): String = maskSecret(getGoogleDriveApiKey())
+
+    fun clearGoogleDriveApiKey() {
+        prefs.edit().remove(KEY_ENCRYPTED_DRIVE_API_KEY).apply()
+    }
+
     private fun maskSecret(secret: String?): String {
         val value = secret ?: return ""
         return if (value.length <= 8) "••••••••" else "${value.take(4)}••••${value.takeLast(4)}"
@@ -133,6 +147,7 @@ class SecureConfigStore(context: Context) {
         const val KEY_ENCRYPTED_GEMINI = "enc_gemini_api_key"
         const val KEY_ENCRYPTED_ELEVENLABS_KEY = "enc_elevenlabs_api_key"
         const val KEY_ENCRYPTED_ELEVENLABS_VOICE = "enc_elevenlabs_voice_id"
+        const val KEY_ENCRYPTED_DRIVE_API_KEY = "enc_google_drive_api_key"
         const val TRANSFORMATION = "AES/GCM/NoPadding"
     }
 }

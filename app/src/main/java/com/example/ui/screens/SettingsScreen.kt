@@ -69,6 +69,7 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
     val elevenSub by viewModel.elevenLabsSubscription.collectAsStateWithLifecycle()
     val elevenStatus by viewModel.elevenLabsStatus.collectAsStateWithLifecycle()
     val elevenBusy by viewModel.elevenLabsBusy.collectAsStateWithLifecycle()
+    val signatureReport by viewModel.signatureReport.collectAsStateWithLifecycle()
 
     var activeLegalDialog by remember { mutableStateOf<String?>(null) }
 
@@ -226,6 +227,9 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                     PermissionsAndDiagnosticsCard(
                         context = context,
                         telemetry = telemetry,
+                        signatureReport = signatureReport,
+                        onOpenSdkAndSignature = { viewModel.openTab("sdk") },
+                        onOpenDriveVault = { viewModel.openTab("drive") },
                         onRequestMic = { micAndNotifLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) },
                         onOpenNotificationSettings = { viewModel.deviceController.openAndroidSettings("notifications") },
                         onRequestLocation = { coarseLocationLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) },

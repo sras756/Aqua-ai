@@ -38,26 +38,17 @@ import com.example.data.model.PendingAuthorization
 import com.example.data.model.UserSettings
 import com.example.data.model.WalletConfig
 import com.example.data.repository.AquaFirestoreRepository
-import com.example.data.repository.DriveAuthOutcome
+import com.example.data.repository.DriveAboutInfo
 import com.example.data.repository.DriveBackupMetadata
 import com.example.data.repository.FileImportRepository
 import com.example.data.repository.GoogleDriveHistoryRepository
-import com.example.data.repository.GoogleWorkspaceRepository
-import com.example.data.repository.WorkspaceAuthOutcome
-import com.example.data.repository.WorkspaceCalendarEvent
-import com.example.data.repository.WorkspaceChatMessage
-import com.example.data.repository.WorkspaceChatSpace
-import com.example.data.repository.WorkspaceContact
-import com.example.data.repository.WorkspaceEmailMessage
-import com.example.data.repository.WorkspaceFormInfo
-import com.example.data.repository.WorkspaceFormResponseItem
-import com.example.data.repository.WorkspaceService
-import com.example.data.repository.WorkspaceSheetCreated
-import com.example.data.repository.WorkspaceSheetReadResult
 import com.example.device.AndroidDeviceController
+import com.example.device.AndroidSdkReport
 import com.example.device.DeviceTelemetry
 import com.example.device.StorageAndMemoryStats
+import com.example.security.SignatureCheckReport
 import com.example.skills.SkillParserAndValidator
+import com.example.ui.state.AquaSystemAndDriveCoordinator
 import com.example.voice.AquaWakeWordService
 import com.example.voice.ElevenLabsSubscription
 import com.example.voice.ElevenLabsVoice
@@ -101,7 +92,6 @@ class AquaMainViewModel(
     val walletConnector: FlashWalletConnector,
     private val cacheDb: AquaCacheDatabase,
     val driveHistoryRepo: GoogleDriveHistoryRepository,
-    val workspaceRepo: GoogleWorkspaceRepository,
     val walletEngine: AquaWalletEngine = AquaWalletEngine(
         vault = WalletSecurityVault(appContext),
         walletCacheDao = cacheDb.walletCacheDao()
@@ -111,6 +101,16 @@ class AquaMainViewModel(
     val walletCoordinator = AquaWalletCoordinator(
         engine = walletEngine,
         firestoreRepo = firestoreRepo,
+        scope = viewModelScope,
+        onBanner = { msg -> _bannerMessage.value = msg }
+    )
+
+    val systemAndDriveCoordinator = AquaSystemAndDriveCoordinator(
+        appContext = appContext,
+        currentUserId = currentUserId,
+        firestoreRepo = firestoreRepo,
+        secureConfigStore = secureConfigStore,
+        driveHistoryRepo = driveHistoryRepo,
         scope = viewModelScope,
         onBanner = { msg -> _bannerMessage.value = msg }
     )
@@ -131,7 +131,6 @@ class AquaMainViewModel(
         walletConnector = walletConnector,
         firestoreRepo = firestoreRepo,
         driveHistoryRepo = driveHistoryRepo,
-        workspaceRepo = workspaceRepo,
         aiWalletBridge = walletCoordinator.aiBridge,
         onWalletMutated = { viewModelScope.launch { walletCoordinator.reloadAll() } },
         freedomConfigProvider = { UserProfilePolicy.clampFreedomForAge(localPrefs.aiFreedomConfig.value, settings.value) },
@@ -148,7 +147,8 @@ class AquaMainViewModel(
             } else {
                 "ElevenLabs Voice ID/Key is not configured (optional); speaking via ${if (settings.value.useGeminiTts) "Gemini Native TTS" else "Android TTS"}."
             }
-        }
+        },
+        sdkReportProvider = { systemAndDriveCoordinator.buildSdkAndSignatureMarkdown() }
     )
 
     private val geminiProvider: GeminiProvider = GeminiProvider(
@@ -296,64 +296,18 @@ class AquaMainViewModel(
     private val _navigateToTabEvent = MutableStateFlow<String?>(null)
     val navigateToTabEvent: StateFlow<String?> = _navigateToTabEvent.asStateFlow()
 
-    private val _driveBusy = MutableStateFlow(false)
-    val driveBusy: StateFlow<Boolean> = _driveBusy.asStateFlow()
-
-    private val _driveConnected = MutableStateFlow(false)
-    val driveConnected: StateFlow<Boolean> = _driveConnected.asStateFlow()
-
-    private val _driveBackups = MutableStateFlow<List<DriveBackupMetadata>>(emptyList())
-    val driveBackups: StateFlow<List<DriveBackupMetadata>> = _driveBackups.asStateFlow()
-
-    private val _driveStatusLabel = MutableStateFlow<String?>(null)
-    val driveStatusLabel: StateFlow<String?> = _driveStatusLabel.asStateFlow()
-
-    private val _driveAuthPendingIntent = MutableStateFlow<PendingIntent?>(null)
-    val driveAuthPendingIntent: StateFlow<PendingIntent?> = _driveAuthPendingIntent.asStateFlow()
-
-    private var pendingDriveAction: (suspend (String) -> Unit)? = null
-
-    // --- GOOGLE WORKSPACE STATE ---
-    private val _workspaceBusy = MutableStateFlow(false)
-    val workspaceBusy: StateFlow<Boolean> = _workspaceBusy.asStateFlow()
-
-    private val _workspaceStatus = MutableStateFlow<String?>(null)
-    val workspaceStatus: StateFlow<String?> = _workspaceStatus.asStateFlow()
-
-    private val _workspaceConsentHelpAccount = MutableStateFlow<String?>(null)
-    val workspaceConsentHelpAccount: StateFlow<String?> = _workspaceConsentHelpAccount.asStateFlow()
-
-    private val _workspaceAuthPendingIntent = MutableStateFlow<PendingIntent?>(null)
-    val workspaceAuthPendingIntent: StateFlow<PendingIntent?> = _workspaceAuthPendingIntent.asStateFlow()
-
-    private var pendingWorkspaceAction: (suspend (String) -> Unit)? = null
-
-    private val _workspaceContacts = MutableStateFlow<List<WorkspaceContact>>(emptyList())
-    val workspaceContacts: StateFlow<List<WorkspaceContact>> = _workspaceContacts.asStateFlow()
-
-    private val _workspaceEvents = MutableStateFlow<List<WorkspaceCalendarEvent>>(emptyList())
-    val workspaceEvents: StateFlow<List<WorkspaceCalendarEvent>> = _workspaceEvents.asStateFlow()
-
-    private val _workspaceEmails = MutableStateFlow<List<WorkspaceEmailMessage>>(emptyList())
-    val workspaceEmails: StateFlow<List<WorkspaceEmailMessage>> = _workspaceEmails.asStateFlow()
-
-    private val _workspaceSheetCreated = MutableStateFlow<WorkspaceSheetCreated?>(null)
-    val workspaceSheetCreated: StateFlow<WorkspaceSheetCreated?> = _workspaceSheetCreated.asStateFlow()
-
-    private val _workspaceSheetRead = MutableStateFlow<WorkspaceSheetReadResult?>(null)
-    val workspaceSheetRead: StateFlow<WorkspaceSheetReadResult?> = _workspaceSheetRead.asStateFlow()
-
-    private val _workspaceFormInfo = MutableStateFlow<WorkspaceFormInfo?>(null)
-    val workspaceFormInfo: StateFlow<WorkspaceFormInfo?> = _workspaceFormInfo.asStateFlow()
-
-    private val _workspaceFormResponses = MutableStateFlow<List<WorkspaceFormResponseItem>>(emptyList())
-    val workspaceFormResponses: StateFlow<List<WorkspaceFormResponseItem>> = _workspaceFormResponses.asStateFlow()
-
-    private val _workspaceChatSpaces = MutableStateFlow<List<WorkspaceChatSpace>>(emptyList())
-    val workspaceChatSpaces: StateFlow<List<WorkspaceChatSpace>> = _workspaceChatSpaces.asStateFlow()
-
-    private val _workspaceChatMessages = MutableStateFlow<List<WorkspaceChatMessage>>(emptyList())
-    val workspaceChatMessages: StateFlow<List<WorkspaceChatMessage>> = _workspaceChatMessages.asStateFlow()
+    val driveBusy: StateFlow<Boolean> = systemAndDriveCoordinator.driveBusy
+    val driveConnected: StateFlow<Boolean> = systemAndDriveCoordinator.driveConnected
+    val driveBackups: StateFlow<List<DriveBackupMetadata>> = systemAndDriveCoordinator.driveBackups
+    val driveAboutInfo: StateFlow<DriveAboutInfo?> = systemAndDriveCoordinator.driveAboutInfo
+    val driveStatusLabel: StateFlow<String?> = systemAndDriveCoordinator.driveStatusLabel
+    val driveApiKeyStatus: StateFlow<String> = systemAndDriveCoordinator.driveApiKeyStatus
+    val driveApiKeyMasked: StateFlow<String> = systemAndDriveCoordinator.driveApiKeyMasked
+    val hasCustomDriveApiKey: StateFlow<Boolean> = systemAndDriveCoordinator.hasCustomDriveApiKey
+    val driveAuthPendingIntent: StateFlow<PendingIntent?> = systemAndDriveCoordinator.driveAuthPendingIntent
+    val preferredDriveEmail: StateFlow<String> = systemAndDriveCoordinator.preferredDriveEmail
+    val sdkReport: StateFlow<AndroidSdkReport> = systemAndDriveCoordinator.sdkReport
+    val signatureReport: StateFlow<SignatureCheckReport> = systemAndDriveCoordinator.signatureReport
 
     init {
         viewModelScope.launch {
@@ -413,14 +367,7 @@ class AquaMainViewModel(
                 }
             }
         }
-        viewModelScope.launch {
-            val silentToken = driveHistoryRepo.tryGetSilentAccessToken()
-            if (!silentToken.isNullOrBlank()) {
-                _driveConnected.value = true
-                driveHistoryRepo.listBackups(silentToken)
-                    .onSuccess { _driveBackups.value = it }
-            }
-        }
+        systemAndDriveCoordinator.bootstrap()
     }
 
     fun refreshTelemetry() {
@@ -1582,438 +1529,45 @@ class AquaMainViewModel(
             .onFailure { _bannerMessage.value = it.localizedMessage }
     }
 
-    // --- GOOGLE DRIVE HISTORY STORAGE ---
+    // --- GOOGLE DRIVE VAULT & ANDROID SDK / SIGNATURE DIAGNOSTICS ---
 
-    fun consumeDriveAuthPendingIntent() {
-        _driveAuthPendingIntent.value = null
-    }
+    fun consumeDriveAuthPendingIntent() = systemAndDriveCoordinator.consumeDriveAuthPendingIntent()
 
-    fun handleDriveConsentResult(intent: Intent?) {
-        val actionToRun = pendingDriveAction
-        pendingDriveAction = null
-        driveHistoryRepo.extractTokenFromIntent(intent)
-            .onSuccess { token ->
-                _driveConnected.value = true
-                if (actionToRun != null) {
-                    viewModelScope.launch {
-                        _driveBusy.value = true
-                        try {
-                            actionToRun(token)
-                        } finally {
-                            _driveBusy.value = false
-                        }
-                    }
-                } else {
-                    refreshDriveBackupsWithToken(token)
-                }
-            }
-            .onFailure { err ->
-                _driveBusy.value = false
-                _driveStatusLabel.value = "Drive consent cancelled/blocked — check OAuth Test Users in Google Cloud"
-                _bannerMessage.value = err.localizedMessage ?: "Google Drive consent cancelled."
-            }
-    }
+    fun handleDriveConsentResult(intent: Intent?, resultCode: Int = Activity.RESULT_OK) =
+        systemAndDriveCoordinator.handleDriveConsentResult(intent, resultCode)
 
-    private fun runWithDriveToken(
-        activity: Activity?,
-        block: suspend (String) -> Unit
-    ) {
-        viewModelScope.launch {
-            _driveBusy.value = true
-            when (val auth = driveHistoryRepo.authorizeDriveAccess(activity)) {
-                is DriveAuthOutcome.Authorized -> {
-                    _driveConnected.value = true
-                    try {
-                        block(auth.accessToken)
-                    } finally {
-                        _driveBusy.value = false
-                    }
-                }
-                is DriveAuthOutcome.NeedsResolution -> {
-                    pendingDriveAction = block
-                    _driveBusy.value = false
-                    _driveAuthPendingIntent.value = auth.pendingIntent
-                }
-                is DriveAuthOutcome.Error -> {
-                    _driveBusy.value = false
-                    _bannerMessage.value = auth.message
-                }
-            }
-        }
-    }
+    fun probeSilentDriveSession() = systemAndDriveCoordinator.probeSilentDriveSession()
 
-    fun refreshDriveBackups(activity: Activity?) {
-        runWithDriveToken(activity) { token ->
-            refreshDriveBackupsWithToken(token)
-        }
-    }
+    fun connectGoogleDrive(activity: Activity?, forceAccountPicker: Boolean = false) =
+        systemAndDriveCoordinator.connectGoogleDrive(activity, forceAccountPicker)
 
-    private fun refreshDriveBackupsWithToken(token: String) {
-        viewModelScope.launch {
-            _driveBusy.value = true
-            driveHistoryRepo.listBackups(token)
-                .onSuccess { list ->
-                    _driveBackups.value = list
-                    _driveStatusLabel.value = if (list.isEmpty()) {
-                        "Connected • No backups stored yet"
-                    } else {
-                        "Connected • ${list.size} backup file(s) found"
-                    }
-                }
-                .onFailure { err ->
-                    _bannerMessage.value = err.localizedMessage ?: "Failed to list Google Drive backups."
-                }
-            _driveBusy.value = false
-        }
-    }
+    fun disconnectGoogleDrive() = systemAndDriveCoordinator.disconnectGoogleDrive()
 
-    fun backupHistoryToGoogleDrive(activity: Activity?, exportVisibleCopy: Boolean = false) {
-        runWithDriveToken(activity) { token ->
-            val convsWithMsgs = firestoreRepo.fetchAllConversationsWithMessagesOnce().getOrElse {
-                _bannerMessage.value = "Could not load conversations: ${it.localizedMessage}"
-                return@runWithDriveToken
-            }
-            val memories = firestoreRepo.fetchMemoriesOnce().getOrElse { emptyList() }
-            if (convsWithMsgs.isEmpty() && memories.isEmpty()) {
-                _bannerMessage.value = "No conversations or memories to back up yet."
-                return@runWithDriveToken
-            }
+    fun refreshDriveBackups(activity: Activity?) = systemAndDriveCoordinator.refreshDriveBackups(activity)
 
-            val snapshot = GoogleDriveHistoryRepository.buildSnapshot(
-                userId = currentUserId,
-                conversationsWithMessages = convsWithMsgs,
-                memories = memories
-            )
-            val uploadRes = if (exportVisibleCopy) {
-                driveHistoryRepo.exportVisibleHistoryFile(token, snapshot)
-            } else {
-                driveHistoryRepo.backupHistoryToAppData(token, snapshot)
-            }
-            uploadRes
-                .onSuccess { meta ->
-                    _driveStatusLabel.value = "Synced ${snapshot.conversations.size} chats & ${snapshot.memories.size} memories (${meta.name})"
-                    _bannerMessage.value = if (exportVisibleCopy) {
-                        "Exported ${meta.name} to Google Drive."
-                    } else {
-                        "History backed up safely to Google Drive AppData."
-                    }
-                    driveHistoryRepo.listBackups(token).onSuccess { _driveBackups.value = it }
-                }
-                .onFailure { err ->
-                    _bannerMessage.value = err.localizedMessage ?: "Google Drive backup failed."
-                }
-        }
-    }
+    fun backupHistoryToGoogleDrive(activity: Activity?, exportVisibleCopy: Boolean = false) =
+        systemAndDriveCoordinator.backupHistoryToGoogleDrive(activity, exportVisibleCopy)
 
-    fun restoreHistoryFromGoogleDrive(activity: Activity?, fileId: String) {
-        runWithDriveToken(activity) { token ->
-            val snap = driveHistoryRepo.downloadAndParseSnapshot(token, fileId).getOrElse {
-                _bannerMessage.value = it.localizedMessage ?: "Failed to download Drive backup."
-                return@runWithDriveToken
-            }
-            firestoreRepo.importDriveSnapshot(snap)
-                .onSuccess { (convsAdded, memoriesAdded) ->
-                    _driveStatusLabel.value = "Restored $convsAdded new conversation(s) & $memoriesAdded memory item(s)"
-                    _bannerMessage.value = "Restored $convsAdded conversation(s) and $memoriesAdded memory item(s) from Google Drive."
-                }
-                .onFailure { err ->
-                    _bannerMessage.value = "Restore merge failed: ${err.localizedMessage}"
-                }
-        }
-    }
+    fun restoreHistoryFromGoogleDrive(activity: Activity?, fileId: String) =
+        systemAndDriveCoordinator.restoreHistoryFromGoogleDrive(activity, fileId)
 
-    // --- GOOGLE WORKSPACE (Contacts, Forms, Calendar, Gmail, Sheets, Chat) ---
+    fun deleteDriveBackup(activity: Activity?, fileId: String) =
+        systemAndDriveCoordinator.deleteDriveBackup(activity, fileId)
 
-    fun dismissWorkspaceConsentHelp() {
-        _workspaceConsentHelpAccount.value = null
-    }
+    fun saveGoogleDriveApiKey(apiKey: String) =
+        systemAndDriveCoordinator.saveGoogleDriveApiKey(apiKey)
 
-    fun consumeWorkspaceAuthPendingIntent() {
-        _workspaceAuthPendingIntent.value = null
-    }
+    fun clearGoogleDriveApiKey() =
+        systemAndDriveCoordinator.clearGoogleDriveApiKey()
 
-    fun handleWorkspaceConsentResult(intent: Intent?, resultCode: Int = Activity.RESULT_OK) {
-        val actionToRun = pendingWorkspaceAction
-        pendingWorkspaceAction = null
-        val targetIntent = if (resultCode == Activity.RESULT_OK) intent else null
-        workspaceRepo.extractTokenFromIntent(targetIntent)
-            .onSuccess { token ->
-                _workspaceConsentHelpAccount.value = null
-                _workspaceStatus.value = "Google Workspace OAuth authorized"
-                if (actionToRun != null) {
-                    viewModelScope.launch {
-                        _workspaceBusy.value = true
-                        try {
-                            actionToRun(token)
-                        } finally {
-                            _workspaceBusy.value = false
-                        }
-                    }
-                }
-            }
-            .onFailure { err ->
-                _workspaceBusy.value = false
-                val signedInEmail = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email.orEmpty()
-                _workspaceConsentHelpAccount.value = signedInEmail.ifBlank { "selected Google account" }
-                _workspaceStatus.value = "OAuth blocked or cancelled (Error 403 / Testing mode)"
-                _bannerMessage.value = err.localizedMessage ?: "Google Workspace consent cancelled."
-            }
-    }
+    fun verifyGoogleDriveApiKey() =
+        systemAndDriveCoordinator.verifyGoogleDriveApiKey()
 
-    private fun runWithWorkspaceToken(
-        activity: Activity?,
-        scopes: List<String>,
-        block: suspend (String) -> Unit
-    ) {
-        viewModelScope.launch {
-            _workspaceBusy.value = true
-            when (val auth = workspaceRepo.authorizeScopes(activity, scopes)) {
-                is WorkspaceAuthOutcome.Authorized -> {
-                    try {
-                        block(auth.accessToken)
-                    } finally {
-                        _workspaceBusy.value = false
-                    }
-                }
-                is WorkspaceAuthOutcome.NeedsResolution -> {
-                    pendingWorkspaceAction = block
-                    _workspaceBusy.value = false
-                    _workspaceAuthPendingIntent.value = auth.pendingIntent
-                }
-                is WorkspaceAuthOutcome.Error -> {
-                    _workspaceBusy.value = false
-                    _bannerMessage.value = auth.message
-                }
-            }
-        }
-    }
+    fun refreshSystemAndSignatureDiagnostics() =
+        systemAndDriveCoordinator.refreshSystemDiagnostics()
 
-    fun connectAllWorkspace(activity: Activity?) {
-        val allScopes = WorkspaceService.entries.flatMap { it.scopes }.distinct()
-        runWithWorkspaceToken(activity, allScopes) {
-            _workspaceStatus.value = "All 6 Google Workspace integrations authorized"
-            _bannerMessage.value = "Google Contacts, Forms, Calendar, Gmail, Sheets, and Chat authorized."
-        }
-    }
-
-    fun loadContacts(activity: Activity?, query: String = "") {
-        runWithWorkspaceToken(activity, WorkspaceService.CONTACTS.scopes) { token ->
-            workspaceRepo.listContacts(token, query)
-                .onSuccess { list ->
-                    _workspaceContacts.value = list
-                    _workspaceStatus.value = "Loaded ${list.size} contact(s)"
-                }
-                .onFailure { _bannerMessage.value = it.localizedMessage }
-        }
-    }
-
-    fun createContact(activity: Activity?, fullName: String, email: String, phone: String) {
-        runWithWorkspaceToken(activity, WorkspaceService.CONTACTS.scopes) { token ->
-            workspaceRepo.createContact(token, fullName, email, phone)
-                .onSuccess { created ->
-                    _bannerMessage.value = "Saved Google Contact '${created.displayName}'."
-                    workspaceRepo.listContacts(token).onSuccess { _workspaceContacts.value = it }
-                }
-                .onFailure { _bannerMessage.value = it.localizedMessage }
-        }
-    }
-
-    fun loadCalendarEvents(activity: Activity?) {
-        runWithWorkspaceToken(activity, WorkspaceService.CALENDAR.scopes) { token ->
-            workspaceRepo.listUpcomingEvents(token)
-                .onSuccess { list ->
-                    _workspaceEvents.value = list
-                    _workspaceStatus.value = "Loaded ${list.size} upcoming calendar event(s)"
-                }
-                .onFailure { _bannerMessage.value = it.localizedMessage }
-        }
-    }
-
-    fun createCalendarEvent(
-        activity: Activity?,
-        summary: String,
-        startIso: String,
-        endIso: String,
-        description: String,
-        location: String
-    ) {
-        runWithWorkspaceToken(activity, WorkspaceService.CALENDAR.scopes) { token ->
-            workspaceRepo.createCalendarEvent(token, summary, startIso, endIso, description, location)
-                .onSuccess { ev ->
-                    _bannerMessage.value = "Created event '${ev.summary}'."
-                    workspaceRepo.listUpcomingEvents(token).onSuccess { _workspaceEvents.value = it }
-                }
-                .onFailure { _bannerMessage.value = it.localizedMessage }
-        }
-    }
-
-    fun loadGmailMessages(activity: Activity?, query: String = "") {
-        runWithWorkspaceToken(activity, WorkspaceService.GMAIL.scopes) { token ->
-            workspaceRepo.listGmailMessages(token, query)
-                .onSuccess { list ->
-                    _workspaceEmails.value = list
-                    _workspaceStatus.value = "Loaded ${list.size} Gmail message(s)"
-                }
-                .onFailure { _bannerMessage.value = it.localizedMessage }
-        }
-    }
-
-    fun sendGmailEmail(activity: Activity?, to: String, subject: String, bodyText: String) {
-        if (to.isBlank() || subject.isBlank()) {
-            _bannerMessage.value = "Recipient email and subject are required."
-            return
-        }
-        viewModelScope.launch {
-            val approved = requestUserAuthorization(
-                PendingAuthorization(
-                    id = "gmail_${System.currentTimeMillis()}",
-                    actionTitle = "Send Email via Gmail",
-                    actionType = "Outbound Email Confirmation",
-                    description = "Confirm sending this email through your authorized Gmail account.",
-                    parametersSummary = listOf(
-                        "To" to to.trim(),
-                        "Subject" to subject.trim(),
-                        "Body Preview" to bodyText.trim().take(160)
-                    ),
-                    isFinancialOrSecurity = true,
-                    onApprove = { "Approved email send" },
-                    onDeny = { "Cancelled email send" }
-                )
-            )
-            if (!approved) {
-                _bannerMessage.value = "Email sending cancelled."
-                return@launch
-            }
-            runWithWorkspaceToken(activity, WorkspaceService.GMAIL.scopes) { token ->
-                workspaceRepo.sendGmailMessage(token, to, subject, bodyText)
-                    .onSuccess { id ->
-                        _bannerMessage.value = "Gmail message sent (id: $id)."
-                        workspaceRepo.listGmailMessages(token).onSuccess { _workspaceEmails.value = it }
-                    }
-                    .onFailure { _bannerMessage.value = it.localizedMessage }
-            }
-        }
-    }
-
-    fun createGoogleSheet(activity: Activity?, title: String) {
-        runWithWorkspaceToken(activity, WorkspaceService.SHEETS.scopes) { token ->
-            workspaceRepo.createSpreadsheet(token, title)
-                .onSuccess { created ->
-                    _workspaceSheetCreated.value = created
-                    _workspaceStatus.value = "Created sheet '${created.title}'"
-                    _bannerMessage.value = "Created Google Sheet '${created.title}'."
-                }
-                .onFailure { _bannerMessage.value = it.localizedMessage }
-        }
-    }
-
-    fun readGoogleSheet(activity: Activity?, spreadsheetId: String, range: String) {
-        runWithWorkspaceToken(activity, WorkspaceService.SHEETS.scopes) { token ->
-            workspaceRepo.readSheetRange(token, spreadsheetId, range)
-                .onSuccess { res ->
-                    _workspaceSheetRead.value = res
-                    _workspaceStatus.value = "Read ${res.rows.size} row(s) from ${res.range}"
-                }
-                .onFailure { _bannerMessage.value = it.localizedMessage }
-        }
-    }
-
-    fun appendGoogleSheetRow(activity: Activity?, spreadsheetId: String, range: String, valuesCsv: String) {
-        val values = valuesCsv.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-        runWithWorkspaceToken(activity, WorkspaceService.SHEETS.scopes) { token ->
-            workspaceRepo.appendSheetRow(token, spreadsheetId, range, values)
-                .onSuccess { msg ->
-                    _bannerMessage.value = msg
-                    workspaceRepo.readSheetRange(token, spreadsheetId, range)
-                        .onSuccess { _workspaceSheetRead.value = it }
-                }
-                .onFailure { _bannerMessage.value = it.localizedMessage }
-        }
-    }
-
-    fun createGoogleForm(activity: Activity?, title: String, firstQuestion: String) {
-        runWithWorkspaceToken(activity, WorkspaceService.FORMS.scopes) { token ->
-            workspaceRepo.createForm(token, title, firstQuestion)
-                .onSuccess { info ->
-                    _workspaceFormInfo.value = info
-                    _workspaceFormResponses.value = emptyList()
-                    _workspaceStatus.value = "Created Google Form '${info.title}'"
-                    _bannerMessage.value = "Created Google Form '${info.title}'."
-                }
-                .onFailure { _bannerMessage.value = it.localizedMessage }
-        }
-    }
-
-    fun loadGoogleFormAndResponses(activity: Activity?, formId: String) {
-        runWithWorkspaceToken(activity, WorkspaceService.FORMS.scopes) { token ->
-            workspaceRepo.getFormAndResponses(token, formId)
-                .onSuccess { (info, responses) ->
-                    _workspaceFormInfo.value = info
-                    _workspaceFormResponses.value = responses
-                    _workspaceStatus.value = "Loaded ${responses.size} response(s) for '${info.title}'"
-                }
-                .onFailure { _bannerMessage.value = it.localizedMessage }
-        }
-    }
-
-    fun loadChatSpaces(activity: Activity?) {
-        runWithWorkspaceToken(activity, WorkspaceService.CHAT.scopes) { token ->
-            workspaceRepo.listChatSpaces(token)
-                .onSuccess { spaces ->
-                    _workspaceChatSpaces.value = spaces
-                    _workspaceStatus.value = "Loaded ${spaces.size} Google Chat space(s)"
-                }
-                .onFailure { _bannerMessage.value = it.localizedMessage }
-        }
-    }
-
-    fun loadChatMessages(activity: Activity?, spaceName: String) {
-        runWithWorkspaceToken(activity, WorkspaceService.CHAT.scopes) { token ->
-            workspaceRepo.listChatMessages(token, spaceName)
-                .onSuccess { msgs ->
-                    _workspaceChatMessages.value = msgs
-                    _workspaceStatus.value = "Loaded ${msgs.size} message(s) in $spaceName"
-                }
-                .onFailure { _bannerMessage.value = it.localizedMessage }
-        }
-    }
-
-    fun sendChatMessage(activity: Activity?, spaceName: String, text: String) {
-        if (spaceName.isBlank() || text.isBlank()) {
-            _bannerMessage.value = "Space name and message text are required."
-            return
-        }
-        viewModelScope.launch {
-            val approved = requestUserAuthorization(
-                PendingAuthorization(
-                    id = "gchat_${System.currentTimeMillis()}",
-                    actionTitle = "Send Google Chat Message",
-                    actionType = "Outbound Google Chat Confirmation",
-                    description = "Confirm posting this message into Google Chat space $spaceName.",
-                    parametersSummary = listOf(
-                        "Space" to spaceName.trim(),
-                        "Message" to text.trim().take(160)
-                    ),
-                    isFinancialOrSecurity = true,
-                    onApprove = { "Approved Chat message" },
-                    onDeny = { "Cancelled Chat message" }
-                )
-            )
-            if (!approved) {
-                _bannerMessage.value = "Google Chat send cancelled."
-                return@launch
-            }
-            runWithWorkspaceToken(activity, WorkspaceService.CHAT.scopes) { token ->
-                workspaceRepo.sendChatMessage(token, spaceName, text)
-                    .onSuccess {
-                        _bannerMessage.value = "Message posted to $spaceName."
-                        workspaceRepo.listChatMessages(token, spaceName)
-                            .onSuccess { _workspaceChatMessages.value = it }
-                    }
-                    .onFailure { _bannerMessage.value = it.localizedMessage }
-            }
-        }
-    }
+    fun buildSdkAndSignatureMarkdown(): String =
+        systemAndDriveCoordinator.buildSdkAndSignatureMarkdown()
 
     private fun handleFlowError(source: String, error: Throwable) {
         val firestoreError = generateSequence(error) { it.cause }

@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Aqua AI — Legal, Privacy &amp; Security Trust Portal</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     :root {
       --bg: #030b16;
@@ -15,6 +16,7 @@
       --border-strong: rgba(34, 211, 238, 0.45);
       --cyan: #22d3ee;
       --teal: #2dd4bf;
+      --emerald: #34d399;
       --text: #eaf6ff;
       --muted: #93b3cc;
       --code-bg: rgba(3, 11, 22, 0.72);
@@ -29,6 +31,7 @@
       --border-strong: rgba(2, 132, 199, 0.45);
       --cyan: #0284c7;
       --teal: #0d9488;
+      --emerald: #059669;
       --text: #092035;
       --muted: #456580;
       --code-bg: rgba(224, 242, 254, 0.75);
@@ -44,10 +47,7 @@
       color: var(--text);
       line-height: 1.65;
     }
-    .topbar {
-      position: sticky; top: 0; z-index: 40;
-      background: var(--surface); border-bottom: 1px solid var(--border);
-    }
+    .topbar { position: sticky; top: 0; z-index: 40; background: var(--surface); border-bottom: 1px solid var(--border); }
     .topbar-inner {
       max-width: 980px; margin: 0 auto; padding: 12px 16px;
       display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
@@ -72,6 +72,19 @@
     .wrap { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
     .hero, .card {
       background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 22px; margin-bottom: 16px;
+    }
+    .gsi-bar {
+      background: var(--surface); border: 1px solid var(--border-strong); border-radius: 18px;
+      padding: 14px 18px; margin-bottom: 16px;
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .gsi-user { display: flex; align-items: center; gap: 10px; }
+    .gsi-avatar { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border-strong); object-fit: cover; }
+    .gsi-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .ack-badge {
+      font-size: 0.74rem; font-weight: 600; color: var(--emerald);
+      background: rgba(52, 211, 153, 0.14); border: 1px solid rgba(52, 211, 153, 0.42);
+      padding: 5px 10px; border-radius: 999px;
     }
     .badge {
       display: inline-block; font-size: 0.72rem; font-weight: 700; color: var(--teal);
@@ -104,9 +117,7 @@
     }
     .filter-tab.active { color: #031320; background: var(--cyan); border-color: var(--cyan); }
     .f-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
-    .f-card {
-      background: var(--surface-elevated); border: 1px solid var(--border); border-radius: 14px; padding: 14px;
-    }
+    .f-card { background: var(--surface-elevated); border: 1px solid var(--border); border-radius: 14px; padding: 14px; }
     .f-card.hidden { display: none; }
     .f-card h3 { margin: 6px 0; font-size: 0.96rem; color: var(--text); }
     .f-card p { margin: 0; font-size: 0.84rem; color: var(--muted); }
@@ -131,6 +142,7 @@
       <nav class="nav-links" aria-label="Primary Navigation">
         <a class="active" href="index.html">Overview</a>
         <a href="#features">All Features</a>
+        <a href="#permissions-audit">Permissions Audit</a>
         <a href="privacy.html">Privacy Policy</a>
         <a href="terms.html">Terms &amp; Conditions</a>
       </nav>
@@ -140,11 +152,12 @@
 
   <main class="wrap">
     <section class="hero">
-      <span class="badge">EFFECTIVE NOV 17, 2026 • GOOGLE PLAY COMPLIANT</span>
-      <h1>Transparent Privacy, Clear Terms &amp; All Aqua AI Features</h1>
+      <span class="badge">EFFECTIVE NOV 18, 2026 • GOOGLE PLAY &amp; API 36.1 COMPLIANT</span>
+      <h1>Verified Android Architecture, Google Signature Check &amp; All Aqua AI Features</h1>
       <p>
-        Aqua AI (<code>com.aistudio.aquaai.vqrzmn</code>) unites Gemini reasoning, an animated modular 5-tab UI, optional Google AI Studio &amp; ElevenLabs voice setup,
-        AI Freedom controls, Age 13+ &amp; Teen guardrails, optional gender personalization, Google Workspace automation, and a strictly self-custodial crypto wallet.
+        Aqua AI (<code>com.aistudio.aquaai.vqrzmn</code>) runs on Android SDK 36.1 (minSdk 24) with clean Coordinator architecture,
+        APK Google Signature verification, Google Drive Vault + approved <code>GOOGLE_DRIVE_API_KEY</code> support, optional BYOK Google AI Studio &amp; ElevenLabs voice,
+        Age 13+ &amp; Teen guardrails, and a strictly self-custodial crypto wallet.
       </p>
       <div class="cta-row">
         <a class="btn-primary" href="#features">All Old &amp; New Features ↓</a>
@@ -153,18 +166,40 @@
       </div>
     </section>
 
+    <section class="gsi-bar" id="googlePortalAuth" aria-label="Sign in with Google Account Verification">
+      <div class="gsi-user" id="gsiSignedOutInfo">
+        <div>
+          <strong style="display:block;font-size:0.92rem;">Sign in with Google — Verify Legal Portal Session</strong>
+          <span style="font-size:0.82rem;color:var(--muted);">Verify your Google account via Google Identity Services to record local Privacy Policy &amp; Terms acknowledgement.</span>
+        </div>
+      </div>
+      <div class="gsi-user" id="gsiSignedInInfo" style="display:none;">
+        <img class="gsi-avatar" id="gsiAvatar" src="" alt="Google Profile Avatar" />
+        <div>
+          <strong id="gsiName" style="display:block;font-size:0.92rem;"></strong>
+          <span id="gsiEmail" style="font-size:0.8rem;color:var(--cyan);"></span>
+        </div>
+      </div>
+      <div class="gsi-actions">
+        <div id="gsiButtonMount"></div>
+        <button class="icon-btn" type="button" id="ackLegalBtn" style="display:none;border-color:var(--cyan);color:var(--cyan);">✓ Acknowledge</button>
+        <span class="ack-badge" id="ackStatusBadge" style="display:none;"></span>
+        <button class="icon-btn" type="button" id="gsiSignOutBtn" style="display:none;">Sign Out</button>
+      </div>
+    </section>
+
     <section class="bento">
       <article class="card">
-        <h2>AI Personas &amp; Tools</h2>
-        <p>Five switchable AI personas plus per-user custom system directives stored locally.</p>
+        <h2>Coordinator Architecture</h2>
+        <p>Modular <code>AquaSystemAndDriveCoordinator</code> &amp; <code>AquaWalletCoordinator</code> with spring-motion UI &amp; 5-tab bar/rail.</p>
       </article>
       <article class="card">
-        <h2>Animated Modular UI</h2>
-        <p>Spring-physics 5-tab Compose architecture, Age 13+ safety tiers, and transparent Foreground Service status.</p>
+        <h2>Google Signature &amp; SDK</h2>
+        <p>Live <code>SHA-1</code>/<code>SHA-256</code> APK verification + <code>AndroidSdkInspector</code> for API 36.1 hardware telemetry.</p>
       </article>
       <article class="card">
-        <h2>Google API Limited Use</h2>
-        <p>Workspace &amp; Drive scopes act strictly on request—never sold or used for advertising.</p>
+        <h2>Google Drive Vault Only</h2>
+        <p>Backup &amp; restore via <code>drive.appdata</code> / <code>drive.file</code> and optional <code>GOOGLE_DRIVE_API_KEY</code>.</p>
       </article>
       <article class="card">
         <h2>On-Device Wallet Vault</h2>
@@ -174,57 +209,57 @@
 
     <section class="card" id="features">
       <h2>All Aqua AI Features — Foundation &amp; Latest Releases</h2>
-      <p style="margin-bottom:6px;">Browse our newest AI Freedom, Voice &amp; Personal API Studio upgrades alongside Aqua AI's core capabilities.</p>
+      <p style="margin-bottom:6px;">Browse our latest Coordinator Architecture, Google Signature Check, Drive Vault &amp; Android SDK upgrades alongside Aqua AI's core capabilities.</p>
       <div class="filter-tabs">
-        <button class="filter-tab active" type="button" data-filter="all">All (13)</button>
-        <button class="filter-tab" type="button" data-filter="new">New Releases (9)</button>
+        <button class="filter-tab active" type="button" data-filter="all">All (14)</button>
+        <button class="filter-tab" type="button" data-filter="new">New Releases (10)</button>
         <button class="filter-tab" type="button" data-filter="core">Core Foundation (4)</button>
       </div>
       <div class="f-grid" id="featuresGrid">
         <article class="f-card" data-era="new">
+          <span class="era era-new">NEW • SECURITY</span>
+          <h3>Google Signature Check</h3>
+          <p>Verifies live APK SHA-1/SHA-256 certificates against Firebase OAuth <code>5B:FA:1D:7E:...</code>, <code>default_web_client_id</code> &amp; Play Services.</p>
+        </article>
+        <article class="f-card" data-era="new">
+          <span class="era era-new">NEW • ANDROID SDK</span>
+          <h3>Android SDK &amp; Hardware Inspector</h3>
+          <p>Reports Compile 36.1 / Target 36 / Min 24, Security Patch, ABIs, StrongBox/Biometric/BLE/NFC features, and exports Markdown diagnostics.</p>
+        </article>
+        <article class="f-card" data-era="new">
+          <span class="era era-new">NEW • DRIVE VAULT</span>
+          <h3>Google Drive + Approved API Key</h3>
+          <p>Credential Manager OAuth + optional <code>GOOGLE_DRIVE_API_KEY</code>, live Drive quota bar, JSON snapshots &amp; approval-gated delete.</p>
+        </article>
+        <article class="f-card" data-era="new">
+          <span class="era era-new">NEW • WEB PORTAL</span>
+          <h3>Sign in with Google Legal Portal</h3>
+          <p>Official Google Identity Services on Privacy Policy &amp; Terms pages with client-side JWT verification and local receipt badges.</p>
+        </article>
+        <article class="f-card" data-era="new">
+          <span class="era era-new">NEW • ARCHITECTURE</span>
+          <h3>Modular Coordinators &amp; UI</h3>
+          <p><code>AquaSectionHeader</code>, <code>AquaStatusPill</code>, refined glass elevation, adaptive 5-tab NavigationBar/Rail &amp; Hub sub-screens.</p>
+        </article>
+        <article class="f-card" data-era="new">
           <span class="era era-new">NEW • ONBOARDING</span>
           <h3>Post-Login AI Setup Studio</h3>
-          <p>Optional Google AI Studio API Key verifier, optional ElevenLabs Voice setup, Age 13+ / optional Gender fields, and non-blocking Skip for Now.</p>
+          <p>Optional Google AI Studio API Key verifier, optional ElevenLabs Voice setup, Age 13+ / optional Gender fields &amp; Skip for Now.</p>
         </article>
         <article class="f-card" data-era="new">
           <span class="era era-new">NEW • AI FREEDOM</span>
           <h3>AI Dependency &amp; Freedom Lab</h3>
-          <p>Advisory / Balanced / Unrestricted modes (Balanced-clamped in Teen Mode), Unlock All 45+ Tools Always, Temperature, Top-P, Max Tokens &amp; Steps.</p>
+          <p>Advisory / Balanced / Unrestricted modes (Balanced-clamped in Teen Mode), Unlock All Tools, Temperature, Top-P, Max Tokens &amp; Steps.</p>
         </article>
         <article class="f-card" data-era="new">
           <span class="era era-new">NEW • VOICE STUDIO</span>
           <h3>Optional ElevenLabs Voice Studio</h3>
-          <p>Non-compulsory custom Voice ID &amp; API key in Keystore, live voice &amp; quota loader, Test Voice preview, and Gemini/Android TTS fallback.</p>
-        </article>
-        <article class="f-card" data-era="new">
-          <span class="era era-new">NEW • BYOK ENGINE</span>
-          <h3>Direct AI Studio REST Parity</h3>
-          <p>Multimodal image/doc attachments, custom verified Gemini models, Google Search grounding &amp; full multi-step tool calling on personal keys.</p>
+          <p>Non-compulsory custom Voice ID &amp; API key in Keystore, live voice &amp; quota loader, Test Voice preview &amp; Gemini/Android TTS fallback.</p>
         </article>
         <article class="f-card" data-era="new">
           <span class="era era-new">NEW • SERVICE</span>
           <h3>Foreground Service &amp; Background Mic</h3>
-          <p>Transparent persistent notification with active task status, Pause/Resume/Stop controls, boot restore, and Android 15+ timeout safety.</p>
-        </article>
-        <article class="f-card" data-era="new">
-          <span class="era era-new">NEW • WORKFLOW</span>
-          <h3>Personas, Prompt Studio &amp; Palette</h3>
-          <p>5 switchable AI personas, persistent custom directives, Prompt Studio templates, Pinned Routines strip, and Command Palette search.</p>
-        </article>
-        <article class="f-card" data-era="new">
-          <span class="era era-new">NEW • DIAGNOSTICS</span>
-          <h3>Exports, Code Blocks &amp; Sparklines</h3>
-          <p>Fenced code blocks with 1-tap copy, Markdown/JSON SAF exports, Clipboard Smart Inspector, and 24-sample Battery/RAM sparklines.</p>
-        </article>
-        <article class="f-card" data-era="core">
-          <span class="era era-core">CORE • AGENT</span>
-          <h3>Gemini Agent, Live Voice &amp; Memory</h3>
-          <p>Streaming responses, Deep Thinking traces, Gemini Live duplex voice, Firestore history, long-term Memories &amp; approval modals.</p>
-        </article>
-        <article class="f-card" data-era="new">
-          <span class="era era-new">NEW • ARCHITECTURE</span>
-          <h3>Redesigned Animated UI &amp; Architecture</h3>
-          <p>Spring motion physics, sonar-rippled Core Orb, drifting Aurora, focused 5-tab navigation, and modular Home/Settings architecture (Launcher retired).</p>
+          <p>Transparent persistent notification with active task status, Pause/Resume/Stop controls, boot restore &amp; Android 15+ timeout safety.</p>
         </article>
         <article class="f-card" data-era="new">
           <span class="era era-new">NEW • SAFETY &amp; PROFILE</span>
@@ -232,14 +267,19 @@
           <p>Under-13 COPPA execution lock, automatic Teen 13–17 guardrails &amp; Balanced autonomy cap, plus optional pronoun personalization.</p>
         </article>
         <article class="f-card" data-era="core">
+          <span class="era era-core">CORE • AGENT</span>
+          <h3>Gemini Agent, Live Voice &amp; Memory</h3>
+          <p>Streaming responses, Deep Thinking traces, Personas, Prompt Studio, Gemini Live duplex voice, Firestore history &amp; Memories.</p>
+        </article>
+        <article class="f-card" data-era="core">
           <span class="era era-core">CORE • WEB</span>
           <h3>Aqua Browser &amp; Live Internet Tools</h3>
           <p>Multi-tab browser paired with live DuckDuckGo/Wikipedia search, reader extraction, REST HTTP requests &amp; SSRF-safe URL validation.</p>
         </article>
         <article class="f-card" data-era="core">
-          <span class="era era-core">CORE • WORKSPACE</span>
-          <h3>Google Workspace &amp; Drive Backup</h3>
-          <p>OAuth Limited Use tools for Gmail, Calendar, Contacts, Sheets, Forms &amp; Google Chat plus personal Drive JSON snapshot backups.</p>
+          <span class="era era-core">CORE • DIAGNOSTICS</span>
+          <h3>Exports, Code Blocks &amp; Sparklines</h3>
+          <p>Fenced code blocks with 1-tap copy, Markdown/JSON SAF exports, Clipboard Smart Inspector, and 24-sample Battery/RAM sparklines.</p>
         </article>
         <article class="f-card" data-era="core">
           <span class="era era-core">CORE • CRYPTO &amp; SKILLS</span>
@@ -255,15 +295,47 @@
         <table>
           <thead><tr><th>Category</th><th>Storage</th><th>User Control</th></tr></thead>
           <tbody>
-            <tr><td><strong>Google Profile</strong></td><td>Firebase Auth / Firestore</td><td>Sign out or email for deletion</td></tr>
-            <tr><td><strong>Chats &amp; Memories</strong></td><td>User Firestore &amp; optional Drive</td><td>Delete or export Markdown/JSON</td></tr>
+            <tr><td><strong>Google Profile</strong></td><td>Firebase Auth / Portal localStorage</td><td>Sign out or email for deletion</td></tr>
+            <tr><td><strong>Google Drive Vault</strong></td><td>Personal Drive (<code>drive.appdata</code>, <code>drive.file</code>)</td><td>Backup, restore, delete, or revoke anytime</td></tr>
+            <tr><td><strong>Android SDK &amp; Signature</strong></td><td>Device memory only (never uploaded)</td><td>Inspect or export Markdown anytime</td></tr>
             <tr><td><strong>Wallet Keys &amp; PIN</strong></td><td>Device Android Keystore only</td><td>PIN/Biometric &amp; Emergency Lock</td></tr>
             <tr><td><strong>Age Tier &amp; Gender</strong></td><td>User-scoped Firestore preferences</td><td>Update or reset anytime in Setup/Settings</td></tr>
-            <tr><td><strong>Installed Apps Query</strong></td><td>Device memory only (never synced)</td><td>Used solely by Command Palette &amp; Launch tool</td></tr>
           </tbody>
         </table>
       </div>
       <p style="margin-bottom:0;margin-top:12px;">Developer Support: <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a></p>
+    </section>
+
+    <section class="card" id="permissions-audit">
+      <span class="badge">● GOOGLE OAUTH • LEAST-PRIVILEGE AUDIT</span>
+      <h2>Permissions Audit — Google Drive Least-Privilege Scopes</h2>
+      <p>
+        Aqua AI enforces Google's strict <strong>least-privilege</strong> OAuth model, requesting only the minimum Google Drive scopes
+        needed to store and restore Aqua AI snapshots. Broad Drive scopes (<code>drive</code>, <code>drive.readonly</code>) and all Google Workspace scopes
+        are completely excluded so unrelated files, docs, photos, emails, contacts, and calendars remain invisible to Aqua AI.
+      </p>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>Scope</th><th>Identifier</th><th>Access Boundary &amp; Least-Privilege Rationale</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>App Data Folder</strong></td>
+              <td><code>https://www.googleapis.com/auth/drive.appdata</code> (<code>drive.appdata</code>)</td>
+              <td>Restricted strictly to Aqua AI's private hidden <code>appDataFolder</code> for <code>aqua_ai_history_backup.json</code>; cannot view personal Drive files.</td>
+            </tr>
+            <tr>
+              <td><strong>App-Created Files</strong></td>
+              <td><code>https://www.googleapis.com/auth/drive.file</code> (<code>drive.file</code>)</td>
+              <td>Per-file access limited to JSON snapshots created or opened by Aqua AI (<code>Aqua_AI_History_*.json</code>) plus Drive <code>/about</code> quota lookup with optional <code>GOOGLE_DRIVE_API_KEY</code>.</td>
+            </tr>
+            <tr>
+              <td><strong>Excluded Scopes</strong></td>
+              <td><code>drive</code>, <code>drive.readonly</code>, Gmail, Calendar, Contacts, <code>READ_MEDIA_*</code></td>
+              <td>Never requested; keeps unrelated cloud files, media libraries, and Workspace records completely isolated.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
   </main>
   <script>
@@ -286,6 +358,103 @@
           cards.forEach((c) => c.classList.toggle("hidden", era !== "all" && c.getAttribute("data-era") !== era));
         });
       });
+
+      const CLIENT_ID = "299712147014-tr9jkmpjf6nj5h66ekissl1arb2es3rp.apps.googleusercontent.com";
+      const USER_KEY = "aqua_google_user";
+      const ACK_KEY = "aqua_legal_ack";
+      const signedOutEl = document.getElementById("gsiSignedOutInfo");
+      const signedInEl = document.getElementById("gsiSignedInInfo");
+      const avatarEl = document.getElementById("gsiAvatar");
+      const nameEl = document.getElementById("gsiName");
+      const emailEl = document.getElementById("gsiEmail");
+      const mountEl = document.getElementById("gsiButtonMount");
+      const ackBtn = document.getElementById("ackLegalBtn");
+      const ackBadge = document.getElementById("ackStatusBadge");
+      const signOutBtn = document.getElementById("gsiSignOutBtn");
+
+      function decodeGoogleJwt(token) {
+        const parts = (token || "").split(".");
+        if (parts.length < 2) throw new Error("Invalid ID token");
+        const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+        const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+        const binary = atob(padded);
+        const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+        return JSON.parse(new TextDecoder().decode(bytes));
+      }
+
+      function renderAuthState() {
+        let user = null;
+        try { user = JSON.parse(localStorage.getItem(USER_KEY) || "null"); } catch (_) {}
+        let ack = null;
+        try { ack = JSON.parse(localStorage.getItem(ACK_KEY) || "null"); } catch (_) {}
+        if (user && user.email) {
+          signedOutEl.style.display = "none";
+          signedInEl.style.display = "flex";
+          nameEl.textContent = user.name || "Google Account";
+          emailEl.textContent = user.email;
+          avatarEl.style.display = user.picture ? "block" : "none";
+          if (user.picture) avatarEl.src = user.picture;
+          mountEl.style.display = "none";
+          signOutBtn.style.display = "inline-flex";
+          if (ack && ack.email === user.email && ack.timestamp) {
+            ackBtn.style.display = "none";
+            ackBadge.style.display = "inline-block";
+            ackBadge.textContent = "✓ Policy Verified • " + ack.timestamp;
+          } else {
+            ackBtn.style.display = "inline-flex";
+            ackBadge.style.display = "none";
+          }
+        } else {
+          signedOutEl.style.display = "flex";
+          signedInEl.style.display = "none";
+          mountEl.style.display = "block";
+          ackBtn.style.display = "none";
+          ackBadge.style.display = "none";
+          signOutBtn.style.display = "none";
+        }
+      }
+
+      if (ackBtn) {
+        ackBtn.addEventListener("click", () => {
+          let user = null;
+          try { user = JSON.parse(localStorage.getItem(USER_KEY) || "null"); } catch (_) {}
+          if (!user) return;
+          const now = new Date().toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+          localStorage.setItem(ACK_KEY, JSON.stringify({ email: user.email, timestamp: now }));
+          renderAuthState();
+        });
+      }
+      if (signOutBtn) {
+        signOutBtn.addEventListener("click", () => {
+          localStorage.removeItem(USER_KEY);
+          if (window.google && google.accounts && google.accounts.id) google.accounts.id.disableAutoSelect();
+          renderAuthState();
+        });
+      }
+      function initGsi() {
+        if (window.location.protocol === "file:") {
+          if (mountEl && !mountEl.hasChildNodes()) {
+            mountEl.innerHTML = '<span style="font-size:0.78rem;color:var(--muted);">Use Public HTTPS Portal button below for live Google Sign-In</span>';
+          }
+          renderAuthState();
+          return;
+        }
+        if (window.google && google.accounts && google.accounts.id) {
+          google.accounts.id.initialize({
+            client_id: CLIENT_ID,
+            callback: (res) => {
+              const p = decodeGoogleJwt(res.credential);
+              localStorage.setItem(USER_KEY, JSON.stringify({ sub: p.sub || "", name: p.name || "", email: p.email || "", picture: p.picture || "" }));
+              renderAuthState();
+            }
+          });
+          google.accounts.id.renderButton(mountEl, { theme: "filled_black", size: "medium", shape: "pill", text: "signin_with" });
+        } else {
+          setTimeout(initGsi, 250);
+        }
+      }
+      renderAuthState();
+      window.addEventListener("load", initGsi);
     })();
   </script>
 </body>

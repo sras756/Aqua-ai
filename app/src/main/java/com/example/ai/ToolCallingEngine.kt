@@ -9,9 +9,8 @@ import com.example.data.model.UserSettings
 import com.example.data.model.WalletConfig
 import com.example.data.repository.AquaFirestoreRepository
 import com.example.data.repository.GoogleDriveHistoryRepository
-import com.example.data.repository.GoogleWorkspaceRepository
-import com.example.data.repository.WorkspaceService
 import com.example.device.AndroidDeviceController
+import com.example.device.AndroidSdkInspector
 import com.example.network.AquaWebClient
 import com.example.wallet.FlashWalletConnector
 import com.example.wallet.ai.AquaAiWalletBridge
@@ -34,13 +33,13 @@ class ToolCallingEngine(
     private val walletConnector: FlashWalletConnector,
     private val firestoreRepo: AquaFirestoreRepository,
     private val driveHistoryRepo: GoogleDriveHistoryRepository? = null,
-    private val workspaceRepo: GoogleWorkspaceRepository? = null,
     private val aiWalletBridge: AquaAiWalletBridge? = null,
     private val webClient: AquaWebClient = AquaWebClient(),
     private val onWalletMutated: () -> Unit = {},
     private val freedomConfigProvider: (() -> AiFreedomConfig)? = null,
     private val aiStatusProvider: (() -> String)? = null,
-    private val onSpeakWithElevenLabs: ((String) -> String)? = null
+    private val onSpeakWithElevenLabs: ((String) -> String)? = null,
+    private val sdkReportProvider: (() -> String)? = null
 ) {
 
     fun buildToolDeclarations(
@@ -1163,7 +1162,7 @@ class ToolCallingEngine(
                         ?: return jsonResult(false, "Google Drive repository is not initialized.")
                     val token = repo.tryGetSilentAccessToken()
                     if (token.isNullOrBlank()) {
-                        val msg = "Google Drive consent is required first. Open the Memory & History tab and tap 'Back Up to Drive' to authorize your Google Drive account."
+                        val msg = "Google Drive consent is required first. Open Hub -> Drive Vault (or Memory & History) and connect Google Drive."
                         onTrace(AgentStepTrace("Google Drive Sync", name, "needs_auth", msg))
                         jsonResult(false, msg)
                     } else {
@@ -1181,283 +1180,51 @@ class ToolCallingEngine(
                     }
                 }
 
-                "workspace_contacts_list" -> {
-                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
-                    val token = repo.tryGetSilentToken(WorkspaceService.CONTACTS.scopes)
-                        ?: return workspaceNeedsAuthResult(WorkspaceService.CONTACTS, name, onTrace)
-                    val query = argStr("query")
-                    val list = repo.listContacts(token, query).getOrThrow()
+                "drive_list_backups" -> {
+                    val repo = driveHistoryRepo
+                        ?: return jsonResult(false, "Google Drive repository is not initialized.")
+                    val token = repo.tryGetSilentAccessToken()
+                    if (token.isNullOrBlank()) {
+                        val msg = "Google Drive consent is required first. Open Hub -> Drive Vault and tap Connect Google Drive."
+                        onTrace(AgentStepTrace("Drive Vault", name, "needs_auth", msg))
+                        return jsonResult(false, msg)
+                    }
+                    val list = repo.listBackups(token).getOrThrow()
                     val summary = if (list.isEmpty()) {
-                        "No matching Google Contacts found."
+                        "Google Drive Vault connected (${repo.getApiKeyStatusSummary()}), no backup files stored yet."
                     } else {
-                        list.take(20).joinToString("\n") { c ->
-                            "- ${c.displayName} | Email: ${c.email.ifBlank { "-" }} | Phone: ${c.phone.ifBlank { "-" }}"
+                        list.joinToString("\n") { b ->
+                            "- ${b.name} (${b.space}, ${b.sizeBytes / 1024L} KB, modified ${b.modifiedTime}, id=${b.fileId})"
                         }
                     }
-                    onTrace(AgentStepTrace("Contacts", name, "completed", "Fetched ${list.size} contact(s)"))
+                    onTrace(AgentStepTrace("Drive Vault", name, "completed", "Found ${list.size} backup(s)"))
                     jsonResult(true, summary)
                 }
 
-                "workspace_contacts_create" -> {
-                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
-                    val token = repo.tryGetSilentToken(WorkspaceService.CONTACTS.scopes)
-                        ?: return workspaceNeedsAuthResult(WorkspaceService.CONTACTS, name, onTrace)
-                    val fullName = argStr("fullName")
-                    val email = argStr("email")
-                    val phone = argStr("phone")
-                    val msg = runWithOptionalGate(
-                        settings = settings,
-                        isSensitive = false,
-                        title = "Create Google Contact",
-                        type = "Google Contacts",
-                        desc = "Add a new contact to your Google Contacts.",
-                        params = listOf("Name" to fullName, "Email" to email, "Phone" to phone),
-                        requestAuthorization = requestAuthorization
-                    ) {
-                        val created = repo.createContact(token, fullName, email, phone).getOrThrow()
-                        "Created Google Contact '${created.displayName}' (${created.resourceName})."
+                "drive_get_storage_quota" -> {
+                    val repo = driveHistoryRepo
+                        ?: return jsonResult(false, "Google Drive repository is not initialized.")
+                    val token = repo.tryGetSilentAccessToken()
+                    if (token.isNullOrBlank()) {
+                        val msg = "Google Drive consent required. ${repo.getApiKeyStatusSummary()}."
+                        onTrace(AgentStepTrace("Drive Quota", name, "needs_auth", msg))
+                        return jsonResult(false, msg)
                     }
-                    onTrace(AgentStepTrace("Create Contact", name, "completed", msg))
+                    val about = repo.fetchDriveAboutInfo(token).getOrThrow()
+                    val usedMb = about.storageUsageBytes / (1024L * 1024L)
+                    val limitGb = about.storageLimitBytes / (1024L * 1024L * 1024L)
+                    val msg = "Google Drive Account: ${about.displayName} (${about.emailAddress}) | Usage: $usedMb MB" +
+                        (if (limitGb > 0) " of $limitGb GB" else "") +
+                        " | ${repo.getApiKeyStatusSummary()}"
+                    onTrace(AgentStepTrace("Drive Quota", name, "completed", "${usedMb}MB used"))
                     jsonResult(true, msg)
                 }
 
-                "workspace_calendar_list" -> {
-                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
-                    val token = repo.tryGetSilentToken(WorkspaceService.CALENDAR.scopes)
-                        ?: return workspaceNeedsAuthResult(WorkspaceService.CALENDAR, name, onTrace)
-                    val maxResults = argInt("maxResults", 15)
-                    val events = repo.listUpcomingEvents(token, maxResults).getOrThrow()
-                    val summary = if (events.isEmpty()) {
-                        "No upcoming Google Calendar events found."
-                    } else {
-                        events.joinToString("\n") { ev ->
-                            "- ${ev.summary} (${ev.startTime} -> ${ev.endTime})${if (ev.location.isNotBlank()) " @ ${ev.location}" else ""}"
-                        }
-                    }
-                    onTrace(AgentStepTrace("Calendar List", name, "completed", "Fetched ${events.size} event(s)"))
+                "inspect_android_sdk_and_signature" -> {
+                    val summary = sdkReportProvider?.invoke()
+                        ?: "Android SDK API ${android.os.Build.VERSION.SDK_INT} (Target ${AndroidSdkInspector.BUILD_TARGET_SDK}, Min ${AndroidSdkInspector.BUILD_MIN_SDK}, Compile ${AndroidSdkInspector.COMPILE_SDK_LABEL}). Open Hub -> SDK & Signature for full SHA-1/SHA-256 report."
+                    onTrace(AgentStepTrace("SDK & Signature", name, "completed", "Inspected SDK API ${android.os.Build.VERSION.SDK_INT}"))
                     jsonResult(true, summary)
-                }
-
-                "workspace_calendar_create" -> {
-                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
-                    val token = repo.tryGetSilentToken(WorkspaceService.CALENDAR.scopes)
-                        ?: return workspaceNeedsAuthResult(WorkspaceService.CALENDAR, name, onTrace)
-                    val summary = argStr("summary")
-                    val startIso = argStr("startIso")
-                    val endIso = argStr("endIso")
-                    val desc = argStr("description")
-                    val location = argStr("location")
-                    val msg = runWithOptionalGate(
-                        settings = settings,
-                        isSensitive = false,
-                        title = "Create Calendar Event",
-                        type = "Google Calendar",
-                        desc = "Schedule an event on your primary Google Calendar.",
-                        params = listOf("Title" to summary, "Start" to startIso, "End" to endIso),
-                        requestAuthorization = requestAuthorization
-                    ) {
-                        val ev = repo.createCalendarEvent(token, summary, startIso, endIso, desc, location).getOrThrow()
-                        "Created Calendar event '${ev.summary}' (${ev.startTime} to ${ev.endTime})."
-                    }
-                    onTrace(AgentStepTrace("Create Event", name, "completed", msg))
-                    jsonResult(true, msg)
-                }
-
-                "workspace_gmail_list" -> {
-                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
-                    val token = repo.tryGetSilentToken(WorkspaceService.GMAIL.scopes)
-                        ?: return workspaceNeedsAuthResult(WorkspaceService.GMAIL, name, onTrace)
-                    val query = argStr("query")
-                    val max = argInt("maxResults", 10)
-                    val msgs = repo.listGmailMessages(token, query, max).getOrThrow()
-                    val summary = if (msgs.isEmpty()) {
-                        "No Gmail messages matched your query."
-                    } else {
-                        msgs.joinToString("\n") { m ->
-                            "- From: ${m.from} | Subject: ${m.subject} | Snippet: ${m.snippet.take(120)}"
-                        }
-                    }
-                    onTrace(AgentStepTrace("Gmail Inbox", name, "completed", "Loaded ${msgs.size} email(s)"))
-                    jsonResult(true, summary)
-                }
-
-                "workspace_gmail_send" -> {
-                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
-                    val token = repo.tryGetSilentToken(WorkspaceService.GMAIL.scopes)
-                        ?: return workspaceNeedsAuthResult(WorkspaceService.GMAIL, name, onTrace)
-                    val to = argStr("to")
-                    val subject = argStr("subject")
-                    val body = argStr("body")
-                    val msg = runWithOptionalGate(
-                        settings = settings,
-                        isSensitive = true,
-                        title = "Send Email via Gmail",
-                        type = "Outbound Communication (Explicit Approval Required)",
-                        desc = "Review recipient, subject, and body before Aqua sends this email via your Gmail account.",
-                        params = listOf("To" to to, "Subject" to subject, "Body Preview" to body.take(160)),
-                        requestAuthorization = requestAuthorization
-                    ) {
-                        val id = repo.sendGmailMessage(token, to, subject, body).getOrThrow()
-                        "Sent Gmail message to $to (message id: $id)."
-                    }
-                    onTrace(AgentStepTrace("Send Gmail", name, "completed", msg))
-                    jsonResult(!msg.contains("declined", ignoreCase = true), msg)
-                }
-
-                "workspace_sheets_create" -> {
-                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
-                    val token = repo.tryGetSilentToken(WorkspaceService.SHEETS.scopes)
-                        ?: return workspaceNeedsAuthResult(WorkspaceService.SHEETS, name, onTrace)
-                    val title = argStr("title")
-                    val msg = runWithOptionalGate(
-                        settings = settings,
-                        isSensitive = false,
-                        title = "Create Google Sheet",
-                        type = "Google Sheets",
-                        desc = "Create a new Google Sheets spreadsheet.",
-                        params = listOf("Title" to title),
-                        requestAuthorization = requestAuthorization
-                    ) {
-                        val sheet = repo.createSpreadsheet(token, title).getOrThrow()
-                        "Created Google Sheet '${sheet.title}' (ID: ${sheet.spreadsheetId})."
-                    }
-                    onTrace(AgentStepTrace("Create Sheet", name, "completed", msg))
-                    jsonResult(true, msg)
-                }
-
-                "workspace_sheets_read" -> {
-                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
-                    val token = repo.tryGetSilentToken(WorkspaceService.SHEETS.scopes)
-                        ?: return workspaceNeedsAuthResult(WorkspaceService.SHEETS, name, onTrace)
-                    val sid = argStr("spreadsheetId")
-                    val range = argStr("range").ifBlank { "Sheet1!A1:J25" }
-                    val res = repo.readSheetRange(token, sid, range).getOrThrow()
-                    val summary = if (res.rows.isEmpty()) {
-                        "Range ${res.range} in sheet ${res.spreadsheetId} is empty."
-                    } else {
-                        res.rows.joinToString("\n") { row -> row.joinToString(" | ") }
-                    }
-                    onTrace(AgentStepTrace("Read Sheet", name, "completed", "Read ${res.rows.size} row(s)"))
-                    jsonResult(true, summary)
-                }
-
-                "workspace_sheets_append" -> {
-                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
-                    val token = repo.tryGetSilentToken(WorkspaceService.SHEETS.scopes)
-                        ?: return workspaceNeedsAuthResult(WorkspaceService.SHEETS, name, onTrace)
-                    val sid = argStr("spreadsheetId")
-                    val range = argStr("range").ifBlank { "Sheet1!A1" }
-                    val values = argStr("valuesCsv").split(",").map { it.trim() }.filter { it.isNotEmpty() }
-                    val msg = runWithOptionalGate(
-                        settings = settings,
-                        isSensitive = false,
-                        title = "Append Row to Sheet",
-                        type = "Google Sheets",
-                        desc = "Append a new row to spreadsheet $sid ($range).",
-                        params = listOf("Spreadsheet ID" to sid, "Range" to range, "Values" to values.joinToString(", ")),
-                        requestAuthorization = requestAuthorization
-                    ) {
-                        repo.appendSheetRow(token, sid, range, values).getOrThrow()
-                    }
-                    onTrace(AgentStepTrace("Append Sheet Row", name, "completed", msg))
-                    jsonResult(true, msg)
-                }
-
-                "workspace_forms_create" -> {
-                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
-                    val token = repo.tryGetSilentToken(WorkspaceService.FORMS.scopes)
-                        ?: return workspaceNeedsAuthResult(WorkspaceService.FORMS, name, onTrace)
-                    val title = argStr("title")
-                    val firstQuestion = argStr("firstQuestion")
-                    val msg = runWithOptionalGate(
-                        settings = settings,
-                        isSensitive = false,
-                        title = "Create Google Form",
-                        type = "Google Forms",
-                        desc = "Create a new Google Form.",
-                        params = listOf("Title" to title, "First Question" to firstQuestion.ifBlank { "(none)" }),
-                        requestAuthorization = requestAuthorization
-                    ) {
-                        val form = repo.createForm(token, title, firstQuestion).getOrThrow()
-                        "Created Google Form '${form.title}' (ID: ${form.formId}, Responder URI: ${form.responderUri})."
-                    }
-                    onTrace(AgentStepTrace("Create Form", name, "completed", msg))
-                    jsonResult(true, msg)
-                }
-
-                "workspace_forms_get_responses" -> {
-                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
-                    val token = repo.tryGetSilentToken(WorkspaceService.FORMS.scopes)
-                        ?: return workspaceNeedsAuthResult(WorkspaceService.FORMS, name, onTrace)
-                    val formId = argStr("formId")
-                    val (info, responses) = repo.getFormAndResponses(token, formId).getOrThrow()
-                    val summary = buildString {
-                        appendLine("Form: ${info.title} (${info.formId})")
-                        if (info.questionTitles.isNotEmpty()) {
-                            appendLine("Questions: ${info.questionTitles.joinToString(", ")}")
-                        }
-                        appendLine("Responses (${responses.size}):")
-                        if (responses.isEmpty()) {
-                            appendLine("- No responses submitted yet.")
-                        } else {
-                            responses.take(20).forEach { r ->
-                                appendLine("- [${r.lastSubmittedTime}] ${r.respondentEmail.ifBlank { "Anonymous" }}: ${r.answersSummary}")
-                            }
-                        }
-                    }
-                    onTrace(AgentStepTrace("Form Responses", name, "completed", "Loaded ${responses.size} response(s)"))
-                    jsonResult(true, summary)
-                }
-
-                "workspace_chat_list_spaces" -> {
-                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
-                    val token = repo.tryGetSilentToken(WorkspaceService.CHAT.scopes)
-                        ?: return workspaceNeedsAuthResult(WorkspaceService.CHAT, name, onTrace)
-                    val spaces = repo.listChatSpaces(token).getOrThrow()
-                    val summary = if (spaces.isEmpty()) {
-                        "No Google Chat spaces found for this account."
-                    } else {
-                        spaces.joinToString("\n") { s -> "- ${s.displayName} (${s.name}, type=${s.spaceType})" }
-                    }
-                    onTrace(AgentStepTrace("Chat Spaces", name, "completed", "Loaded ${spaces.size} space(s)"))
-                    jsonResult(true, summary)
-                }
-
-                "workspace_chat_list_messages" -> {
-                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
-                    val token = repo.tryGetSilentToken(WorkspaceService.CHAT.scopes)
-                        ?: return workspaceNeedsAuthResult(WorkspaceService.CHAT, name, onTrace)
-                    val spaceName = argStr("spaceName")
-                    val msgs = repo.listChatMessages(token, spaceName).getOrThrow()
-                    val summary = if (msgs.isEmpty()) {
-                        "No messages found in $spaceName."
-                    } else {
-                        msgs.joinToString("\n") { m -> "- ${m.senderName}: ${m.text}" }
-                    }
-                    onTrace(AgentStepTrace("Chat Messages", name, "completed", "Loaded ${msgs.size} message(s)"))
-                    jsonResult(true, summary)
-                }
-
-                "workspace_chat_send_message" -> {
-                    val repo = workspaceRepo ?: return jsonResult(false, "Google Workspace repository is unavailable.")
-                    val token = repo.tryGetSilentToken(WorkspaceService.CHAT.scopes)
-                        ?: return workspaceNeedsAuthResult(WorkspaceService.CHAT, name, onTrace)
-                    val spaceName = argStr("spaceName")
-                    val text = argStr("text")
-                    val msg = runWithOptionalGate(
-                        settings = settings,
-                        isSensitive = true,
-                        title = "Send Google Chat Message",
-                        type = "Outbound Communication (Explicit Approval Required)",
-                        desc = "Confirm sending this message into Google Chat space $spaceName.",
-                        params = listOf("Space" to spaceName, "Message" to text.take(160)),
-                        requestAuthorization = requestAuthorization
-                    ) {
-                        val sent = repo.sendChatMessage(token, spaceName, text).getOrThrow()
-                        "Sent Google Chat message to $spaceName (${sent.name})."
-                    }
-                    onTrace(AgentStepTrace("Send Chat", name, "completed", msg))
-                    jsonResult(!msg.contains("declined", ignoreCase = true), msg)
                 }
 
                 "get_device_storage_and_memory" -> {
@@ -1578,16 +1345,6 @@ class ToolCallingEngine(
             )
         )
         return if (approved) action() else "Action '$title' was declined by user."
-    }
-
-    private fun workspaceNeedsAuthResult(
-        service: WorkspaceService,
-        toolName: String,
-        onTrace: (AgentStepTrace) -> Unit
-    ): JsonObject {
-        val msg = "Google ${service.label} consent is required first. Direct the user to open the Workspace Hub from Home and connect ${service.label} (or Connect All)."
-        onTrace(AgentStepTrace("Workspace Auth", toolName, "needs_auth", msg))
-        return jsonResult(false, msg)
     }
 
     private fun jsonResult(success: Boolean, message: String): JsonObject {

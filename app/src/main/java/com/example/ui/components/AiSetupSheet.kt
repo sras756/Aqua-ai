@@ -765,7 +765,7 @@ fun AiSetupSheet(
                                     ) {
                                         Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                                             Text("Unlock All 50+ Tools Always", style = MaterialTheme.typography.bodyMedium, color = c.textPrimary)
-                                            Text("Exposes Web, Workspace & Device tools simultaneously without keyword filtering.", style = MaterialTheme.typography.bodySmall, color = c.textMuted)
+                                            Text("Exposes Web, Drive Vault, Android SDK & Device tools simultaneously without keyword filtering.", style = MaterialTheme.typography.bodySmall, color = c.textMuted)
                                         }
                                         Switch(
                                             checked = effectiveFreedomDraft.enableAllToolsAlways,

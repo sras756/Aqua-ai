@@ -24,8 +24,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.AutoMode
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Language
@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -236,36 +237,38 @@ fun HubScreen(
                     }
                 }
 
-                // Bento Grid Row 2: Workspace & Skills
+                // Bento Grid Row 2: Drive Vault & SDK / Signature
                 item {
                     AquaAnimatedEntrance(index = 2) {
+                        val driveBackups by viewModel.driveBackups.collectAsStateWithLifecycle()
+                        val sigReport by viewModel.signatureReport.collectAsStateWithLifecycle()
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             HubBentoTile(
-                                icon = Icons.Filled.Apps,
-                                title = "Workspace",
-                                subtitle = "Gmail, Calendar & Sheets",
+                                icon = Icons.Filled.CloudSync,
+                                title = "Drive Vault",
+                                subtitle = "${driveBackups.size} backup(s) • API Key",
                                 accent = c.success,
-                                tag = "hub_card_workspace",
-                                onClick = { onOpenTab("workspace") },
+                                tag = "hub_card_drive",
+                                onClick = { onOpenTab("drive") },
                                 modifier = Modifier.weight(1f)
                             )
                             HubBentoTile(
-                                icon = Icons.Filled.Extension,
-                                title = "Skills Engine",
-                                subtitle = "${skills.count { it.enabled }} enabled • ${skills.size} total",
+                                icon = Icons.Filled.VerifiedUser,
+                                title = "SDK & Signature",
+                                subtitle = if (sigReport.isTrustedForGoogleSignIn) "API ${android.os.Build.VERSION.SDK_INT} • Verified" else "Inspect SHA-1 & SDK",
                                 accent = c.accentCyan,
-                                tag = "hub_card_skills",
-                                onClick = { onOpenTab("skills") },
+                                tag = "hub_card_sdk",
+                                onClick = { onOpenTab("sdk") },
                                 modifier = Modifier.weight(1f)
                             )
                         }
                     }
                 }
 
-                // Bento Grid Row 3: Memory & Browser
+                // Bento Grid Row 3: Aqua Browser & Crypto Wallet
                 item {
                     AquaAnimatedEntrance(index = 3) {
                         Row(
@@ -273,34 +276,14 @@ fun HubScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             HubBentoTile(
-                                icon = Icons.Filled.Memory,
-                                title = "Memory & Logs",
-                                subtitle = "${conversations.size} chats • Drive sync",
-                                accent = c.accentAzure,
-                                tag = "hub_card_memory",
-                                onClick = { onOpenTab("memory") },
-                                modifier = Modifier.weight(1f)
-                            )
-                            HubBentoTile(
                                 icon = Icons.Filled.Language,
                                 title = "Aqua Browser",
-                                subtitle = "Reader & Web Agent",
+                                subtitle = "Live Web & Reader",
                                 accent = c.accentAzure,
                                 tag = "hub_card_browser",
                                 onClick = { onOpenTab("browser") },
                                 modifier = Modifier.weight(1f)
                             )
-                        }
-                    }
-                }
-
-                // Bento Grid Row 4: Crypto Wallet & Profile/Settings
-                item {
-                    AquaAnimatedEntrance(index = 4) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
                             HubBentoTile(
                                 icon = Icons.Filled.AccountBalanceWallet,
                                 title = "Crypto Wallet",
@@ -310,26 +293,61 @@ fun HubScreen(
                                 onClick = { onOpenTab("wallet") },
                                 modifier = Modifier.weight(1f)
                             )
+                        }
+                    }
+                }
+
+                // Bento Grid Row 4: Skills Engine & Memory & Logs
+                item {
+                    AquaAnimatedEntrance(index = 4) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
                             HubBentoTile(
-                                icon = if (ageTier == AgeTier.UNSET || ageTier == AgeTier.UNDER_13_BLOCKED) {
-                                    Icons.Filled.Person
-                                } else {
-                                    Icons.Filled.Settings
-                                },
-                                title = "Settings & Age",
-                                subtitle = "${ageTier.shortBadge} • ${gender.label}",
-                                accent = c.amber,
-                                tag = "hub_card_settings",
-                                onClick = { onOpenTab("settings") },
+                                icon = Icons.Filled.Extension,
+                                title = "Skills Engine",
+                                subtitle = "${skills.count { it.enabled }} enabled • ${skills.size} total",
+                                accent = c.accentCyan,
+                                tag = "hub_card_skills",
+                                onClick = { onOpenTab("skills") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            HubBentoTile(
+                                icon = Icons.Filled.Memory,
+                                title = "Memory & Logs",
+                                subtitle = "${conversations.size} chats • ${memories.size} notes",
+                                accent = c.accentAzure,
+                                tag = "hub_card_memory",
+                                onClick = { onOpenTab("memory") },
                                 modifier = Modifier.weight(1f)
                             )
                         }
                     }
                 }
 
-                // Live Session Device Telemetry Sparkline
+                // Bento Grid Row 5: Settings, Age Tier & Profile
                 item {
                     AquaAnimatedEntrance(index = 5) {
+                        HubBentoTile(
+                            icon = if (ageTier == AgeTier.UNSET || ageTier == AgeTier.UNDER_13_BLOCKED) {
+                                Icons.Filled.Person
+                            } else {
+                                Icons.Filled.Settings
+                            },
+                            title = "Settings, Age & Profile",
+                            subtitle = "${ageTier.shortBadge} • ${gender.label} • AI Freedom & Legal",
+                            accent = c.amber,
+                            tag = "hub_card_settings",
+                            onClick = { onOpenTab("settings") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
+                // Live Session Device Telemetry Sparkline
+                item {
+                    AquaAnimatedEntrance(index = 6) {
                         TelemetrySparklineCard(
                             telemetry = telemetry,
                             stats = stats,

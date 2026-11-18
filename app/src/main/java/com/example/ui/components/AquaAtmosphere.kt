@@ -8,13 +8,19 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -126,9 +132,9 @@ fun AquaBackdropBox(
 fun AquaGlassCard(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(22.dp),
-    containerColor: Color = AquaTheme.colors.cardSurface.copy(alpha = if (AquaTheme.colors.isDark) 0.90f else 0.96f),
-    borderColor: Color = AquaTheme.colors.borderGlow.copy(alpha = if (AquaTheme.colors.isDark) 0.85f else 0.9f),
-    elevation: Dp = if (AquaTheme.colors.isDark) 2.dp else 3.dp,
+    containerColor: Color = AquaTheme.colors.cardSurface.copy(alpha = if (AquaTheme.colors.isDark) 0.92f else 0.97f),
+    borderColor: Color = AquaTheme.colors.borderGlow.copy(alpha = if (AquaTheme.colors.isDark) 0.88f else 0.92f),
+    elevation: Dp = if (AquaTheme.colors.isDark) 3.dp else 4.dp,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Card(
@@ -139,4 +145,57 @@ fun AquaGlassCard(
         modifier = modifier,
         content = content
     )
+}
+
+@Composable
+fun AquaSectionHeader(
+    eyebrow: String,
+    title: String,
+    subtitle: String? = null,
+    modifier: Modifier = Modifier
+) {
+    val c = AquaTheme.colors
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            text = eyebrow.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = c.accentCyan
+        )
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineSmall,
+            color = c.textPrimary
+        )
+        if (!subtitle.isNullOrBlank()) {
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = c.textMuted
+            )
+        }
+    }
+}
+
+@Composable
+fun AquaStatusPill(
+    label: String,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = accent.copy(alpha = 0.14f),
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.45f)),
+        modifier = modifier
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = accent,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+        )
+    }
 }

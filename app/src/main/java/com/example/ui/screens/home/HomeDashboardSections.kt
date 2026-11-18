@@ -26,11 +26,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.BatteryStd
 import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.ContentPasteGo
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FileDownload
@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Icon
@@ -159,15 +160,15 @@ fun HomeTelemetryHeaderRow(
             }
 
             IconButton(
-                onClick = { onOpenTab("workspace") },
+                onClick = { onOpenTab("drive") },
                 modifier = Modifier
                     .minimumInteractiveComponentSize()
                     .clip(CircleShape)
                     .background(c.cardSurface.copy(alpha = 0.92f))
                     .border(1.dp, c.borderGlow, CircleShape)
-                    .testTag("home_workspace_shortcut")
+                    .testTag("home_drive_shortcut")
             ) {
-                Icon(Icons.Filled.Apps, contentDescription = "Open Google Workspace", tint = c.accentTeal)
+                Icon(Icons.Filled.CloudSync, contentDescription = "Open Google Drive Vault", tint = c.accentTeal)
             }
 
             IconButton(
@@ -463,7 +464,8 @@ fun HomeQuickModulesStrip(onOpenTab: (String) -> Unit) {
             modifier = Modifier.fillMaxWidth()
         ) {
             item { QuickShortcutTile(Icons.Filled.AutoMode, "Routines", c.accentCyan, "shortcut_routines") { onOpenTab("routines") } }
-            item { QuickShortcutTile(Icons.Filled.Apps, "Workspace", c.success, "shortcut_workspace") { onOpenTab("workspace") } }
+            item { QuickShortcutTile(Icons.Filled.CloudSync, "Drive Vault", c.success, "shortcut_drive") { onOpenTab("drive") } }
+            item { QuickShortcutTile(Icons.Filled.VerifiedUser, "SDK & Sig", c.accentTeal, "shortcut_sdk") { onOpenTab("sdk") } }
             item { QuickShortcutTile(Icons.Filled.Extension, "Skills", c.accentTeal, "shortcut_skills") { onOpenTab("skills") } }
             item { QuickShortcutTile(Icons.Filled.Language, "Browser", c.accentAzure, "shortcut_browser") { onOpenTab("browser") } }
             item { QuickShortcutTile(Icons.Filled.AccountBalanceWallet, "Wallet", c.amber, "shortcut_wallet") { onOpenTab("wallet") } }

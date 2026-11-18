@@ -774,7 +774,7 @@ fun AiFreedomLabCard(
 
             SettingSwitchRow(
                 title = "Unlock All 50+ Tools Always",
-                subtitle = "Give the AI access to Device, Web, Browser, Wallet & Workspace tools simultaneously without keyword gating.",
+                subtitle = "Give the AI access to Device, Web, Browser, Drive Vault, SDK & Wallet tools simultaneously without keyword gating.",
                 checked = freedomConfig.enableAllToolsAlways,
                 onCheckedChange = { onUpdateFreedom(freedomConfig.copy(enableAllToolsAlways = it)) }
             )

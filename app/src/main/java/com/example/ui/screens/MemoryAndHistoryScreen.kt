@@ -89,7 +89,13 @@ fun MemoryAndHistoryScreen(
     onOpenHomeChat: () -> Unit
 ) {
     val context = LocalContext.current
-    val activity = context as? Activity
+    val activity = remember(context) {
+        var cur: android.content.Context? = context
+        while (cur is android.content.ContextWrapper && cur !is Activity) {
+            cur = cur.baseContext
+        }
+        cur as? Activity
+    }
     val c = AquaTheme.colors
 
     val conversations by viewModel.conversations.collectAsStateWithLifecycle()
@@ -104,11 +110,12 @@ fun MemoryAndHistoryScreen(
     val driveBackups by viewModel.driveBackups.collectAsStateWithLifecycle()
     val driveStatusLabel by viewModel.driveStatusLabel.collectAsStateWithLifecycle()
     val driveAuthPendingIntent by viewModel.driveAuthPendingIntent.collectAsStateWithLifecycle()
+    val preferredDriveEmail by viewModel.preferredDriveEmail.collectAsStateWithLifecycle()
 
     val driveConsentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
-        viewModel.handleDriveConsentResult(result.data)
+        viewModel.handleDriveConsentResult(result.data, result.resultCode)
     }
 
     val exportMdLauncher = rememberLauncherForActivityResult(
@@ -283,8 +290,10 @@ fun MemoryAndHistoryScreen(
                                 GoogleDriveHistoryCard(
                                     connected = driveConnected,
                                     busy = driveBusy,
+                                    preferredEmail = preferredDriveEmail,
                                     statusLabel = driveStatusLabel,
                                     backups = driveBackups,
+                                    onConnect = { viewModel.connectGoogleDrive(activity) },
                                     onBackupAppData = { viewModel.backupHistoryToGoogleDrive(activity, exportVisibleCopy = false) },
                                     onExportVisible = { viewModel.backupHistoryToGoogleDrive(activity, exportVisibleCopy = true) },
                                     onRefresh = { viewModel.refreshDriveBackups(activity) },
@@ -607,8 +616,10 @@ fun MemoryAndHistoryScreen(
 private fun GoogleDriveHistoryCard(
     connected: Boolean,
     busy: Boolean,
+    preferredEmail: String,
     statusLabel: String?,
     backups: List<DriveBackupMetadata>,
+    onConnect: () -> Unit,
     onBackupAppData: () -> Unit,
     onExportVisible: () -> Unit,
     onRefresh: () -> Unit,
@@ -643,7 +654,13 @@ private fun GoogleDriveHistoryCard(
                             color = c.textPrimary
                         )
                         Text(
-                            text = statusLabel ?: if (connected) "Authorized via Google Drive OAuth" else "Connect Google Drive to back up & restore chats",
+                            text = statusLabel ?: if (connected) {
+                                "Authorized via Google Drive OAuth"
+                            } else if (preferredEmail.isNotBlank()) {
+                                "1-tap sign-in ready for $preferredEmail"
+                            } else {
+                                "Connect Google Drive in 1 tap to back up & restore chats"
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             color = if (connected) c.accentTeal else c.textMuted
                         )
@@ -662,6 +679,24 @@ private fun GoogleDriveHistoryCard(
                 }
             }
 
+            if (!connected) {
+                Button(
+                    onClick = onConnect,
+                    enabled = !busy,
+                    colors = ButtonDefaults.buttonColors(containerColor = c.accentCyan, contentColor = c.canvas),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("drive_connect_inline_button")
+                ) {
+                    Icon(Icons.Filled.CloudDone, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = if (preferredEmail.isNotBlank()) "Continue with Google Drive" else "Sign in with Google Drive",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -669,14 +704,17 @@ private fun GoogleDriveHistoryCard(
                 Button(
                     onClick = onBackupAppData,
                     enabled = !busy,
-                    colors = ButtonDefaults.buttonColors(containerColor = c.accentCyan, contentColor = c.canvas),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (connected) c.accentCyan else c.deepSurface,
+                        contentColor = if (connected) c.canvas else c.accentCyan
+                    ),
                     modifier = Modifier
                         .weight(1f)
                         .testTag("drive_backup_button")
                 ) {
                     Icon(Icons.Filled.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("Back Up", fontWeight = FontWeight.Bold)
+                    Text(if (connected) "Back Up" else "Connect & Back Up", fontWeight = FontWeight.Bold)
                 }
                 OutlinedButton(
                     onClick = onExportVisible,

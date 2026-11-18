@@ -18,13 +18,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -123,15 +124,27 @@ private val STUDIO_TEMPLATES = listOf(
         }
     ),
     PromptStudioTemplate(
-        id = "workspace_digest",
-        title = "Google Workspace Triage",
-        category = "PRODUCTIVITY",
-        description = "Pull real unread emails and calendar events into a prioritized plan.",
-        icon = Icons.Filled.Apps,
-        fieldLabel = "Workspace Scope",
-        fieldPlaceholder = "e.g. Today's calendar + urgent unread Gmail",
+        id = "drive_vault_audit",
+        title = "Google Drive Vault Sync & Quota",
+        category = "CLOUD VAULT",
+        description = "Inspect Drive storage quota, API key readiness, and saved AppData snapshots.",
+        icon = Icons.Filled.CloudSync,
+        fieldLabel = "Drive Action Focus",
+        fieldPlaceholder = "e.g. Check quota and list my latest history backups",
         builder = { scopeText, _ ->
-            "Inspect my connected Google Workspace ($scopeText) and organize an actionable priority checklist with deadlines."
+            "Check my Google Drive Vault ($scopeText) using drive_get_storage_quota and drive_list_backups, and advise if I should sync a fresh AppData snapshot."
+        }
+    ),
+    PromptStudioTemplate(
+        id = "sdk_signature_audit",
+        title = "Android SDK & Signature Verification",
+        category = "SECURITY",
+        description = "Audit live APK SHA-1/SHA-256 fingerprint, Play Services & Android 16 (API 36) capabilities.",
+        icon = Icons.Filled.VerifiedUser,
+        fieldLabel = "Verification Focus (Optional)",
+        fieldPlaceholder = "e.g. Confirm Google Sign-In SHA-1 & StrongBox support",
+        builder = { scopeText, _ ->
+            "Run inspect_android_sdk_and_signature ($scopeText) and summarize APK SHA-1/SHA-256 trust, OAuth readiness, API level, ABIs, and hardware capabilities."
         }
     ),
     PromptStudioTemplate(
@@ -283,7 +296,8 @@ fun PromptStudioSheet(
                     ) {
                         Text("Back", color = c.textMuted)
                     }
-                    val canRun = tpl.id == "device_audit" || primaryInput.isNotBlank() || secondaryInput.isNotBlank()
+                    val canRun = tpl.id in setOf("device_audit", "drive_vault_audit", "sdk_signature_audit") ||
+                        primaryInput.isNotBlank() || secondaryInput.isNotBlank()
                     Button(
                         onClick = {
                             val built = tpl.builder(

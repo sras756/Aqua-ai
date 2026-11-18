@@ -33,6 +33,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.BrightnessMedium
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
@@ -43,6 +44,7 @@ import androidx.compose.material.icons.filled.Policy
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SettingsApplications
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -70,7 +72,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.example.data.model.UserSettings
 import com.example.device.DeviceTelemetry
+import com.example.security.SignatureCheckReport
 import com.example.ui.components.AquaGlassCard
+import com.example.ui.components.AquaStatusPill
 import com.example.ui.theme.AquaTheme
 
 @Composable
@@ -139,6 +143,9 @@ fun AppearanceAndBrightnessCard(
 fun PermissionsAndDiagnosticsCard(
     context: Context,
     telemetry: DeviceTelemetry,
+    signatureReport: SignatureCheckReport,
+    onOpenSdkAndSignature: () -> Unit,
+    onOpenDriveVault: () -> Unit,
     onRequestMic: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
     onRequestLocation: () -> Unit,
@@ -154,10 +161,52 @@ fun PermissionsAndDiagnosticsCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Security, contentDescription = null, tint = c.success)
-                Spacer(Modifier.width(8.dp))
-                Text("Android Permissions Dashboard", style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Security, contentDescription = null, tint = c.success)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Permissions, SDK & Signature", style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
+                }
+                AquaStatusPill(
+                    label = if (signatureReport.isTrustedForGoogleSignIn) "SIG VERIFIED" else "CHECK SIG",
+                    accent = if (signatureReport.isTrustedForGoogleSignIn) c.success else c.amber
+                )
+            }
+            Text(
+                text = "${signatureReport.overallStatusLabel} • Android API ${android.os.Build.VERSION.SDK_INT} (Target 36 / Min 24)",
+                style = MaterialTheme.typography.bodySmall,
+                color = c.textMuted
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onOpenSdkAndSignature,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .testTag("settings_open_sdk_signature_button")
+                ) {
+                    Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("SDK & Signature", color = c.accentCyan)
+                }
+                OutlinedButton(
+                    onClick = onOpenDriveVault,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .testTag("settings_open_drive_vault_button")
+                ) {
+                    Icon(Icons.Filled.CloudSync, contentDescription = null, tint = c.accentTeal, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Drive Vault", color = c.accentTeal)
+                }
             }
             PermissionRow(
                 label = "Microphone (Voice & Wake Word)",
@@ -297,40 +346,45 @@ fun LegalReaderFullScreenModal(
         when (activeDoc) {
             "index" -> listOf(
                 "Aqua AI — Package: com.aistudio.aquaai.vqrzmn" to
-                    "Trust & Legal Portal (Effective Nov 17, 2026) • Animated Modular Android AI Assistant, Age 13+ Safety & Gender Personalization, Optional BYOK AI Studio & ElevenLabs Voice, Routines, Workspace Hub & Self-Custodial Multi-Chain Crypto Wallet.",
+                    "Trust & Legal Portal (Effective Nov 18, 2026) • Clean Modular Android AI Assistant with Coordinator Architecture, Google Signature Check, Google Drive Vault + Approved API Key, Android SDK Inspector, Age 13+ Safety, Optional BYOK AI Studio & ElevenLabs Voice, and Self-Custodial Multi-Chain Wallet.",
                 "New & Redesigned Features" to
-                    "• Animated Modular UI Architecture: Fluid spring-physics orb interactions, sonar halo pulse, ambient drift canvas, staggered card motion & bottom/rail 5-tab workflow.\n" +
-                    "• Age System (13+) & Optional Gender Personalization: Strict under-13 COPPA block, Teen Mode (13–17) autonomy guardrails, Adult (18+) mode, and optional pronoun/gender preference.\n" +
-                    "• Post-Login AI Setup Studio & Freedom Lab: Optional Google AI Studio API Key verifier + live model discovery, optional non-compulsory ElevenLabs Voice ID setup, and granular sampling/tool autonomy.",
+                    "• Clean Modular Coordinator Architecture & Professional UI: State separated into AquaSystemAndDriveCoordinator & AquaWalletCoordinator, refined AquaGlassCard elevations, AquaSectionHeader & AquaStatusPill tokens.\n" +
+                    "• Google Signature Check: Live APK SHA-1/SHA-256 certificate inspection against Firebase OAuth fingerprints, default_web_client_id validation, and Google Play Services verification.\n" +
+                    "• Android SDK Inspector (API 36.1): Real Build.VERSION, Compile/Target/Min SDK alignment, ABI matrix, PackageManager hardware features, and JVM heap telemetry.\n" +
+                    "• Google Drive Vault + Approved API Key: Focused Drive-only integration (all Gmail/Calendar/Contacts/Sheets/Forms/Chat scopes removed) pairing Credential Manager OAuth with GOOGLE_DRIVE_API_KEY attribution.\n" +
+                    "• Website Sign in with Google: Official Google Identity Services authentication right inside the Privacy Policy, Terms & Conditions, and Overview web portal.",
                 "Core Platform Capabilities" to
-                    "• Gemini Agent & Live Voice: Streaming chat, Deep Thinking traces, Gemini Live voice, Memories & Skills validator.\n" +
-                    "• Routines, Browser & App Launching: Reusable automation routines, multi-tab browser & live DuckDuckGo/Wikipedia search.\n" +
-                    "• Google Workspace & Drive: Limited Use Gmail, Calendar, Contacts, Sheets, Forms, Chat & Drive snapshot backups.\n" +
+                    "• Gemini Agent & Live Voice: Streaming chat, Deep Thinking traces, Gemini Live voice, Memories, Routines & Skills validator.\n" +
+                    "• Age 13+ System & Optional Gender: COPPA under-13 lock, Teen 13–17 Balanced guardrails & optional pronoun personalization.\n" +
                     "• Self-Custodial Multi-Chain Wallet: BIP-39 EVM/Solana/Bitcoin vault in Android Keystore AES-256-GCM, ENS, ERC-20 revokes & CoinGecko charts.",
                 "Data Safety Summary" to
-                    "• Google Account Profile: Used strictly for Firebase Authentication & per-user Firestore isolation.\n" +
-                    "• Age Tier & Gender Preference: Stored inside your user-scoped Firestore preferences solely for 13+ eligibility, Teen guardrails & assistant personalization — never sold or shared for ads.\n" +
-                    "• API Keys & Wallet Vault: AI Studio / ElevenLabs keys, wallet keys & PINs stay encrypted strictly in Android Keystore.",
+                    "• Google Account Profile: Used strictly for Firebase Authentication, Signature Check verification & per-user Firestore isolation (or local Google Identity Services acknowledgment on the web portal).\n" +
+                    "• Google Drive Vault: Accessed solely with drive.appdata & drive.file scopes plus optional GOOGLE_DRIVE_API_KEY — never Workspace mail/contacts/calendar.\n" +
+                    "• API Keys & Wallet Vault: AI Studio, ElevenLabs & Drive API key overrides plus wallet keys/PINs stay encrypted strictly in Android Keystore.",
+                "Permissions Audit (Least-Privilege Google Drive Scopes)" to
+                    "• https://www.googleapis.com/auth/drive.appdata (drive.appdata): Confines automated JSON backups (aqua_ai_history_backup.json) to a hidden per-app folder so Aqua AI cannot see or list any personal files in your Google Drive.\n" +
+                    "• https://www.googleapis.com/auth/drive.file (drive.file): Limits visible Drive access strictly to individual JSON snapshots created or opened by Aqua AI (Aqua_AI_History_*.json) and quota checks, never granting blanket Drive read/write access.\n" +
+                    "• Least-Privilege Guarantee: Broad drive/drive.readonly scopes, all Google Workspace scopes (Gmail, Calendar, Contacts, Sheets, Forms, Chat), and broad Android storage scans (READ_MEDIA_*) are completely omitted to eliminate unnecessary data exposure.",
                 "Support" to
                     "Developer support & data deletion requests: srasmarkhor7289@gmail.com"
             )
             "terms" -> listOf(
-                "Effective Date: November 17, 2026" to
+                "Effective Date: November 18, 2026" to
                     "App Package: com.aistudio.aquaai.vqrzmn | Developer Contact: srasmarkhor7289@gmail.com",
-                "1. Acceptance & Age 13+ Eligibility" to
-                    "By accessing Aqua AI, you confirm you meet the minimum age of 13 years (under COPPA and Google Play policy). Accounts reporting age under 13 are restricted from AI chat and live voice features. Users aged 13–17 operate under mandatory Teen Guardrails limiting autonomy to supervised Balanced mode.",
+                "1. Acceptance, Website Sign-In & Age 13+ Eligibility" to
+                    "By accessing Aqua AI or signing in with Google on our Privacy Policy / Terms portal, you confirm you meet the minimum age of 13 years (under COPPA and Google Play policy). Accounts reporting age under 13 are restricted from AI chat and live voice features. Users aged 13–17 operate under mandatory Teen Guardrails limiting autonomy to supervised Balanced mode.",
                 "2. AI Assistant, Autonomy Modes & Supervision" to
                     "• Aqua AI uses Gemini models (managed Firebase AI or your optional personal Google AI Studio key), custom directives, live web search, and connected tools.\n" +
                     "• Adults (18+) may select Advisory, Balanced, or Unrestricted Tools modes inside the AI Freedom Lab; users 13–17 are automatically capped at Balanced autonomy.\n" +
-                    "• High-impact actions (outbound messages, HTTP writes, wallet contact edits, or blockchain signing) always require explicit modal confirmation.",
-                "3. Foreground Service & Modular UI Operation" to
-                    "Background voice/task prioritization is strictly optional, displays a persistent Android foreground notification with pause/stop controls when active, and remains reversible anytime. Note: Dedicated Home Launcher / Live Wallpaper functionality was permanently removed.",
+                    "• High-impact actions (outbound HTTP writes, wallet contact edits, Drive deletes, or blockchain signing) always require explicit modal confirmation.",
+                "3. Android SDK, Google Signature Integrity & Foreground Service" to
+                    "Aqua AI targets Android 16 (API 36, minSdk 24), exposes an in-app Android SDK & Google Signature Check verifier for build transparency, and offers an optional foreground service displaying a persistent Android notification with pause/stop controls.",
                 "4. Self-Custodial Wallet & Financial Disclaimers" to
                     "• Non-Custodial Software: Aqua Wallet is purely self-custodial software. You alone control recovery phrases, private keys, PINs, and device security.\n" +
                     "• Irreversible Transactions: Digital asset transfers and smart-contract approvals/revocations are irreversible once broadcast.\n" +
                     "• Not Financial Advice: Market data and portfolio analytics are informational only.",
-                "5. Third-Party Services" to
-                    "Integrations with Google (Firebase, Workspace, Drive, Google AI Studio APIs), optional ElevenLabs TTS APIs, public blockchain RPC nodes, and CoinGecko depend on those third parties' uptime, quotas, and terms.",
+                "5. Third-Party Services & Google Drive Integration" to
+                    "Aqua AI integrates strictly with Google Drive (drive.appdata and drive.file via OAuth 2.0 and optional GOOGLE_DRIVE_API_KEY), Firebase, Google Sign-In / Identity Services, optional ElevenLabs TTS APIs, public blockchain RPC nodes, and CoinGecko. Google Workspace (Gmail, Calendar, Contacts, Sheets, Forms, Chat) integrations have been removed.",
                 "6. Imported Skills & Acceptable Use" to
                     "Declarative YAML, JSON, and Markdown skills are scanned against executable payloads; do not import untrusted instructions or misuse Aqua AI.",
                 "7. Disclaimer of Warranties & Limitation of Liability" to
@@ -339,21 +393,23 @@ fun LegalReaderFullScreenModal(
                     "Continued use after revised terms take effect constitutes acceptance. Contact srasmarkhor7289@gmail.com with questions."
             )
             else -> listOf(
-                "Effective Date: November 17, 2026" to
+                "Effective Date: November 18, 2026" to
                     "App Package: com.aistudio.aquaai.vqrzmn | Developer Contact: srasmarkhor7289@gmail.com",
                 "1. Information We Access & Process" to
-                    "• Account Information: Google Sign-In via Firebase Authentication provides Firebase UID, display name, email, and avatar for user-scoped sync.\n" +
+                    "• Account Information & Google Signature Check: Google Sign-In via Firebase Authentication provides UID, display name, email, and avatar for user-scoped isolation. An on-device Signature Check inspects APK SHA-1/SHA-256 and Play Services readiness without exporting private device certificates.\n" +
+                    "• Website Google Sign-In: When you sign in with Google on our Privacy Policy or Terms website, Google Identity Services returns a signed JWT profile (name, email, avatar) decoded locally in your browser to record your timestamped policy acknowledgement in localStorage.\n" +
                     "• Age Tier & Optional Gender Preference: Age in years (validated strictly for 13+ eligibility and 13–17 Teen Guardrails) and optional gender identity preference are saved solely inside your private Firestore preferences.\n" +
-                    "• User Prompts & Attachments: Messages, voice transcripts, images, and SAF files selected by you are processed via Gemini when submitted.\n" +
-                    "• Live Web & On-Device Telemetry: Web fetches use HTTPS without ad trackers; RAM/battery sparklines stay strictly on-device.",
+                    "• User Prompts, Attachments & Android SDK Telemetry: Prompts and selected files are processed via Gemini on submit; Android SDK & RAM/battery telemetry stay strictly on-device.",
                 "2. AI Personas, Custom Keys, ElevenLabs Voice & Freedom Controls" to
-                    "Personal Google AI Studio API keys and optional (non-compulsory) ElevenLabs API keys & Voice IDs remain encrypted locally in Android Keystore AES-256-GCM. Personas and directives stay local per user.",
-                "3. Permissions & Foreground Service (Zero Broad Storage)" to
-                    "• Opt-In Runtime Permissions: Microphone, Camera, Biometrics, Coarse Location, and Alarms.\n" +
+                    "Personal Google AI Studio API keys, optional Google Drive API key overrides, and optional ElevenLabs API keys & Voice IDs remain encrypted locally in Android Keystore AES-256-GCM. Personas and directives stay local per user.",
+                "3. Permissions & Foreground Service (Zero Broad Storage / No Workspace Scopes)" to
+                    "• Opt-In Runtime Permissions: Microphone, Camera, Biometrics, Coarse Location, and Alarms. Google Contacts/Calendar permissions (READ_CONTACTS, READ_CALENDAR) have been completely removed.\n" +
                     "• Zero Broad Storage Scans: Uses Android Photo Picker & SAF.\n" +
                     "• Foreground Service: Optional background automation/wake-word service displays a persistent notification with pause/stop actions.",
-                "4. Google Workspace & Google Drive Data (Limited Use)" to
-                    "• Google Drive (drive.appdata, drive.file) & Workspace (Gmail, Calendar, Contacts, Sheets, Forms, Chat) are accessed strictly on request and adhere to Google API Services User Data Policy (Limited Use). Never sold or used for ad targeting or model training.",
+                "4. Google Drive Vault & Approved API Key (Limited Use)" to
+                    "• Google Drive Only (drive.appdata, drive.file): Accessed strictly on request to back up, inspect quota, list, restore, or delete your own Aqua AI history snapshots, paired with approved GOOGLE_DRIVE_API_KEY project attribution.\n" +
+                    "• Google Workspace Removed: Aqua AI does not request or access Gmail, Google Calendar, Google Contacts, Sheets, Forms, or Google Chat data.\n" +
+                    "• Limited Use Guarantee: Never sold or used for ad targeting or model training.",
                 "5. Self-Custodial Crypto Wallet & AI Boundary Controls" to
                     "BIP-39 seeds and private keys remain encrypted strictly inside Android Keystore AES-256-GCM and never leave your device. Wallet Read and Wallet Write permissions are separately gated.",
                 "6. Storage, Children's Privacy (Under 13 Restricted) & Deletion" to
@@ -437,7 +493,7 @@ fun LegalReaderFullScreenModal(
                 OutlinedTextField(
                     value = clauseFilter,
                     onValueChange = { clauseFilter = it },
-                    placeholder = { Text("Filter clauses (e.g. age, gender, wallet, Drive)...") },
+                    placeholder = { Text("Filter clauses (e.g. signature, SDK, Drive, age, wallet)...") },
                     leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = c.accentCyan) },
                     singleLine = true,
                     shape = RoundedCornerShape(14.dp),

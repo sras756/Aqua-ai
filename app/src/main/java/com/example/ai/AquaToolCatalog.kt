@@ -171,29 +171,18 @@ internal object AquaToolCatalog {
             readTools + writeTools
         } else emptyList()
 
-        val workspaceNeeded = includeAll || listOf(
-            "gmail", "email", "mail", "inbox", "calendar", "event", "meeting", "schedule",
-            "contact", "sheet", "spreadsheet", "csv", "form", "survey", "response",
-            "google chat", "space", "drive", "backup", "workspace"
+        val driveAndSdkNeeded = includeAll || listOf(
+            "drive", "backup", "quota", "storage", "restore", "export",
+            "sdk", "api level", "signature", "sha-1", "sha1", "sha-256", "sha256",
+            "play services", "android", "abi", "device"
         ).any { lower.contains(it) }
 
-        val workspaceTools = if (workspaceNeeded) {
+        val driveAndSdkTools = if (driveAndSdkNeeded) {
             listOf(
-                AquaToolSpec("backup_history_to_drive", "Backs up conversation history and memories to Google Drive."),
-                AquaToolSpec("workspace_contacts_list", "Lists or searches Google Contacts.", listOf(s("query", "Optional filter."))),
-                AquaToolSpec("workspace_contacts_create", "Creates a new Google Contact.", listOf(s("fullName", "Full name."), s("email", "Email."), s("phone", "Phone."))),
-                AquaToolSpec("workspace_calendar_list", "Lists upcoming Google Calendar events.", listOf(i("maxResults", "1-50 (default 15)."))),
-                AquaToolSpec("workspace_calendar_create", "Creates a Google Calendar event.", listOf(s("summary", "Title."), s("startIso", "ISO-8601 start time."), s("endIso", "ISO-8601 end time."), s("description", "Optional description."), s("location", "Optional location."))),
-                AquaToolSpec("workspace_gmail_list", "Searches or lists recent Gmail messages.", listOf(s("query", "Optional Gmail query."), i("maxResults", "1-20 (default 10)."))),
-                AquaToolSpec("workspace_gmail_send", "Sends an email via Gmail. Requires explicit confirmation.", listOf(s("to", "Recipient email."), s("subject", "Subject."), s("body", "Plain-text body."))),
-                AquaToolSpec("workspace_sheets_create", "Creates a new Google Sheets spreadsheet.", listOf(s("title", "Spreadsheet title."))),
-                AquaToolSpec("workspace_sheets_read", "Reads cells from a Google Sheets spreadsheet.", listOf(s("spreadsheetId", "Spreadsheet ID."), s("range", "A1 range."))),
-                AquaToolSpec("workspace_sheets_append", "Appends a comma-separated row to a Google Sheet.", listOf(s("spreadsheetId", "Spreadsheet ID."), s("range", "Target range."), s("valuesCsv", "Comma-separated row values."))),
-                AquaToolSpec("workspace_forms_create", "Creates a new Google Form and optional initial question.", listOf(s("title", "Form title."), s("firstQuestion", "Optional first question."))),
-                AquaToolSpec("workspace_forms_get_responses", "Reads Google Form metadata, questions, and responses.", listOf(s("formId", "Google Form ID."))),
-                AquaToolSpec("workspace_chat_list_spaces", "Lists Google Chat spaces."),
-                AquaToolSpec("workspace_chat_list_messages", "Lists recent messages in a Google Chat space.", listOf(s("spaceName", "Space resource name."))),
-                AquaToolSpec("workspace_chat_send_message", "Sends a message to a Google Chat space. Requires confirmation.", listOf(s("spaceName", "Space resource name."), s("text", "Message body.")))
+                AquaToolSpec("backup_history_to_drive", "Backs up conversation history and memories to Google Drive AppData."),
+                AquaToolSpec("drive_list_backups", "Lists saved Aqua AI history backup files in Google Drive AppData and My Drive."),
+                AquaToolSpec("drive_get_storage_quota", "Fetches authenticated Google Drive storage quota, account name, and API key status."),
+                AquaToolSpec("inspect_android_sdk_and_signature", "Returns live Android SDK level, ABI targets, hardware features, and Google APK signing SHA-1/SHA-256 verification status.")
             )
         } else emptyList()
 
@@ -201,7 +190,7 @@ internal object AquaToolCatalog {
             coreWebTools +
             extendedWebAndCommsTools +
             walletTools +
-            workspaceTools
+            driveAndSdkTools
     }
 
     fun buildFirebaseTool(

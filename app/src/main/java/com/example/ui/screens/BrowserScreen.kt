@@ -519,7 +519,8 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                                     view: WebView?,
                                     detail: RenderProcessGoneDetail?
                                 ): Boolean {
-                                    Log.w("AquaBrowser", "WebView render process gone (didCrash=${detail?.didCrash()})")
+                                    val didCrash = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) detail?.didCrash() else null
+                                    Log.w("AquaBrowser", "WebView render process gone (didCrash=$didCrash)")
                                     webViewInstance = null
                                     safelyDisposeWebView(view, viewModel.browserController, rendererAlreadyGone = true)
                                     viewModel.browserController.updatePageState {

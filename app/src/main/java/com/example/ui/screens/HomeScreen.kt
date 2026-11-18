@@ -79,7 +79,7 @@ import java.util.Locale
 
 private val QUICK_PROMPT_STARTERS = listOf(
     "Device Health" to "Check my current battery, Wi-Fi connectivity, available RAM, and storage space.",
-    "Unread Gmail" to "Check my recent unread Gmail messages and summarize anything urgent.",
+    "Drive & SDK Check" to "Inspect my Android SDK & Google Signature verification status and list my Google Drive Vault backups.",
     "Top Tech News" to "Search the live web for today's biggest Android and AI engineering headlines with links.",
     "Clipboard Insights" to "Read my Android clipboard and tell me the most helpful next action."
 )

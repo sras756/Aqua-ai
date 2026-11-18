@@ -15,14 +15,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.AutoMode
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -61,7 +62,6 @@ import com.example.data.local.SecureConfigStore
 import com.example.data.repository.AquaFirestoreRepository
 import com.example.data.repository.FileImportRepository
 import com.example.data.repository.GoogleDriveHistoryRepository
-import com.example.data.repository.GoogleWorkspaceRepository
 import com.example.device.AndroidDeviceController
 import com.example.ui.AquaMainViewModel
 import com.example.ui.components.AiSetupSheet
@@ -69,14 +69,15 @@ import com.example.ui.components.AuthorizationModal
 import com.example.ui.components.CommandPaletteSheet
 import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.BrowserScreen
+import com.example.ui.screens.DriveVaultScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.HubScreen
 import com.example.ui.screens.MemoryAndHistoryScreen
 import com.example.ui.screens.RoutinesScreen
+import com.example.ui.screens.SdkAndSignatureScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.SkillsScreen
 import com.example.ui.screens.WalletScreen
-import com.example.ui.screens.WorkspaceScreen
 import com.example.ui.theme.AquaAiTheme
 import com.example.ui.theme.AquaTheme
 import com.example.wallet.FlashWalletConnector
@@ -104,7 +105,8 @@ private val AQUA_RAIL_TABS = listOf(
     AquaTab("home", "Core", Icons.Filled.GraphicEq),
     AquaTab("hub", "Hub", Icons.Filled.Dashboard),
     AquaTab("routines", "Routines", Icons.Filled.AutoMode),
-    AquaTab("workspace", "Workspace", Icons.Filled.Apps),
+    AquaTab("drive", "Drive", Icons.Filled.CloudSync),
+    AquaTab("sdk", "SDK", Icons.Filled.VerifiedUser),
     AquaTab("skills", "Skills", Icons.Filled.Extension),
     AquaTab("browser", "Browser", Icons.Filled.Language),
     AquaTab("wallet", "Wallet", Icons.Filled.AccountBalanceWallet),
@@ -167,18 +169,18 @@ private fun AuthenticatedAquaShell(
                 val dbId = context.getString(R.string.firestore_database_id)
                 val firestore = FirebaseFirestore.getInstance(dbId)
                 val firestoreRepo = AquaFirestoreRepository(firestore)
+                val secureConfig = SecureConfigStore(context)
                 AquaMainViewModel(
                     appContext = context,
                     currentUserId = userId,
                     firestoreRepo = firestoreRepo,
-                    secureConfigStore = SecureConfigStore(context),
+                    secureConfigStore = secureConfig,
                     fileImportRepository = FileImportRepository(context),
                     deviceController = AndroidDeviceController(context),
                     browserController = AquaBrowserController(context),
                     walletConnector = FlashWalletConnector(context),
                     cacheDb = AquaCacheDatabase.getInstance(context),
-                    driveHistoryRepo = GoogleDriveHistoryRepository(context),
-                    workspaceRepo = GoogleWorkspaceRepository(context)
+                    driveHistoryRepo = GoogleDriveHistoryRepository(context, secureConfig)
                 )
             }
         }
@@ -250,7 +252,7 @@ private fun AuthenticatedAquaShell(
         }
     }
 
-    val hubSubRoutes = setOf("workspace", "skills", "memory", "settings")
+    val hubSubRoutes = setOf("drive", "sdk", "skills", "memory", "settings")
     if (currentTab != "home") {
         BackHandler {
             currentTab = if (currentTab in hubSubRoutes) {
@@ -353,7 +355,8 @@ private fun AuthenticatedAquaShell(
                                     onOpenCommandPalette = { showCommandPalette = true }
                                 )
                                 "routines" -> RoutinesScreen(viewModel = viewModel)
-                                "workspace" -> WorkspaceScreen(viewModel = viewModel)
+                                "drive" -> DriveVaultScreen(viewModel = viewModel)
+                                "sdk" -> SdkAndSignatureScreen(viewModel = viewModel)
                                 "skills" -> SkillsScreen(viewModel = viewModel)
                                 "browser" -> BrowserScreen(viewModel = viewModel)
                                 "wallet" -> WalletScreen(viewModel = viewModel)

@@ -4,11 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Terms &amp; Conditions — Aqua AI</title>
-  <meta name="description" content="Terms and Conditions governing use of Aqua AI, AI tools, Age 13+ safety rules, Google Workspace integrations, and the non-custodial wallet." />
+  <meta name="description" content="Terms and Conditions governing use of Aqua AI, Sign in with Google portal acceptance, Google Signature Check, Android SDK runtime, Google Drive Vault, Age 13+ safety rules, and the non-custodial wallet." />
   <link rel="icon" type="image/png" href="public/branding/aqua-ai-logo-512.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     :root {
       --bg: #030b16;
@@ -21,6 +22,7 @@
       --cyan: #22d3ee;
       --teal: #2dd4bf;
       --amber: #fbbf24;
+      --emerald: #34d399;
       --text: #eaf6ff;
       --muted: #93b3cc;
       --code-bg: rgba(3, 11, 22, 0.72);
@@ -37,6 +39,7 @@
       --cyan: #0284c7;
       --teal: #0d9488;
       --amber: #b45309;
+      --emerald: #059669;
       --text: #092035;
       --muted: #456580;
       --code-bg: rgba(224, 242, 254, 0.75);
@@ -93,7 +96,7 @@
     .icon-btn {
       font-family: inherit; cursor: pointer; padding: 7px 12px; border-radius: 999px;
       border: 1px solid var(--border); background: var(--surface-elevated); color: var(--text);
-      font-size: 0.82rem; font-weight: 600;
+      font-size: 0.82rem; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;
     }
     .icon-btn:hover { border-color: var(--border-strong); }
     .wrap { max-width: 1140px; margin: 0 auto; padding: 32px 20px 64px; }
@@ -103,7 +106,28 @@
       border-radius: 24px;
       padding: 28px;
       box-shadow: var(--shadow);
+      margin-bottom: 18px;
+    }
+    .gsi-bar {
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 20px;
+      padding: 16px 22px;
       margin-bottom: 20px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+    .gsi-user { display: flex; align-items: center; gap: 12px; }
+    .gsi-avatar { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--border-strong); object-fit: cover; }
+    .gsi-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+    .ack-badge {
+      font-family: "JetBrains Mono", monospace; font-size: 0.76rem; color: var(--emerald);
+      background: rgba(52, 211, 153, 0.14); border: 1px solid rgba(52, 211, 153, 0.42);
+      padding: 6px 12px; border-radius: 999px;
     }
     .badge {
       display: inline-block;
@@ -256,7 +280,7 @@
       font-size: 0.88rem;
     }
     @media print {
-      .topbar, .toc, .search-box, .controls { display: none !important; }
+      .topbar, .toc, .search-box, .controls, .gsi-bar { display: none !important; }
       .layout { grid-template-columns: 1fr; }
       body { background: #fff !important; color: #111 !important; }
       .clause-card, .doc-banner, .summary-card { background: #fff !important; border: 1px solid #ccc !important; box-shadow: none !important; }
@@ -297,19 +321,43 @@
       <h1>Terms &amp; Conditions for Aqua AI</h1>
       <p style="margin:0;color:var(--muted);">
         Please read these Terms &amp; Conditions carefully before using Aqua AI, AI tools, age-gated personalization features,
-        connected Workspace tools, or the non-custodial multi-chain cryptocurrency wallet.
+        Google Signature &amp; Android SDK diagnostics, Google Drive Vault backups, or the non-custodial multi-chain cryptocurrency wallet.
       </p>
       <div class="meta-chips">
-        <span class="meta-chip"><strong>Effective Date:</strong> November 17, 2026</span>
+        <span class="meta-chip"><strong>Effective Date:</strong> November 18, 2026</span>
         <span class="meta-chip"><strong>App Package:</strong> com.aistudio.aquaai.vqrzmn</span>
         <span class="meta-chip"><strong>Contact:</strong> <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a></span>
+      </div>
+    </section>
+
+    <section class="gsi-bar" id="googlePortalAuth" aria-label="Sign in with Google to Accept Terms">
+      <div class="gsi-user" id="gsiSignedOutInfo">
+        <div>
+          <strong style="display:block;font-size:0.95rem;">Sign in with Google to Accept Terms &amp; Conditions</strong>
+          <span style="font-size:0.83rem;color:var(--muted);">
+            Sign in via Google Identity Services to verify your Google account in-browser and save a local timestamped acceptance badge.
+          </span>
+        </div>
+      </div>
+      <div class="gsi-user" id="gsiSignedInInfo" style="display:none;">
+        <img class="gsi-avatar" id="gsiAvatar" src="" alt="Google Profile Avatar" />
+        <div>
+          <strong id="gsiName" style="display:block;font-size:0.95rem;"></strong>
+          <span id="gsiEmail" style="font-size:0.82rem;color:var(--cyan);font-family:'JetBrains Mono',monospace;"></span>
+        </div>
+      </div>
+      <div class="gsi-actions">
+        <div id="gsiButtonMount"></div>
+        <button class="icon-btn" type="button" id="ackLegalBtn" style="display:none;border-color:var(--cyan);color:var(--cyan);">✓ Accept Terms &amp; Privacy</button>
+        <span class="ack-badge" id="ackStatusBadge" style="display:none;"></span>
+        <button class="icon-btn" type="button" id="gsiSignOutBtn" style="display:none;">Sign Out</button>
       </div>
     </section>
 
     <section class="summary-grid" aria-label="Key Terms Highlights">
       <div class="summary-card">
         <div class="label">SUPERVISED AI</div>
-        <p>You control tool toggles and must review high-impact emails, requests, and blockchain transactions before confirmation.</p>
+        <p>You control tool toggles and must review high-impact Drive deletions, HTTP mutations, and blockchain transactions before confirmation.</p>
       </div>
       <div class="summary-card">
         <div class="label">NON-CUSTODIAL</div>
@@ -320,8 +368,8 @@
         <p>Market charts, token balances, and AI commentary are purely informational and not financial, tax, or legal advice.</p>
       </div>
       <div class="summary-card">
-        <div class="label">SKILL SAFETY</div>
-        <p>Declarative YAML/JSON/Markdown skills run through validator rules; avoid importing untrusted third-party instructions.</p>
+        <div class="label">SIGNATURE &amp; SDK</div>
+        <p>Built on Android SDK 36.1 with real APK SHA-1/SHA-256 verification and declarative Skill safety checks.</p>
       </div>
     </section>
 
@@ -330,9 +378,9 @@
         <p class="toc-title">On This Page</p>
         <a href="#t-1">1. Acceptance &amp; 13+ Eligibility</a>
         <a href="#t-2">2. AI Assistant, Teen Mode &amp; Autonomy</a>
-        <a href="#t-3">3. Modular App &amp; Foreground Service</a>
+        <a href="#t-3">3. Android SDK, Signature &amp; Service</a>
         <a href="#t-4">4. Self-Custodial Wallet Terms</a>
-        <a href="#t-5">5. Third-Party Providers</a>
+        <a href="#t-5">5. Google Drive &amp; Third-Party APIs</a>
         <a href="#t-6">6. Skills &amp; Acceptable Use</a>
         <a href="#t-7">7. Disclaimers &amp; Liability</a>
         <a href="#t-8">8. Updates &amp; Contact</a>
@@ -341,14 +389,14 @@
       <div>
         <div class="search-box">
           <span style="color:var(--cyan);font-weight:700;">⌕</span>
-          <input id="clauseSearch" type="search" placeholder="Filter terms clauses (e.g. eligibility, wallet, teen, skills)..." aria-label="Filter terms clauses" />
+          <input id="clauseSearch" type="search" placeholder="Filter terms clauses (e.g. signature, Drive, SDK, wallet, teen)..." aria-label="Filter terms clauses" />
           <span class="search-count" id="searchCount">8 / 8 sections</span>
         </div>
 
         <article class="clause-card" id="t-1">
-          <h2>1. Acceptance of Terms &amp; Minimum Age (13+)</h2>
+          <h2>1. Acceptance of Terms, Portal Sign-In &amp; Minimum Age (13+)</h2>
           <p>
-            By downloading, installing, accessing, or using Aqua AI (package <code>com.aistudio.aquaai.vqrzmn</code>),
+            By downloading, installing, signing into this portal with Google Identity Services, or using Aqua AI (package <code>com.aistudio.aquaai.vqrzmn</code>),
             you confirm that you are at least <strong>13 years of age</strong> (or the higher minimum digital consent age in your country)
             and agree to be bound by these Terms &amp; Conditions and our <a href="privacy.html">Privacy Policy</a>.
             Users under age 13 are strictly prohibited from using Aqua AI chat and live voice features; if an age under 13 is set, access is automatically locked.
@@ -360,15 +408,16 @@
           <h2>2. AI Assistant, Teen Guardrails, Autonomy Modes &amp; Profile</h2>
           <ul>
             <li><strong>Generative Output Disclaimer:</strong> Aqua AI uses Gemini AI models (managed Firebase AI or your optional personal Google AI Studio key), custom directives, live web inspection, and connected tools. Generative outputs may contain inaccuracies; verify critical code, legal, medical, or financial details independently.</li>
-            <li><strong>Teen Mode (13–17) &amp; Freedom Controls:</strong> Users choose between <em>Advisory</em>, <em>Balanced</em>, and <em>Unrestricted Tools</em> autonomy modes, custom step limits, and tool availability. For accounts aged 13–17, Teen Guardrails automatically cap autonomy at <em>Balanced</em> and apply age-appropriate content rules. High-impact external writes, messages, HTTP mutations, wallet contact edits, and blockchain signing always require explicit modal confirmation or vault unlock.</li>
+            <li><strong>Teen Mode (13–17) &amp; Freedom Controls:</strong> Users choose between <em>Advisory</em>, <em>Balanced</em>, and <em>Unrestricted Tools</em> autonomy modes, custom step limits, and tool availability. For accounts aged 13–17, Teen Guardrails automatically cap autonomy at <em>Balanced</em> and apply age-appropriate content rules. High-impact actions (Drive file deletions, HTTP mutations, wallet contact edits, and blockchain signing) always require explicit modal confirmation or vault unlock.</li>
             <li><strong>Optional Gender Personalization:</strong> Providing a gender selection is entirely optional and used solely to personalize pronoun references during AI responses.</li>
           </ul>
         </article>
 
         <article class="clause-card" id="t-3">
-          <h2>3. Modular Application Architecture &amp; Foreground Service</h2>
+          <h2>3. Android SDK Alignment, Google Signature Integrity &amp; Foreground Service</h2>
           <ul>
-            <li><strong>Focused Assistant Hub:</strong> Aqua AI operates as a modular 5-tab assistant hub (Core, Routines, Browser, Wallet, and Hub). Aqua Launcher and live wallpaper services have been permanently removed; launching external Android apps remains a user-triggered utility action.</li>
+            <li><strong>Android SDK &amp; Clean Coordinator Architecture:</strong> Aqua AI compiles against Android 16 (<code>compileSdk 36.1</code>, <code>targetSdk 36</code>, <code>minSdk 24</code>) and organizes platform modules into clean coordinators (including <code>DriveVaultScreen</code> and <code>SdkAndSignatureScreen</code>).</li>
+            <li><strong>Google Signature Check Utility:</strong> The built-in Google Signature Check helps verify whether your installed APK certificate (<code>SHA-1</code> / <code>SHA-256</code>) and Google Play Services environment match the registered OAuth configuration for reliable Google Sign-In.</li>
             <li><strong>Foreground Keep-Alive Service:</strong> Enabling background wake-word detection or prioritized task execution launches a transparent Android foreground service notification; battery impact depends on device OS scheduling and wake-word usage.</li>
           </ul>
         </article>
@@ -386,11 +435,11 @@
         </article>
 
         <article class="clause-card" id="t-5">
-          <h2>5. Third-Party Services &amp; API Availability</h2>
+          <h2>5. Google Drive Integration &amp; Third-Party Services</h2>
           <p>
-            Aqua AI interacts with third-party infrastructure including Google (Firebase, Sign-In, Workspace, Drive, Google AI Studio APIs),
-            optional ElevenLabs text-to-speech APIs (when user-configured), public EVM/Solana/Bitcoin RPC endpoints, block explorers, and CoinGecko.
-            Service uptime, API quotas, billing on personal API keys, and external accuracy remain governed by those third-party providers.
+            Aqua AI interacts exclusively with <strong>Google Drive</strong> (<code>drive.appdata</code> and <code>drive.file</code> via user-triggered OAuth 2.0 plus optional approved <code>GOOGLE_DRIVE_API_KEY</code> attribution), Firebase Auth/Firestore, Google Identity Services, Google AI Studio APIs,
+            optional ElevenLabs text-to-speech APIs, public EVM/Solana/Bitcoin RPC endpoints, block explorers, and CoinGecko.
+            All legacy Google Workspace service integrations have been removed. Service uptime, API quotas, billing on personal API keys, and external accuracy remain governed by those third-party providers.
           </p>
         </article>
 
@@ -423,7 +472,7 @@
     </div>
 
     <footer>
-      <span>&copy; 2026 Aqua AI • Terms &amp; Conditions (Effective Nov 17, 2026)</span>
+      <span>&copy; 2026 Aqua AI • Terms &amp; Conditions (Effective Nov 18, 2026)</span>
       <span><a href="privacy.html">← Read Privacy Policy</a></span>
     </footer>
   </main>
@@ -463,6 +512,127 @@
           countEl.textContent = shown + " / " + cards.length + " sections";
         });
       }
+
+      const CLIENT_ID = "299712147014-tr9jkmpjf6nj5h66ekissl1arb2es3rp.apps.googleusercontent.com";
+      const USER_KEY = "aqua_google_user";
+      const ACK_KEY = "aqua_legal_ack";
+      const signedOutEl = document.getElementById("gsiSignedOutInfo");
+      const signedInEl = document.getElementById("gsiSignedInInfo");
+      const avatarEl = document.getElementById("gsiAvatar");
+      const nameEl = document.getElementById("gsiName");
+      const emailEl = document.getElementById("gsiEmail");
+      const mountEl = document.getElementById("gsiButtonMount");
+      const ackBtn = document.getElementById("ackLegalBtn");
+      const ackBadge = document.getElementById("ackStatusBadge");
+      const signOutBtn = document.getElementById("gsiSignOutBtn");
+
+      function decodeGoogleJwt(token) {
+        const parts = (token || "").split(".");
+        if (parts.length < 2) throw new Error("Invalid ID token");
+        const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+        const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+        const binary = atob(padded);
+        const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+        return JSON.parse(new TextDecoder().decode(bytes));
+      }
+
+      function renderAuthState() {
+        let user = null;
+        try { user = JSON.parse(localStorage.getItem(USER_KEY) || "null"); } catch (_) {}
+        let ack = null;
+        try { ack = JSON.parse(localStorage.getItem(ACK_KEY) || "null"); } catch (_) {}
+
+        if (user && user.email) {
+          signedOutEl.style.display = "none";
+          signedInEl.style.display = "flex";
+          nameEl.textContent = user.name || "Google Account";
+          emailEl.textContent = user.email;
+          if (user.picture) {
+            avatarEl.src = user.picture;
+            avatarEl.style.display = "block";
+          } else {
+            avatarEl.style.display = "none";
+          }
+          mountEl.style.display = "none";
+          signOutBtn.style.display = "inline-flex";
+          if (ack && ack.email === user.email && ack.timestamp) {
+            ackBtn.style.display = "none";
+            ackBadge.style.display = "inline-block";
+            ackBadge.textContent = "✓ Terms Accepted • " + ack.timestamp;
+          } else {
+            ackBtn.style.display = "inline-flex";
+            ackBadge.style.display = "none";
+          }
+        } else {
+          signedOutEl.style.display = "flex";
+          signedInEl.style.display = "none";
+          mountEl.style.display = "block";
+          ackBtn.style.display = "none";
+          ackBadge.style.display = "none";
+          signOutBtn.style.display = "none";
+        }
+      }
+
+      if (ackBtn) {
+        ackBtn.addEventListener("click", () => {
+          let user = null;
+          try { user = JSON.parse(localStorage.getItem(USER_KEY) || "null"); } catch (_) {}
+          if (!user) return;
+          const now = new Date().toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+          localStorage.setItem(ACK_KEY, JSON.stringify({ email: user.email, timestamp: now }));
+          renderAuthState();
+        });
+      }
+
+      if (signOutBtn) {
+        signOutBtn.addEventListener("click", () => {
+          localStorage.removeItem(USER_KEY);
+          if (window.google && google.accounts && google.accounts.id) {
+            google.accounts.id.disableAutoSelect();
+          }
+          renderAuthState();
+        });
+      }
+
+      function initGsi() {
+        if (window.location.protocol === "file:") {
+          if (mountEl && !mountEl.hasChildNodes()) {
+            mountEl.innerHTML = '<span style="font-size:0.78rem;color:var(--muted);">Open public HTTPS portal for Google Sign-In</span>';
+          }
+          renderAuthState();
+          return;
+        }
+        if (window.google && google.accounts && google.accounts.id) {
+          google.accounts.id.initialize({
+            client_id: CLIENT_ID,
+            callback: (response) => {
+              try {
+                const payload = decodeGoogleJwt(response.credential);
+                localStorage.setItem(USER_KEY, JSON.stringify({
+                  sub: payload.sub || "",
+                  name: payload.name || "Google User",
+                  email: payload.email || "",
+                  picture: payload.picture || ""
+                }));
+                renderAuthState();
+              } catch (e) {
+                console.error("Failed to decode Google credential", e);
+              }
+            }
+          });
+          google.accounts.id.renderButton(mountEl, {
+            theme: root.getAttribute("data-theme") === "light" ? "outline" : "filled_black",
+            size: "large",
+            shape: "pill",
+            text: "signin_with"
+          });
+        } else {
+          setTimeout(initGsi, 250);
+        }
+      }
+
+      renderAuthState();
+      window.addEventListener("load", initGsi);
     })();
   </script>
 </body>

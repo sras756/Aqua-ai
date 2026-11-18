@@ -4,11 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Privacy Policy — Aqua AI</title>
-  <meta name="description" content="Privacy Policy for Aqua AI (com.aistudio.aquaai.vqrzmn), including Google API Limited Use disclosure and self-custodial wallet privacy." />
+  <meta name="description" content="Privacy Policy for Aqua AI (com.aistudio.aquaai.vqrzmn), including Google Sign-In, Google Signature Check, Google Drive Limited Use disclosure, Android SDK telemetry, and self-custodial wallet privacy." />
   <link rel="icon" type="image/png" href="public/branding/aqua-ai-logo-512.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     :root {
       --bg: #030b16;
@@ -93,7 +94,7 @@
     .icon-btn {
       font-family: inherit; cursor: pointer; padding: 7px 12px; border-radius: 999px;
       border: 1px solid var(--border); background: var(--surface-elevated); color: var(--text);
-      font-size: 0.82rem; font-weight: 600;
+      font-size: 0.82rem; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;
     }
     .icon-btn:hover { border-color: var(--border-strong); }
     .wrap { max-width: 1140px; margin: 0 auto; padding: 32px 20px 64px; }
@@ -103,7 +104,28 @@
       border-radius: 24px;
       padding: 28px;
       box-shadow: var(--shadow);
+      margin-bottom: 18px;
+    }
+    .gsi-bar {
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 20px;
+      padding: 16px 22px;
       margin-bottom: 20px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+    .gsi-user { display: flex; align-items: center; gap: 12px; }
+    .gsi-avatar { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--border-strong); object-fit: cover; }
+    .gsi-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+    .ack-badge {
+      font-family: "JetBrains Mono", monospace; font-size: 0.76rem; color: var(--emerald);
+      background: rgba(52, 211, 153, 0.14); border: 1px solid rgba(52, 211, 153, 0.42);
+      padding: 6px 12px; border-radius: 999px;
     }
     .badge {
       display: inline-block;
@@ -269,7 +291,7 @@
       font-size: 0.88rem;
     }
     @media print {
-      .topbar, .toc, .search-box, .controls { display: none !important; }
+      .topbar, .toc, .search-box, .controls, .gsi-bar { display: none !important; }
       .layout { grid-template-columns: 1fr; }
       body { background: #fff !important; color: #111 !important; }
       .clause-card, .doc-banner, .summary-card { background: #fff !important; border: 1px solid #ccc !important; box-shadow: none !important; }
@@ -306,17 +328,42 @@
 
   <main class="wrap">
     <section class="doc-banner">
-      <span class="badge">PRIVACY &amp; GOOGLE API LIMITED USE POLICY</span>
+      <span class="badge">PRIVACY &amp; GOOGLE DRIVE LIMITED USE POLICY</span>
       <h1>Privacy Policy for Aqua AI</h1>
       <p style="margin:0;color:var(--muted);">
-        This Privacy Policy explains how Aqua AI collects, processes, protects, and lets you export or delete information
-        across AI conversations, profile safety (Age 13+ &amp; optional gender preferences), optional Google Workspace integrations, and the self-custodial crypto wallet.
+        This Privacy Policy explains how Aqua AI collects, processes, protects, and lets you verify, export, or delete information
+        across AI conversations, Google Signature Check, Android SDK diagnostics, Age 13+ &amp; optional gender preferences,
+        Google Drive Vault backups (with approved API key), and the self-custodial crypto wallet.
       </p>
       <div class="meta-chips">
-        <span class="meta-chip"><strong>Effective Date:</strong> November 17, 2026</span>
+        <span class="meta-chip"><strong>Effective Date:</strong> November 18, 2026</span>
         <span class="meta-chip"><strong>App Package:</strong> com.aistudio.aquaai.vqrzmn</span>
         <span class="meta-chip"><strong>Contact:</strong> <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a></span>
         <button class="icon-btn" type="button" id="copyEmailBtn">Copy Support Email</button>
+      </div>
+    </section>
+
+    <section class="gsi-bar" id="googlePortalAuth" aria-label="Sign in with Google Account on Privacy Policy">
+      <div class="gsi-user" id="gsiSignedOutInfo">
+        <div>
+          <strong style="display:block;font-size:0.95rem;">Sign in with Google to Acknowledge Privacy Policy</strong>
+          <span style="font-size:0.83rem;color:var(--muted);">
+            Optional Google Identity Services sign-in decodes your Google profile JWT strictly in-browser to stamp your local Privacy Policy receipt.
+          </span>
+        </div>
+      </div>
+      <div class="gsi-user" id="gsiSignedInInfo" style="display:none;">
+        <img class="gsi-avatar" id="gsiAvatar" src="" alt="Google Profile Avatar" />
+        <div>
+          <strong id="gsiName" style="display:block;font-size:0.95rem;"></strong>
+          <span id="gsiEmail" style="font-size:0.82rem;color:var(--cyan);font-family:'JetBrains Mono',monospace;"></span>
+        </div>
+      </div>
+      <div class="gsi-actions">
+        <div id="gsiButtonMount"></div>
+        <button class="icon-btn" type="button" id="ackLegalBtn" style="display:none;border-color:var(--cyan);color:var(--cyan);">✓ Confirm Privacy Read</button>
+        <span class="ack-badge" id="ackStatusBadge" style="display:none;"></span>
+        <button class="icon-btn" type="button" id="gsiSignOutBtn" style="display:none;">Sign Out</button>
       </div>
     </section>
 
@@ -326,12 +373,12 @@
         <p>Wallet seeds, private keys, and PINs stay strictly on-device encrypted via Android Keystore AES-256-GCM.</p>
       </div>
       <div class="summary-card">
-        <div class="label">GOOGLE LIMITED USE</div>
-        <p>Workspace and Drive scopes run only upon explicit consent and never feed ads, brokers, or model training.</p>
+        <div class="label">DRIVE ONLY • LIMITED USE</div>
+        <p>Only least-privilege Google Drive backup scopes run on request (no Gmail, Calendar, or Contacts access).</p>
       </div>
       <div class="summary-card">
-        <div class="label">AGE 13+ &amp; PROFILE</div>
-        <p>Under-13 prompts are blocked on-device; Teen Mode (13–17) enforces guardrails; gender preference is optional.</p>
+        <div class="label">SIGNATURE &amp; SDK</div>
+        <p>On-device SHA-1/SHA-256 Signature Check &amp; Android SDK Inspector stay strictly local with zero tracking.</p>
       </div>
       <div class="summary-card">
         <div class="label">PORTABILITY &amp; DELETE</div>
@@ -342,10 +389,10 @@
     <div class="layout">
       <aside class="toc" aria-label="Table of Contents">
         <p class="toc-title">On This Page</p>
-        <a href="#sec-1">1. Information We Process</a>
-        <a href="#sec-2">2. AI Personas, Age &amp; Gender</a>
-        <a href="#sec-3">3. Permissions &amp; Foreground Service</a>
-        <a href="#sec-4">4. Google API Limited Use</a>
+        <a href="#sec-1">1. Information &amp; Portal Sign-In</a>
+        <a href="#sec-2">2. AI Keys, Age &amp; Gender</a>
+        <a href="#sec-3">3. Permissions &amp; Android SDK</a>
+        <a href="#sec-4">4. Google Drive &amp; Limited Use</a>
         <a href="#sec-5">5. Self-Custodial Wallet</a>
         <a href="#sec-6">6. Storage &amp; Data Exports</a>
         <a href="#sec-7">7. Blockchain &amp; Market APIs</a>
@@ -355,51 +402,50 @@
       <div>
         <div class="search-box">
           <span style="color:var(--cyan);font-weight:700;">⌕</span>
-          <input id="clauseSearch" type="search" placeholder="Filter privacy clauses (e.g. wallet, microphone, Drive, delete)..." aria-label="Filter privacy clauses" />
+          <input id="clauseSearch" type="search" placeholder="Filter privacy clauses (e.g. signature, Drive, SDK, wallet, delete)..." aria-label="Filter privacy clauses" />
           <span class="search-count" id="searchCount">8 / 8 sections</span>
         </div>
 
         <article class="clause-card" id="sec-1">
-          <h2>1. Information We Access and Process</h2>
+          <h2>1. Information We Access, Google Signature Check &amp; Portal Sign-In</h2>
           <ul>
-            <li><strong>Account Information:</strong> When you sign in with Google via Firebase Authentication, Aqua AI receives your Firebase UID, display name, email address, and profile photo URL solely to authenticate your session and isolate your Firestore workspace.</li>
-            <li><strong>Age Tier &amp; Optional Gender Profile:</strong> You may provide your age (validated 13+) and an optional gender identity/pronoun preference (Female, Male, Non-binary, Prefer not to say, or Unspecified) in Post-Login Setup or Settings. These values are stored inside your user-scoped Firestore settings document (<code>users/{uid}/settings/preferences</code>) solely to enforce 13+ safety guardrails and adapt conversational tone.</li>
+            <li><strong>App Account &amp; Google Signature Check:</strong> When you sign in with Google via Firebase Authentication, Aqua AI receives your Firebase UID, display name, email address, and profile photo URL solely to authenticate your session and isolate your user data. An on-device <code>GoogleSignatureVerifier</code> inspects the installed APK's <code>SHA-1</code> / <code>SHA-256</code> certificates, OAuth Web Client ID configuration, and Google Play Services status locally to safeguard sign-in integrity.</li>
+            <li><strong>Website Sign in with Google (Privacy &amp; Terms Portal):</strong> When you sign in on this web portal via Google Identity Services (<code>accounts.google.com/gsi/client</code>), your signed Google ID token (JWT) is decoded strictly client-side in your browser to display your name, email, and avatar and store a local policy acknowledgement receipt inside browser <code>localStorage</code>. No third-party tracking server stores your website session.</li>
+            <li><strong>Age Tier &amp; Optional Gender Profile:</strong> You may provide your age (validated 13+) and an optional gender identity/pronoun preference stored inside your user-scoped Firestore settings document (<code>users/{uid}/settings/preferences</code>) solely to enforce 13+ safety guardrails and adapt conversational tone.</li>
             <li><strong>User-Initiated Prompts &amp; Attachments:</strong> Text messages, voice transcripts, documents, and images selected via Android Photo Picker or Storage Access Framework (SAF) are processed only when you submit them to generate AI responses.</li>
-            <li><strong>Live Web &amp; Network Access:</strong> When <em>Full Internet Access</em> is enabled, search queries and public URLs you ask Aqua AI to inspect are retrieved over HTTPS without ad-tech cookies or cross-site tracking SDKs.</li>
-            <li><strong>Session Telemetry (On-Device):</strong> Live battery level, charging state, Wi-Fi state, and RAM utilization displayed in the Core/Hub sparkline come from local Android system managers during your active session and are not uploaded as background telemetry profiles.</li>
           </ul>
         </article>
 
         <article class="clause-card" id="sec-2">
           <h2>2. AI Personas, Age Guardrails, Custom Keys &amp; ElevenLabs Voice</h2>
           <ul>
-            <li><strong>AI Intelligence Provider (BYOK Supported):</strong> Assistant reasoning uses managed Firebase AI Logic by default, or your own optional personal <strong>Google AI Studio API key</strong> entered during Post-Login Setup or Settings and encrypted on-device via Android Keystore AES-256-GCM.</li>
-            <li><strong>Optional ElevenLabs Voice Studio (Non-Compulsory):</strong> If you choose to supply an optional <strong>ElevenLabs API key and Voice ID</strong>, both are encrypted locally in Android Keystore and only submitted text phrases you speak or preview are sent to ElevenLabs (<code>api.elevenlabs.io</code>) for synthesis. Otherwise Gemini or Android TTS handles voice locally.</li>
-            <li><strong>Personas, Directives &amp; AI Freedom Parameters:</strong> Your AI Persona, custom system directive, pinned routines, sampling temperature/Top-P/step limits, and autonomy policy stay saved locally per user in <code>AquaLocalPreferences</code> and govern only prompts you submit. In Teen Mode (ages 13–17), autonomy is capped at <em>Balanced</em> and safety guardrails are injected into the prompt context.</li>
+            <li><strong>AI Intelligence Provider (BYOK Supported):</strong> Assistant reasoning uses managed Firebase AI Logic by default, or your own optional personal <strong>Google AI Studio API key</strong> encrypted on-device via Android Keystore AES-256-GCM.</li>
+            <li><strong>Optional ElevenLabs Voice Studio (Non-Compulsory):</strong> If you choose to supply an optional <strong>ElevenLabs API key and Voice ID</strong>, both are encrypted locally in Android Keystore and only submitted phrases you speak or preview are sent to ElevenLabs (<code>api.elevenlabs.io</code>).</li>
+            <li><strong>Personas, Directives &amp; AI Freedom Parameters:</strong> Your AI Persona, custom directive, pinned routines, and AI Freedom sliders stay saved locally per user in <code>AquaLocalPreferences</code>. In Teen Mode (ages 13–17), autonomy is capped at <em>Balanced</em> automatically.</li>
           </ul>
         </article>
 
         <article class="clause-card" id="sec-3">
-          <h2>3. Android Permissions &amp; Foreground Service</h2>
+          <h2>3. Android Permissions, Foreground Service &amp; Android SDK Inspector</h2>
           <ul>
-            <li><strong>Least-Privilege Runtime Permissions:</strong> Microphone (<code>RECORD_AUDIO</code> for push-to-talk, Gemini Live, or optional wake-word listening), Camera (QR scanning and visual capture), Biometrics (local wallet unlock/signing), Coarse Location (opt-in local map context), and Alarms (only on explicit user request).</li>
-            <li><strong>Zero Broad Storage Scanning:</strong> Aqua AI uses Android's zero-permission Photo Picker and Storage Access Framework (<code>OpenDocument</code> / <code>CreateDocument</code>) rather than broad media-library storage permissions.</li>
-            <li><strong>Foreground Priority Service Transparency:</strong> When you enable background wake-word listening or background task prioritization, Android runs a visible persistent notification (<code>AquaWakeWordService</code>, type <code>microphone|dataSync</code>) with one-tap pause and stop controls.</li>
-            <li><strong>No Home Launcher &amp; Local Package Lookup:</strong> Aqua AI no longer ships a custom Android Home launcher or live wallpaper service. Standard Android <code>PackageManager</code> queries used solely by the in-app Command Palette or explicit AI app-launch commands remain strictly on-device and are never synced to Firebase.</li>
+            <li><strong>Least-Privilege Runtime Permissions:</strong> Opt-in Microphone (<code>RECORD_AUDIO</code>), Camera (QR scanning and vision), Biometrics (wallet unlock), Coarse Location (opt-in map context), and Alarms. Legacy contact and calendar permissions (<code>READ_CONTACTS</code>, <code>READ_CALENDAR</code>) have been permanently removed.</li>
+            <li><strong>Zero Broad Storage Scans:</strong> Uses Android Photo Picker and SAF (<code>OpenDocument</code> / <code>CreateDocument</code>) rather than broad media storage permissions.</li>
+            <li><strong>On-Device Android SDK &amp; Hardware Telemetry:</strong> <code>AndroidSdkInspector</code> reads local <code>Build.VERSION.SDK_INT</code>, ABI architectures, Security Patch, <code>PackageManager.hasSystemFeature()</code> flags, battery, and JVM heap memory strictly on-device.</li>
+            <li><strong>Foreground Priority Service Transparency:</strong> Optional background wake-word/automation mode shows a persistent Android notification (<code>AquaWakeWordService</code>, type <code>microphone|dataSync</code>) with pause and stop controls.</li>
           </ul>
         </article>
 
         <article class="clause-card" id="sec-4">
-          <h2>4. Google Workspace &amp; Google Drive Data (Limited Use Disclosure)</h2>
-          <p>Aqua AI requests Google Workspace or Google Drive OAuth permissions strictly when you explicitly connect those integrations:</p>
+          <h2>4. Google Drive Vault &amp; Approved API Key (Limited Use Disclosure)</h2>
+          <p>Aqua AI removes all broad mail, calendar, sheets, and personal contacts scopes, requesting strictly least-privilege Google Drive OAuth permissions upon explicit action:</p>
           <ul>
-            <li><strong>Google Drive (<code>drive.appdata</code>, <code>drive.file</code>):</strong> Used exclusively to back up and restore your Aqua AI conversation history and memories into your own Google Drive account.</li>
-            <li><strong>Google Workspace (Gmail, Calendar, Contacts, Sheets, Forms, Chat):</strong> Accessed solely to fulfill explicit commands (reading, summarizing, drafting, scheduling, or sending with your approval). Outbound sends always display an explicit confirmation modal first.</li>
+            <li><strong>Google Drive Only (<code>drive.appdata</code>, <code>drive.file</code>):</strong> Used exclusively to check your Drive quota, list Aqua backups, export/restore JSON snapshots of your conversation history and memories, and delete backups upon explicit modal approval.</li>
+            <li><strong>Approved Google Drive API Key:</strong> Supports approved project attribution via <code>GOOGLE_DRIVE_API_KEY</code> (via Secrets / <code>BuildConfig</code> or per-user encrypted Keystore override) alongside your OAuth 2.0 Bearer token.</li>
           </ul>
           <div class="callout">
             Aqua AI's use and transfer to any other app of information received from Google APIs adheres strictly to the
             <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>,
-            including the Limited Use requirements. Google user data is never sold, shared with data brokers, used for advertising, or used to train generalized AI/ML models.
+            including the Limited Use requirements. Google Drive data is never sold, shared with data brokers, used for advertising, or used to train generalized AI/ML models.
           </div>
         </article>
 
@@ -407,29 +453,29 @@
           <h2>5. Self-Custodial Crypto Wallet &amp; AI Boundary Controls</h2>
           <ul>
             <li><strong>Local Key Custody:</strong> BIP-39 recovery phrases and private keys are created on-device via OS <code>SecureRandom</code> and encrypted inside private device storage backed by Android Keystore AES-256-GCM. Mnemonics, raw keys, and PINs are <strong>never</strong> transmitted to Firebase, Gemini models, or external servers.</li>
-            <li><strong>User-Governed AI Boundary:</strong> You separately control <em>Wallet Read Permission</em> (inspecting public addresses, balances, allowances, and transactions) and <em>Wallet Write Permission</em> (preparing transfers, revocations, or vault creation) in Settings and Wallet. Signing always requires your explicit approval plus PIN/Biometric authentication when enabled.</li>
+            <li><strong>User-Governed AI Boundary:</strong> Separate <em>Wallet Read Permission</em> and <em>Wallet Write Permission</em> controls govern AI access. Signing always requires your explicit approval plus PIN/Biometric authentication when enabled.</li>
           </ul>
         </article>
 
         <article class="clause-card" id="sec-6">
           <h2>6. Data Storage, Security &amp; Markdown / JSON Portability</h2>
           <p>
-            Cloud conversations, skills, routines, and memories reside inside user-scoped Firebase Firestore collections protected by zero-trust authentication rules so only your authenticated account can read or write them. Local preferences, wallet vaults, and offline caches remain private on-device. You can export active conversations anytime to clean Markdown (<code>.md</code>) or JSON (<code>.json</code>), or export a password-encrypted portable wallet JSON independent of Firebase.
+            Cloud conversations, skills, routines, and memories reside inside user-scoped Firebase Firestore collections protected by zero-trust authentication rules so only your authenticated account can read or write them. You can export active conversations anytime to Markdown (<code>.md</code>) or JSON (<code>.json</code>), export Android SDK diagnostic reports, or create a password-encrypted portable wallet JSON.
           </p>
         </article>
 
         <article class="clause-card" id="sec-7">
           <h2>7. Third-Party Blockchain &amp; Market Services</h2>
           <p>
-            When refreshing balances, estimating gas, resolving ENS names, querying CoinGecko token prices, or broadcasting already-signed transactions, Aqua AI sends only public wallet addresses, signed raw payloads, or asset IDs directly to public RPC endpoints and CoinGecko APIs.
+            When refreshing balances, estimating gas, resolving ENS names, querying CoinGecko token prices, or broadcasting signed transactions, Aqua AI sends only public wallet addresses, signed raw payloads, or asset IDs directly to public RPC endpoints and CoinGecko APIs.
           </p>
         </article>
 
         <article class="clause-card" id="sec-8">
           <h2>8. Retention, Data Deletion, Children's Privacy &amp; Contact</h2>
           <ul>
-            <li><strong>Deletion &amp; Revocation:</strong> You can delete conversations, memories, skills, routines, or local wallets directly inside Aqua AI, reset or change your Age/Gender profile inside Settings, revoke Google OAuth permissions in your Google Account Security panel, or request complete cloud account and data deletion by emailing <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a>.</li>
-            <li><strong>Children's Privacy (13+ Gate &amp; Teen Mode):</strong> Aqua AI is strictly restricted to users aged 13 and older (or the minimum digital consent age in your jurisdiction). If an age below 13 is entered, on-device policy blocks chat and live voice execution immediately. Users aged 13–17 operate under automatic Teen Mode guardrails.</li>
+            <li><strong>Deletion &amp; Revocation:</strong> Delete conversations, memories, skills, routines, Drive backups, or local wallets directly inside Aqua AI, clear browser localStorage / Google portal sign-in on this site, revoke OAuth in your Google Account Security panel, or request complete cloud account deletion at <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a>.</li>
+            <li><strong>Children's Privacy (13+ Gate &amp; Teen Mode):</strong> Aqua AI is strictly restricted to users aged 13 and older. If an age below 13 is entered, on-device policy blocks chat and live voice execution immediately. Users aged 13–17 operate under automatic Teen Mode guardrails.</li>
             <li><strong>Policy Updates:</strong> Material updates will be reflected by an updated Effective Date and version summary on this portal.</li>
           </ul>
         </article>
@@ -437,7 +483,7 @@
     </div>
 
     <footer>
-      <span>&copy; 2026 Aqua AI • Privacy Policy (Effective Nov 17, 2026)</span>
+      <span>&copy; 2026 Aqua AI • Privacy Policy (Effective Nov 18, 2026)</span>
       <span><a href="terms.html">Read Terms &amp; Conditions →</a></span>
     </footer>
   </main>
@@ -487,6 +533,127 @@
           countEl.textContent = shown + " / " + cards.length + " sections";
         });
       }
+
+      const CLIENT_ID = "299712147014-tr9jkmpjf6nj5h66ekissl1arb2es3rp.apps.googleusercontent.com";
+      const USER_KEY = "aqua_google_user";
+      const ACK_KEY = "aqua_legal_ack";
+      const signedOutEl = document.getElementById("gsiSignedOutInfo");
+      const signedInEl = document.getElementById("gsiSignedInInfo");
+      const avatarEl = document.getElementById("gsiAvatar");
+      const nameEl = document.getElementById("gsiName");
+      const emailEl = document.getElementById("gsiEmail");
+      const mountEl = document.getElementById("gsiButtonMount");
+      const ackBtn = document.getElementById("ackLegalBtn");
+      const ackBadge = document.getElementById("ackStatusBadge");
+      const signOutBtn = document.getElementById("gsiSignOutBtn");
+
+      function decodeGoogleJwt(token) {
+        const parts = (token || "").split(".");
+        if (parts.length < 2) throw new Error("Invalid ID token");
+        const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+        const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+        const binary = atob(padded);
+        const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+        return JSON.parse(new TextDecoder().decode(bytes));
+      }
+
+      function renderAuthState() {
+        let user = null;
+        try { user = JSON.parse(localStorage.getItem(USER_KEY) || "null"); } catch (_) {}
+        let ack = null;
+        try { ack = JSON.parse(localStorage.getItem(ACK_KEY) || "null"); } catch (_) {}
+
+        if (user && user.email) {
+          signedOutEl.style.display = "none";
+          signedInEl.style.display = "flex";
+          nameEl.textContent = user.name || "Google Account";
+          emailEl.textContent = user.email;
+          if (user.picture) {
+            avatarEl.src = user.picture;
+            avatarEl.style.display = "block";
+          } else {
+            avatarEl.style.display = "none";
+          }
+          mountEl.style.display = "none";
+          signOutBtn.style.display = "inline-flex";
+          if (ack && ack.email === user.email && ack.timestamp) {
+            ackBtn.style.display = "none";
+            ackBadge.style.display = "inline-block";
+            ackBadge.textContent = "✓ Privacy Verified • " + ack.timestamp;
+          } else {
+            ackBtn.style.display = "inline-flex";
+            ackBadge.style.display = "none";
+          }
+        } else {
+          signedOutEl.style.display = "flex";
+          signedInEl.style.display = "none";
+          mountEl.style.display = "block";
+          ackBtn.style.display = "none";
+          ackBadge.style.display = "none";
+          signOutBtn.style.display = "none";
+        }
+      }
+
+      if (ackBtn) {
+        ackBtn.addEventListener("click", () => {
+          let user = null;
+          try { user = JSON.parse(localStorage.getItem(USER_KEY) || "null"); } catch (_) {}
+          if (!user) return;
+          const now = new Date().toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+          localStorage.setItem(ACK_KEY, JSON.stringify({ email: user.email, timestamp: now }));
+          renderAuthState();
+        });
+      }
+
+      if (signOutBtn) {
+        signOutBtn.addEventListener("click", () => {
+          localStorage.removeItem(USER_KEY);
+          if (window.google && google.accounts && google.accounts.id) {
+            google.accounts.id.disableAutoSelect();
+          }
+          renderAuthState();
+        });
+      }
+
+      function initGsi() {
+        if (window.location.protocol === "file:") {
+          if (mountEl && !mountEl.hasChildNodes()) {
+            mountEl.innerHTML = '<span style="font-size:0.78rem;color:var(--muted);">Open public HTTPS portal for Google Sign-In</span>';
+          }
+          renderAuthState();
+          return;
+        }
+        if (window.google && google.accounts && google.accounts.id) {
+          google.accounts.id.initialize({
+            client_id: CLIENT_ID,
+            callback: (response) => {
+              try {
+                const payload = decodeGoogleJwt(response.credential);
+                localStorage.setItem(USER_KEY, JSON.stringify({
+                  sub: payload.sub || "",
+                  name: payload.name || "Google User",
+                  email: payload.email || "",
+                  picture: payload.picture || ""
+                }));
+                renderAuthState();
+              } catch (e) {
+                console.error("Failed to decode Google credential", e);
+              }
+            }
+          });
+          google.accounts.id.renderButton(mountEl, {
+            theme: root.getAttribute("data-theme") === "light" ? "outline" : "filled_black",
+            size: "large",
+            shape: "pill",
+            text: "signin_with"
+          });
+        } else {
+          setTimeout(initGsi, 250);
+        }
+      }
+
+      renderAuthState();
+      window.addEventListener("load", initGsi);
     })();
   </script>
 </body>

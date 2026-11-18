@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Privacy Policy — Aqua AI</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     :root {
       --bg: #030b16;
@@ -15,6 +16,7 @@
       --border-strong: rgba(34, 211, 238, 0.45);
       --cyan: #22d3ee;
       --teal: #2dd4bf;
+      --emerald: #34d399;
       --text: #eaf6ff;
       --muted: #93b3cc;
       --code-bg: rgba(3, 11, 22, 0.72);
@@ -29,6 +31,7 @@
       --border-strong: rgba(2, 132, 199, 0.45);
       --cyan: #0284c7;
       --teal: #0d9488;
+      --emerald: #059669;
       --text: #092035;
       --muted: #456580;
       --code-bg: rgba(224, 242, 254, 0.75);
@@ -63,6 +66,19 @@
     .wrap { max-width: 980px; margin: 0 auto; padding: 20px 14px 48px; }
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 20px; margin-bottom: 14px; }
     .card.hidden { display: none; }
+    .gsi-bar {
+      background: var(--surface); border: 1px solid var(--border-strong); border-radius: 18px;
+      padding: 14px 18px; margin-bottom: 14px;
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .gsi-user { display: flex; align-items: center; gap: 10px; }
+    .gsi-avatar { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border-strong); object-fit: cover; }
+    .gsi-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .ack-badge {
+      font-size: 0.74rem; font-weight: 600; color: var(--emerald);
+      background: rgba(52, 211, 153, 0.14); border: 1px solid rgba(52, 211, 153, 0.42);
+      padding: 5px 10px; border-radius: 999px;
+    }
     h1 { margin: 0 0 8px; font-size: 1.5rem; }
     h2 { color: var(--cyan); margin: 0 0 10px; font-size: 1.1rem; }
     p, li { color: var(--muted); font-size: 0.94rem; }
@@ -101,49 +117,68 @@
   <main class="wrap">
     <section class="card">
       <h1>Privacy Policy for Aqua AI</h1>
-      <p style="margin-bottom:4px;"><strong>Effective Date:</strong> November 17, 2026 &nbsp;|&nbsp; <strong>App Package:</strong> <code>com.aistudio.aquaai.vqrzmn</code></p>
+      <p style="margin-bottom:4px;"><strong>Effective Date:</strong> November 18, 2026 &nbsp;|&nbsp; <strong>App Package:</strong> <code>com.aistudio.aquaai.vqrzmn</code></p>
       <p style="margin:0;"><strong>Developer Contact:</strong> <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a></p>
+    </section>
+
+    <section class="gsi-bar" id="googlePortalAuth" aria-label="Sign in with Google on Privacy Policy">
+      <div class="gsi-user" id="gsiSignedOutInfo">
+        <div>
+          <strong style="display:block;font-size:0.92rem;">Sign in with Google to Acknowledge Privacy Policy</strong>
+          <span style="font-size:0.82rem;color:var(--muted);">Decodes Google ID token locally in browser via Google Identity Services.</span>
+        </div>
+      </div>
+      <div class="gsi-user" id="gsiSignedInInfo" style="display:none;">
+        <img class="gsi-avatar" id="gsiAvatar" src="" alt="Google Profile Avatar" />
+        <div>
+          <strong id="gsiName" style="display:block;font-size:0.92rem;"></strong>
+          <span id="gsiEmail" style="font-size:0.8rem;color:var(--cyan);"></span>
+        </div>
+      </div>
+      <div class="gsi-actions">
+        <div id="gsiButtonMount"></div>
+        <button class="icon-btn" type="button" id="ackLegalBtn" style="display:none;border-color:var(--cyan);color:var(--cyan);">✓ Confirm Privacy Read</button>
+        <span class="ack-badge" id="ackStatusBadge" style="display:none;"></span>
+        <button class="icon-btn" type="button" id="gsiSignOutBtn" style="display:none;">Sign Out</button>
+      </div>
     </section>
 
     <div class="search-box">
       <span style="color:var(--cyan);font-weight:700;">⌕</span>
-      <input id="clauseSearch" type="search" placeholder="Filter privacy clauses (e.g. wallet, microphone, Drive)..." />
+      <input id="clauseSearch" type="search" placeholder="Filter privacy clauses (e.g. signature, Drive, SDK, wallet)..." />
       <span id="searchCount" style="font-size:0.78rem;color:var(--cyan);">8 / 8</span>
     </div>
 
     <article class="card clause">
-      <h2>1. Information We Access and Process</h2>
+      <h2>1. Information, Signature Check &amp; Portal Google Sign-In</h2>
       <ul>
-        <li><strong>Account Information:</strong> Google Sign-In via Firebase Authentication provides your UID, display name, email, and avatar solely to scope your account.</li>
-        <li><strong>Age Tier &amp; Optional Gender Profile:</strong> Optional age (validated 13+) and optional gender preference stored inside your user-scoped Firestore settings solely to enforce Teen Mode guardrails and adapt pronoun style.</li>
-        <li><strong>AI Prompts &amp; Attachments:</strong> Messages, voice transcripts, images, and SAF files you submit are sent to Gemini / Firebase AI Logic when you trigger a request.</li>
-        <li><strong>Live Web Requests:</strong> Queries and public URLs fetched when <em>Full Internet Access</em> is enabled carry zero ad trackers.</li>
-        <li><strong>On-Device Session Telemetry:</strong> Real battery % and RAM % metrics plotted in Core/Hub remain strictly local to your active session.</li>
+        <li><strong>App Account &amp; Google Signature Check:</strong> Google Sign-In via Firebase Authentication provides your UID, display name, email, and avatar solely to scope your account. On-device <code>GoogleSignatureVerifier</code> inspects APK SHA-1/SHA-256 and Play Services locally.</li>
+        <li><strong>Website Google Sign-In:</strong> On the web portal, Google Identity Services decodes your JWT profile client-side to save a local acknowledgement receipt.</li>
+        <li><strong>Age Tier &amp; Optional Gender Profile:</strong> Optional age (13+) and gender preference stored inside user-scoped Firestore settings enforce Teen Mode guardrails and pronoun tone.</li>
       </ul>
     </article>
 
     <article class="card clause">
       <h2>2. AI Personas, Age Guardrails, Custom Keys &amp; ElevenLabs Voice</h2>
-      <p>Personal Google AI Studio keys and optional (non-compulsory) ElevenLabs API keys &amp; Voice IDs remain encrypted locally in Android Keystore AES-GCM. Personas, directives, and AI Freedom tuning parameters are stored locally per user on-device; Teen Mode (13–17) caps autonomy at Balanced automatically.</p>
+      <p>Personal Google AI Studio keys, optional Google Drive API key overrides, and optional (non-compulsory) ElevenLabs API keys &amp; Voice IDs remain encrypted locally in Android Keystore AES-256-GCM. Teen Mode (13–17) caps autonomy at Balanced automatically.</p>
     </article>
 
     <article class="card clause">
-      <h2>3. Permissions &amp; Foreground Service</h2>
+      <h2>3. Permissions, Android SDK Inspector &amp; Foreground Service</h2>
       <ul>
-        <li><strong>Runtime Permissions:</strong> Opt-in <code>RECORD_AUDIO</code>, <code>CAMERA</code>, <code>USE_BIOMETRIC</code>, <code>ACCESS_COARSE_LOCATION</code>, and alarms.</li>
-        <li><strong>Zero Broad Storage Scans:</strong> Uses Android Photo Picker and SAF rather than broad media-library storage permissions.</li>
-        <li><strong>Foreground Service &amp; Local App Query:</strong> Persistent notification appears whenever background wake-word or prioritization is active; Aqua Launcher has been removed and Command Palette app lookups remain device-only.</li>
+        <li><strong>Runtime Permissions:</strong> Opt-in <code>RECORD_AUDIO</code>, <code>CAMERA</code>, <code>USE_BIOMETRIC</code>, <code>ACCESS_COARSE_LOCATION</code>, and alarms. Contact/calendar permissions (<code>READ_CONTACTS</code>, <code>READ_CALENDAR</code>) were permanently removed.</li>
+        <li><strong>On-Device SDK Telemetry:</strong> <code>AndroidSdkInspector</code> reads API 36.1, ABIs, and hardware capabilities strictly locally.</li>
+        <li><strong>Zero Broad Storage Scans &amp; Persistent Service:</strong> Uses Android Photo Picker / SAF and displays a visible notification whenever background mic/automation priority is active.</li>
       </ul>
     </article>
 
     <article class="card clause">
-      <h2>4. Google Workspace &amp; Google Drive (Limited Use)</h2>
+      <h2>4. Google Drive Vault &amp; Approved API Key (Limited Use)</h2>
       <ul>
-        <li><strong>Google Drive (<code>drive.appdata</code>, <code>drive.file</code>):</strong> Conversation &amp; memory backups inside your personal Drive.</li>
-        <li><strong>Workspace (Gmail, Calendar, Contacts, Sheets, Forms, Chat):</strong> Accessed strictly on explicit request; outbound sends require approval.</li>
+        <li><strong>Google Drive Only (<code>drive.appdata</code>, <code>drive.file</code>):</strong> Conversation &amp; memory snapshots, quota checks, and approval-gated backup deletion paired with optional approved <code>GOOGLE_DRIVE_API_KEY</code> attribution.</li>
       </ul>
       <div class="callout">
-        Adheres strictly to the Google API Services User Data Policy (Limited Use). Google user data is never sold, shared for ads, or used to train generalized AI models.
+        Adheres strictly to the Google API Services User Data Policy (Limited Use). Google Drive data is never sold, shared for ads, or used to train generalized AI models.
       </div>
     </article>
 
@@ -157,7 +192,7 @@
 
     <article class="card clause">
       <h2>6. Storage &amp; Markdown / JSON Portability</h2>
-      <p>Cloud chats and memories live in user-scoped Firebase Firestore records. You can export conversations anytime as Markdown (<code>.md</code>) or JSON (<code>.json</code>).</p>
+      <p>Cloud chats and memories live in user-scoped Firebase Firestore records. Export conversations anytime as Markdown (<code>.md</code>) or JSON (<code>.json</code>).</p>
     </article>
 
     <article class="card clause">
@@ -167,7 +202,7 @@
 
     <article class="card clause">
       <h2>8. Retention, Deletion, Children (13+) &amp; Updates</h2>
-      <p>Delete chats, memories, or local wallets anytime, update or clear your Age/Gender profile in Settings, revoke OAuth in your Google Account, or email <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a> for full account deletion. Strictly prohibited for users under 13 (blocked on-device).</p>
+      <p>Delete chats, memories, Drive backups, or local wallets anytime, revoke OAuth in your Google Account, or email <a href="mailto:srasmarkhor7289@gmail.com">srasmarkhor7289@gmail.com</a> for full deletion. Strictly prohibited under age 13.</p>
     </article>
   </main>
   <script>
@@ -196,6 +231,103 @@
           countEl.textContent = shown + " / " + cards.length;
         });
       }
+
+      const CLIENT_ID = "299712147014-tr9jkmpjf6nj5h66ekissl1arb2es3rp.apps.googleusercontent.com";
+      const USER_KEY = "aqua_google_user";
+      const ACK_KEY = "aqua_legal_ack";
+      const signedOutEl = document.getElementById("gsiSignedOutInfo");
+      const signedInEl = document.getElementById("gsiSignedInInfo");
+      const avatarEl = document.getElementById("gsiAvatar");
+      const nameEl = document.getElementById("gsiName");
+      const emailEl = document.getElementById("gsiEmail");
+      const mountEl = document.getElementById("gsiButtonMount");
+      const ackBtn = document.getElementById("ackLegalBtn");
+      const ackBadge = document.getElementById("ackStatusBadge");
+      const signOutBtn = document.getElementById("gsiSignOutBtn");
+
+      function decodeGoogleJwt(token) {
+        const parts = (token || "").split(".");
+        if (parts.length < 2) throw new Error("Invalid ID token");
+        const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+        const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+        const binary = atob(padded);
+        const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+        return JSON.parse(new TextDecoder().decode(bytes));
+      }
+
+      function renderAuthState() {
+        let user = null;
+        try { user = JSON.parse(localStorage.getItem(USER_KEY) || "null"); } catch (_) {}
+        let ack = null;
+        try { ack = JSON.parse(localStorage.getItem(ACK_KEY) || "null"); } catch (_) {}
+        if (user && user.email) {
+          signedOutEl.style.display = "none";
+          signedInEl.style.display = "flex";
+          nameEl.textContent = user.name || "Google Account";
+          emailEl.textContent = user.email;
+          avatarEl.style.display = user.picture ? "block" : "none";
+          if (user.picture) avatarEl.src = user.picture;
+          mountEl.style.display = "none";
+          signOutBtn.style.display = "inline-flex";
+          if (ack && ack.email === user.email && ack.timestamp) {
+            ackBtn.style.display = "none";
+            ackBadge.style.display = "inline-block";
+            ackBadge.textContent = "✓ Privacy Verified • " + ack.timestamp;
+          } else {
+            ackBtn.style.display = "inline-flex";
+            ackBadge.style.display = "none";
+          }
+        } else {
+          signedOutEl.style.display = "flex";
+          signedInEl.style.display = "none";
+          mountEl.style.display = "block";
+          ackBtn.style.display = "none";
+          ackBadge.style.display = "none";
+          signOutBtn.style.display = "none";
+        }
+      }
+
+      if (ackBtn) {
+        ackBtn.addEventListener("click", () => {
+          let user = null;
+          try { user = JSON.parse(localStorage.getItem(USER_KEY) || "null"); } catch (_) {}
+          if (!user) return;
+          const now = new Date().toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+          localStorage.setItem(ACK_KEY, JSON.stringify({ email: user.email, timestamp: now }));
+          renderAuthState();
+        });
+      }
+      if (signOutBtn) {
+        signOutBtn.addEventListener("click", () => {
+          localStorage.removeItem(USER_KEY);
+          if (window.google && google.accounts && google.accounts.id) google.accounts.id.disableAutoSelect();
+          renderAuthState();
+        });
+      }
+      function initGsi() {
+        if (window.location.protocol === "file:") {
+          if (mountEl && !mountEl.hasChildNodes()) {
+            mountEl.innerHTML = '<span style="font-size:0.78rem;color:var(--muted);">Use Public HTTPS Portal button below for live Google Sign-In</span>';
+          }
+          renderAuthState();
+          return;
+        }
+        if (window.google && google.accounts && google.accounts.id) {
+          google.accounts.id.initialize({
+            client_id: CLIENT_ID,
+            callback: (res) => {
+              const p = decodeGoogleJwt(res.credential);
+              localStorage.setItem(USER_KEY, JSON.stringify({ sub: p.sub || "", name: p.name || "", email: p.email || "", picture: p.picture || "" }));
+              renderAuthState();
+            }
+          });
+          google.accounts.id.renderButton(mountEl, { theme: "filled_black", size: "medium", shape: "pill", text: "signin_with" });
+        } else {
+          setTimeout(initGsi, 250);
+        }
+      }
+      renderAuthState();
+      window.addEventListener("load", initGsi);
     })();
   </script>
 </body>

@@ -23,16 +23,17 @@ import com.example.data.model.ChatMessage
 import com.example.data.model.Conversation
 import com.example.data.model.MemoryItem
 import com.example.data.model.UserSettings
+import com.example.data.local.SecureConfigStore
 import com.example.data.model.WalletConfig
 import com.example.data.repository.GoogleDriveHistoryRepository
-import com.example.data.repository.GoogleWorkspaceRepository
-import com.example.data.repository.WorkspaceService
 import com.example.device.AndroidDeviceController
+import com.example.device.AndroidSdkInspector
 import com.example.device.DeviceTelemetry
 import com.example.domain.AgeTier
 import com.example.domain.UserGender
 import com.example.domain.UserProfilePolicy
 import com.example.network.AquaWebClient
+import com.example.security.GoogleSignatureVerifier
 import com.example.skills.SkillParserAndValidator
 import com.example.voice.AquaWakeWordService
 import com.example.voice.ElevenLabsClient
@@ -41,6 +42,7 @@ import com.example.wallet.QrCodeGenerator
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -199,22 +201,85 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `google workspace repository defines all six services and nine oauth scopes`() {
+    fun `google signature verifier computes fingerprints and reports package readiness`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val repo = GoogleWorkspaceRepository(context)
-        val scopes = repo.allWorkspaceScopes().map { it.scopeUri }.toSet()
+        val sha1 = GoogleSignatureVerifier.computeFingerprint("aqua-sig".toByteArray(), "SHA-1")
+        val sha256 = GoogleSignatureVerifier.computeFingerprint("aqua-sig".toByteArray(), "SHA-256")
+        assertEquals(59, sha1.length) // 20 bytes * 2 hex + 19 colons
+        assertEquals(95, sha256.length) // 32 bytes * 2 hex + 31 colons
 
-        assertEquals(6, WorkspaceService.entries.size)
-        assertEquals(9, scopes.size)
-        assertTrue(scopes.contains("https://www.googleapis.com/auth/contacts"))
-        assertTrue(scopes.contains("https://www.googleapis.com/auth/forms.body"))
-        assertTrue(scopes.contains("https://www.googleapis.com/auth/forms.responses.readonly"))
-        assertTrue(scopes.contains("https://www.googleapis.com/auth/calendar"))
-        assertTrue(scopes.contains("https://www.googleapis.com/auth/gmail.readonly"))
-        assertTrue(scopes.contains("https://www.googleapis.com/auth/gmail.send"))
-        assertTrue(scopes.contains("https://www.googleapis.com/auth/spreadsheets"))
-        assertTrue(scopes.contains("https://www.googleapis.com/auth/chat.spaces.readonly"))
-        assertTrue(scopes.contains("https://www.googleapis.com/auth/chat.messages"))
+        val report = GoogleSignatureVerifier.verifyAppSignature(context)
+        assertEquals(context.packageName, report.packageName)
+        assertEquals(GoogleSignatureVerifier.REGISTERED_FIREBASE_SHA1, report.expectedRegisteredSha1)
+        assertTrue(report.overallStatusLabel.isNotBlank())
+    }
+
+    @Test
+    fun `android sdk inspector reports real sdk versions hardware features and markdown`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val report = AndroidSdkInspector.inspect(context)
+        assertEquals(36, report.sdkInt)
+        assertEquals(24, report.minSdkVersion)
+        assertTrue(report.supportedAbis.isNotEmpty())
+        assertTrue(report.cpuCores >= 1)
+        assertTrue(report.features.any { it.featureKey == PackageManager.FEATURE_WIFI })
+
+        val md = AndroidSdkInspector.formatMarkdownReport(report)
+        assertTrue(md.contains("Compile Android 16 (API 36.1)"))
+        assertTrue(md.contains("## Google Signature Check"))
+        assertTrue(md.contains("## Device Feature Matrix"))
+    }
+
+    @Test
+    fun `google drive repository parses about quota appends api key and resolves keystore override`() {
+        val aboutJson = """
+            {
+              "user": { "displayName": "Aqua Explorer", "emailAddress": "explorer@example.com" },
+              "storageQuota": { "limit": "16106127360", "usage": "8053063680", "usageInDrive": "4026531840" }
+            }
+        """.trimIndent()
+        val info = GoogleDriveHistoryRepository.parseDriveAboutInfo(aboutJson)
+        assertEquals("Aqua Explorer", info.displayName)
+        assertEquals("explorer@example.com", info.emailAddress)
+        assertEquals(16106127360L, info.storageLimitBytes)
+        assertEquals(0.5f, info.usageFraction, 0.01f)
+
+        assertEquals(
+            "https://www.googleapis.com/drive/v3/about?fields=user&key=AIzaTestKey1234",
+            GoogleDriveHistoryRepository.appendApiKey("https://www.googleapis.com/drive/v3/about?fields=user", "AIzaTestKey1234")
+        )
+        assertEquals(
+            "https://www.googleapis.com/drive/v3/about?fields=user",
+            GoogleDriveHistoryRepository.appendApiKey("https://www.googleapis.com/drive/v3/about?fields=user", "GOOGLE_DRIVE_API_KEY_DEFAULT_VALUE")
+        )
+        assertFalse(GoogleDriveHistoryRepository.isConfiguredKey("GOOGLE_DRIVE_API_KEY_DEFAULT_VALUE"))
+        assertTrue(GoogleDriveHistoryRepository.isConfiguredKey("AIzaTestKey1234"))
+        assertEquals("AIza••••1234", GoogleDriveHistoryRepository.maskKey("AIzaTestKey1234"))
+
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val store = SecureConfigStore(context)
+        store.clearGoogleDriveApiKey()
+        assertFalse(store.hasGoogleDriveApiKey())
+        val repo = GoogleDriveHistoryRepository(context, store)
+        assertEquals("", repo.resolveEffectiveApiKey())
+        assertEquals("AIzaDemoDriveKey987654321", repo.resolveEffectiveApiKey("AIzaDemoDriveKey987654321"))
+        assertTrue(repo.getApiKeyStatusSummary().contains("OAuth 2.0 Bearer Active"))
+
+        val reqWithHint = repo.buildAuthorizationRequest("explorer@gmail.com")
+        assertEquals("explorer@gmail.com", reqWithHint.account?.name)
+        assertEquals(2, reqWithHint.requestedScopes.size)
+        val reqNoHint = repo.buildAuthorizationRequest("")
+        assertNull(reqNoHint.account)
+
+        repo.cacheAccessToken("ya29.test-token")
+        assertEquals("ya29.test-token", repo.getValidCachedToken())
+        repo.disconnectDrive()
+        assertNull(repo.getValidCachedToken())
+
+        val devErr = com.google.android.gms.common.api.ApiException(
+            com.google.android.gms.common.api.Status(com.google.android.gms.common.api.CommonStatusCodes.DEVELOPER_ERROR)
+        )
+        assertTrue(GoogleDriveHistoryRepository.formatReadableAuthError(devErr).contains("SHA-1"))
     }
 
     @Test
@@ -236,7 +301,7 @@ class ExampleRobolectricTest {
     fun `aqua routine and browser link models validate defaults cleanly`() {
         val routine = AquaRoutine(
             title = "Morning Check",
-            prompt = "Check battery and unread Gmail",
+            prompt = "Check battery and SDK signature status",
             category = "productivity",
             speakResult = true
         )
@@ -615,6 +680,11 @@ class ExampleRobolectricTest {
         assertTrue(declNames.contains("get_ai_freedom_config"))
         assertTrue(declNames.contains("speak_with_elevenlabs"))
         assertTrue(declNames.contains("web_search"))
+        assertTrue(declNames.contains("backup_history_to_drive"))
+        assertTrue(declNames.contains("drive_list_backups"))
+        assertTrue(declNames.contains("drive_get_storage_quota"))
+        assertTrue(declNames.contains("inspect_android_sdk_and_signature"))
+        assertFalse(declNames.any { it.startsWith("workspace_") })
 
         val prompt = ContextManager.buildSystemInstruction(
             settings = UserSettings(useCustomDirectApiKey = true),

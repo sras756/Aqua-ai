@@ -205,8 +205,8 @@ class AquaFirestoreRepositoryRuleTest : FirestoreEmulatorTestBase() {
         val saveRes = withTimeout(TIMEOUT_MS) {
             repo.saveRoutine(
                 AquaRoutine(
-                    title = "Battery & Mail Check",
-                    prompt = "Inspect device status and summarize unread Gmail messages.",
+                    title = "Battery & Drive Check",
+                    prompt = "Inspect device status and check Google Drive vault quota.",
                     category = "productivity",
                     speakResult = false
                 )
@@ -218,7 +218,7 @@ class AquaFirestoreRepositoryRuleTest : FirestoreEmulatorTestBase() {
         val observed = withTimeout(FLOW_TIMEOUT_MS) {
             repo.observeRoutines().first { list -> list.any { it.id == routineId } }
         }
-        assertTrue(observed.any { it.id == routineId && it.title == "Battery & Mail Check" })
+        assertTrue(observed.any { it.id == routineId && it.title == "Battery & Drive Check" })
 
         val recordRes = withTimeout(TIMEOUT_MS) {
             repo.recordRoutineRun(routineId, "Completed cleanly")

@@ -33,7 +33,7 @@ enum class AquaPersona(
         id = "android_power",
         label = "Device Power",
         badge = "ANDROID",
-        promptGuidance = "Prioritize Android device optimization, installed app workflows, system utilities, routines, notifications, storage/RAM diagnostics, and Workspace productivity."
+        promptGuidance = "Prioritize Android device optimization, installed app workflows, system utilities, routines, notifications, storage/RAM/SDK diagnostics, and Google Drive Vault backups."
     ),
     WEB3_STRATEGIST(
         id = "web3_strategist",

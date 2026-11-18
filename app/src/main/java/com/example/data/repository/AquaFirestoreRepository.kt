@@ -652,7 +652,7 @@ class AquaFirestoreRepository(
         val colRef = userRoot(uid).collection("routines")
         val (docRef, hasExplicitId) = resolveSafeDocRef(colRef, routine.id)
         val validCat = routine.category.lowercase().takeIf {
-            it in setOf("productivity", "workspace", "device", "browser", "crypto", "custom")
+            it in setOf("productivity", "device", "browser", "crypto", "custom")
         } ?: "custom"
         val safeTitle = routine.title.ifBlank { "Aqua Routine" }.take(100)
         val safePrompt = routine.prompt.ifBlank { "Check device status" }.take(4000)
