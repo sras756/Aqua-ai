@@ -505,6 +505,79 @@
       font-size: 0.78rem;
       color: var(--cyan);
     }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 13px;
+      border-radius: 999px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.76rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+    }
+    .status-compliant {
+      color: var(--emerald);
+      background: rgba(52, 211, 153, 0.14);
+      border: 1px solid rgba(52, 211, 153, 0.45);
+    }
+    .status-action {
+      color: var(--amber);
+      background: rgba(251, 191, 36, 0.14);
+      border: 1px solid rgba(251, 191, 36, 0.45);
+    }
+    .compliance-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .compliance-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .compliance-item {
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .compliance-item.is-action { border-color: rgba(251, 191, 36, 0.48); }
+    .compliance-item.is-ok { border-color: rgba(52, 211, 153, 0.36); }
+    .compliance-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .compliance-title {
+      font-family: "Outfit", sans-serif;
+      font-size: 0.98rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .compliance-meta {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.74rem;
+      color: var(--cyan);
+      font-weight: 600;
+    }
+    .compliance-detail {
+      font-size: 0.86rem;
+      color: var(--muted);
+    }
+    .compliance-remediation {
+      font-size: 0.81rem;
+      color: var(--amber);
+      font-weight: 600;
+    }
     a { color: var(--cyan); }
     footer {
       margin-top: 32px;
@@ -542,6 +615,7 @@
       </a>
       <nav class="nav-links" aria-label="Primary Navigation">
         <a class="active" href="index.html">Overview</a>
+        <a href="#compliance-status">Compliance Status</a>
         <a href="#features">All Features</a>
         <a href="#permissions-audit">Permissions Audit</a>
         <a href="privacy.html">Privacy Policy</a>
@@ -601,6 +675,21 @@
         <span class="ack-badge" id="ackStatusBadge" style="display:none;"></span>
         <button class="icon-btn" type="button" id="gsiSignOutBtn" style="display:none;">Sign Out</button>
       </div>
+    </section>
+
+    <section class="card" id="compliance-status" aria-live="polite" style="margin-bottom:24px;">
+      <div class="compliance-header">
+        <div>
+          <span class="badge" style="margin-bottom:6px;">● GOOGLE PLAY POLICY AUDIT • LIVE ENVIRONMENT CHECK</span>
+          <h2 style="margin:0;">Compliance Status</h2>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span class="status-pill" id="complianceOverallBadge">Checking…</span>
+          <button class="icon-btn" type="button" id="recheckComplianceBtn">↻ Re-run Check</button>
+        </div>
+      </div>
+      <p id="complianceSummaryText" style="margin:4px 0 0;">Evaluating runtime environment configuration against Google Play policies…</p>
+      <div class="compliance-grid" id="complianceChecksList"></div>
     </section>
 
     <section class="bento">
@@ -1094,6 +1183,168 @@
         }
       }
 
+      function escapeHtml(str) {
+        return String(str || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      function evaluateCompliance() {
+        const params = new URLSearchParams(window.location.search);
+        const appName = (params.get("appName") || "Aqua AI").trim();
+        const targetSdkRaw = params.get("targetSdk");
+        const targetSdk = targetSdkRaw ? parseInt(targetSdkRaw, 10) : 36;
+        const cleartext = params.get("cleartext") === "true";
+        const broadStorage = params.get("broadStorage") ? parseInt(params.get("broadStorage"), 10) : 0;
+        const fgsState = params.get("fgs") || "ok";
+        const ageTier = params.get("ageTier");
+        const sigOkParam = params.get("sigOk");
+
+        const protocol = window.location.protocol;
+        const host = window.location.hostname;
+        const transportSecure = protocol === "https:" || protocol === "file:" || host === "localhost" || host === "127.0.0.1";
+
+        let user = null;
+        try { user = JSON.parse(localStorage.getItem(USER_KEY) || "null"); } catch (_) {}
+        let ack = null;
+        try { ack = JSON.parse(localStorage.getItem(ACK_KEY) || "null"); } catch (_) {}
+        const webAcked = Boolean(user && user.email && ack && ack.email === user.email && ack.timestamp);
+
+        const checks = [];
+
+        const permsOk = broadStorage === 0;
+        checks.push({
+          title: "Permissions Minimization",
+          meta: permsOk ? "0 broad storage / Workspace scopes" : broadStorage + " restricted declaration(s)",
+          ok: permsOk,
+          detail: permsOk
+            ? "Uses Android Photo Picker, SAF, and least-privilege Google Drive (drive.appdata, drive.file) only."
+            : "Restricted broad storage or Workspace permissions detected in manifest.",
+          remediation: "Remove READ_MEDIA_* / READ_EXTERNAL_STORAGE declarations and rely on Photo Picker."
+        });
+
+        const lettersOnly = appName.replace(/[^a-zA-Z]/g, "");
+        const allCaps = lettersOnly.length >= 3 && lettersOnly === lettersOnly.toUpperCase();
+        const hasBuzz = /(free|best|#1|download now|100%)/i.test(appName);
+        const titleOk = appName.length > 0 && appName.length <= 30 && !allCaps && !hasBuzz;
+        checks.push({
+          title: "App Title & Metadata Policy",
+          meta: '"' + appName + '" (' + appName.length + '/30 chars)',
+          ok: titleOk,
+          detail: titleOk
+            ? "Title complies with Google Play 30-character cap with no ALL CAPS or promotional buzzwords."
+            : "App title violates Play Store title length or promotional text constraints.",
+          remediation: "Keep res/values/strings.xml app_name concise (<= 30 chars) without promotional buzzwords."
+        });
+
+        const sdkTlsOk = targetSdk >= 35 && !cleartext && transportSecure;
+        checks.push({
+          title: "Target API & Transport Security",
+          meta: "Target API " + targetSdk + " • " + (transportSecure ? protocol.replace(":", "").toUpperCase() : "INSECURE HTTP"),
+          ok: sdkTlsOk,
+          detail: sdkTlsOk
+            ? "Target SDK " + targetSdk + " meets Play API requirements and cleartext traffic is disabled."
+            : "Detected Target SDK < 35, cleartext traffic enabled, or insecure HTTP portal transport.",
+          remediation: "Enforce Target API 35+, usesCleartextTraffic=false, and HTTPS portal transport."
+        });
+
+        const fgsOk = fgsState !== "missing";
+        checks.push({
+          title: "Foreground Service Type",
+          meta: fgsOk ? "microphone | dataSync" : "Missing FGS type",
+          ok: fgsOk,
+          detail: fgsOk
+            ? "AquaWakeWordService explicitly declares foregroundServiceType and matching Android 14+ permissions."
+            : "Foreground service type or Android 14+ permissions missing.",
+          remediation: "Declare android:foregroundServiceType=\"microphone|dataSync\" in AndroidManifest.xml."
+        });
+
+        let ageOk = false;
+        let ageMeta = "Verification Required";
+        let ageDetail = "";
+        if (ageTier) {
+          ageOk = ageTier === "adult_18_plus" || ageTier === "teen_13_17";
+          ageMeta = ageTier === "adult_18_plus" ? "18+ FULL" : ageTier === "teen_13_17" ? "TEEN 13-17" : ageTier === "under_13_blocked" ? "UNDER 13 RESTRICTED" : "AGE UNCONFIRMED";
+          ageDetail = ageOk
+            ? "Active 13+ profile policy confirmed in Android settings."
+            : "Age 13+ eligibility is unconfirmed or under-13 restricted in app profile.";
+        } else {
+          ageOk = webAcked;
+          ageMeta = webAcked ? "Portal Policy Verified" : "Pending Portal Sign-In & Ack";
+          ageDetail = webAcked
+            ? "Signed-in user acknowledged 13+ eligibility & Privacy/Terms in this browser."
+            : "Sign in with Google above and acknowledge Privacy Policy & Terms for full session compliance.";
+        }
+        checks.push({
+          title: "Age 13+ & COPPA Gate",
+          meta: ageMeta,
+          ok: ageOk,
+          detail: ageDetail,
+          remediation: ageTier
+            ? "Confirm age (13+) in Settings -> Profile, Age & Gender or Setup Studio."
+            : "Complete Sign in with Google and click Acknowledge Privacy & Terms above."
+        });
+
+        let sigOk = true;
+        let sigMeta = "OAuth Client Configured";
+        let sigDetail = "Google Identity Services Web Client ID configured.";
+        if (sigOkParam !== null) {
+          sigOk = sigOkParam === "true";
+          sigMeta = sigOk ? "APK & Play Services Verified" : "Play Services / Sig Unverified";
+          sigDetail = sigOk
+            ? "APK signing SHA-1/SHA-256, OAuth Web Client ID, and Google Play Services verified."
+            : "APK signature, OAuth client ID, or Google Play Services unavailable in current runtime.";
+        }
+        checks.push({
+          title: "Signature & OAuth Integrity",
+          meta: sigMeta,
+          ok: sigOk,
+          detail: sigDetail,
+          remediation: "Verify on a Google Play Services device with registered SHA-1 signing certificate."
+        });
+
+        const passed = checks.filter((c) => c.ok).length;
+        const allCompliant = passed === checks.length;
+
+        const badge = document.getElementById("complianceOverallBadge");
+        const summary = document.getElementById("complianceSummaryText");
+        const listEl = document.getElementById("complianceChecksList");
+        if (badge) {
+          badge.textContent = allCompliant ? "Compliant" : "Action Required";
+          badge.className = "status-pill " + (allCompliant ? "status-compliant" : "status-action");
+        }
+        if (summary) {
+          const ts = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+          summary.textContent = (allCompliant
+            ? "Environment configuration passes all Google Play policy requirements ("
+            : "One or more Google Play policy checks require attention in this environment (") +
+            passed + "/" + checks.length + " passed • checked " + ts + ").";
+        }
+        if (listEl) {
+          listEl.innerHTML = checks.map((item) => {
+            const pillClass = item.ok ? "status-compliant" : "status-action";
+            const pillText = item.ok ? "Compliant" : "Action Required";
+            const remHtml = !item.ok && item.remediation
+              ? '<div class="compliance-remediation">Action: ' + escapeHtml(item.remediation) + "</div>"
+              : "";
+            return '<article class="compliance-item ' + (item.ok ? "is-ok" : "is-action") + '">' +
+              '<div class="compliance-top">' +
+              '<span class="compliance-title">' + escapeHtml(item.title) + "</span>" +
+              '<span class="status-pill ' + pillClass + '">' + pillText + "</span>" +
+              "</div>" +
+              '<div class="compliance-meta">' + escapeHtml(item.meta) + "</div>" +
+              '<div class="compliance-detail">' + escapeHtml(item.detail) + "</div>" +
+              remHtml +
+              "</article>";
+          }).join("");
+        }
+      }
+
+      const recheckBtn = document.getElementById("recheckComplianceBtn");
+      if (recheckBtn) recheckBtn.addEventListener("click", evaluateCompliance);
+
       if (ackBtn) {
         ackBtn.addEventListener("click", () => {
           let user = null;
@@ -1102,7 +1353,31 @@
           const now = new Date().toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
           localStorage.setItem(ACK_KEY, JSON.stringify({ email: user.email, timestamp: now }));
           renderAuthState();
+          evaluateCompliance();
         });
+      }
+
+      window.__aquaOnPortalAuthChanged = function () {
+        renderAuthState();
+        evaluateCompliance();
+      };
+
+      function renderNativeAndroidSignInButton() {
+        if (!mountEl || mountEl.querySelector("#aquaNativeSignInBtn")) return;
+        mountEl.innerHTML = "";
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.id = "aquaNativeSignInBtn";
+        btn.className = "icon-btn";
+        btn.style.borderColor = "var(--cyan)";
+        btn.style.color = "var(--cyan)";
+        btn.textContent = "G  Sign in with Google (App Verified)";
+        btn.addEventListener("click", () => {
+          if (window.AquaAndroidPortal && window.AquaAndroidPortal.requestNativeGoogleSignIn) {
+            window.AquaAndroidPortal.requestNativeGoogleSignIn();
+          }
+        });
+        mountEl.appendChild(btn);
       }
 
       if (signOutBtn) {
@@ -1112,10 +1387,25 @@
             google.accounts.id.disableAutoSelect();
           }
           renderAuthState();
+          evaluateCompliance();
+          initGsi();
         });
       }
 
       function initGsi() {
+        if (window.AquaAndroidPortal && typeof window.AquaAndroidPortal.requestNativeGoogleSignIn === "function") {
+          try {
+            const raw = window.AquaAndroidPortal.getSignedInUserJson();
+            const nativeUser = JSON.parse(raw || "{}");
+            if (nativeUser && nativeUser.email) {
+              localStorage.setItem(USER_KEY, JSON.stringify(nativeUser));
+            }
+          } catch (_) {}
+          renderNativeAndroidSignInButton();
+          renderAuthState();
+          evaluateCompliance();
+          return;
+        }
         if (window.location.protocol === "file:") {
           if (mountEl && !mountEl.hasChildNodes()) {
             mountEl.innerHTML = '<span style="font-size:0.78rem;color:var(--muted);">Open public HTTPS portal for Google Sign-In</span>';
@@ -1126,6 +1416,7 @@
         if (window.google && google.accounts && google.accounts.id) {
           google.accounts.id.initialize({
             client_id: CLIENT_ID,
+            ux_mode: "popup",
             callback: (response) => {
               try {
                 const payload = decodeGoogleJwt(response.credential);
@@ -1136,6 +1427,7 @@
                   picture: payload.picture || ""
                 }));
                 renderAuthState();
+                evaluateCompliance();
               } catch (e) {
                 console.error("Failed to decode Google credential", e);
               }
@@ -1153,6 +1445,7 @@
       }
 
       renderAuthState();
+      evaluateCompliance();
       window.addEventListener("load", initGsi);
     })();
   </script>

@@ -74,24 +74,30 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.credentials.CredentialManager
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.browser.AquaBrowserController
+import com.example.browser.AquaLegalPortalAuthBridge
 import com.example.ui.AquaMainViewModel
+import com.example.ui.auth.onGoogleSignInClicked
 import com.example.ui.components.AquaBackdropBox
 import com.example.ui.components.AquaGlassCard
 import com.example.ui.theme.AquaTheme
+import org.json.JSONObject
 
 @OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("SetJavaScriptEnabled")
@@ -115,6 +121,38 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
     var initialUrlLoadedForGen by remember { mutableIntStateOf(-1) }
     var rendererUnavailable by remember { mutableStateOf(false) }
 
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val credentialManager = remember { CredentialManager.create(context) }
+    var lastNonOAuthUrl by remember { mutableStateOf("") }
+    var oauthNotice by remember { mutableStateOf<String?>(null) }
+
+    fun triggerNativePortalSignIn() {
+        onGoogleSignInClicked(
+            context = context,
+            credentialManager = credentialManager,
+            onAuthSuccess = {
+                oauthNotice = null
+                val json = AquaLegalPortalAuthBridge.currentFirebaseUserJson()
+                val script = "window.__aquaPortalNativeSignInSuccess && window.__aquaPortalNativeSignInSuccess(${JSONObject.quote(json)});"
+                webViewInstance?.post {
+                    runCatching { webViewInstance?.evaluateJavascript(script, null) }
+                }
+            },
+            onAuthError = { err ->
+                oauthNotice = err
+            },
+            scope = scope
+        )
+    }
+
+    val portalAuthBridge = remember {
+        AquaLegalPortalAuthBridge(
+            onRequestNativeSignIn = { triggerNativePortalSignIn() },
+            onOpenExternal = { url -> viewModel.openBrowserUrlExternally(url) }
+        )
+    }
+
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = c.accentCyan,
         unfocusedBorderColor = c.borderGlow,
@@ -123,6 +161,7 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
     )
 
     fun navigateOrRecover(target: String) {
+        oauthNotice = null
         viewModel.navigateBrowser(target)
         if (rendererUnavailable) {
             rendererUnavailable = false
@@ -283,6 +322,37 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                 trackColor = c.cardSurface,
                 modifier = Modifier.fillMaxWidth()
             )
+        }
+
+        AnimatedVisibility(visible = oauthNotice != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(c.deepSurface)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Filled.WarningAmber, contentDescription = null, tint = c.amber, modifier = Modifier.size(18.dp))
+                Text(
+                    text = oauthNotice.orEmpty(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.textPrimary,
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedButton(
+                    onClick = {
+                        val fallbackUrl = lastNonOAuthUrl.ifBlank { pageState.currentUrl }
+                        oauthNotice = null
+                        viewModel.openBrowserUrlExternally(fallbackUrl)
+                    }
+                ) {
+                    Text("External", color = c.accentCyan)
+                }
+                IconButton(onClick = { oauthNotice = null }) {
+                    Icon(Icons.Filled.Close, contentDescription = "Dismiss OAuth notice", tint = c.textMuted)
+                }
+            }
         }
 
         // Saved Browser Tabs strip
@@ -488,10 +558,51 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                                     request: WebResourceRequest?
                                 ): Boolean {
                                     val url = request?.url?.toString().orEmpty()
-                                    return !(url.startsWith("http://") || url.startsWith("https://"))
+                                    if (!(url.startsWith("http://") || url.startsWith("https://"))) {
+                                        return true
+                                    }
+                                    if (AquaLegalPortalAuthBridge.isGoogleOriginMismatchErrorUrl(url) ||
+                                        AquaLegalPortalAuthBridge.isGoogleOAuthFlowUrl(url)
+                                    ) {
+                                        val isPortalOrigin = AquaLegalPortalAuthBridge.isTrustedAquaPortalUrl(lastNonOAuthUrl) ||
+                                            url.lowercase().contains("sras756.github.io")
+                                        if (isPortalOrigin) {
+                                            val portalUrl = lastNonOAuthUrl
+                                                .takeIf { AquaLegalPortalAuthBridge.isTrustedAquaPortalUrl(it) }
+                                                ?: "https://sras756.github.io/aqua-ai/"
+                                            view?.post { runCatching { view.loadUrl(portalUrl) } }
+                                            triggerNativePortalSignIn()
+                                        } else {
+                                            viewModel.openBrowserUrlExternally(url)
+                                            oauthNotice = "Google Sign-In opened in your system browser to comply with OAuth 2.0 security policy."
+                                        }
+                                        return true
+                                    }
+                                    return false
                                 }
 
                                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                                    val target = url.orEmpty()
+                                    if (AquaLegalPortalAuthBridge.isGoogleOriginMismatchErrorUrl(target) ||
+                                        (AquaLegalPortalAuthBridge.isGoogleOAuthFlowUrl(target) &&
+                                            AquaLegalPortalAuthBridge.isTrustedAquaPortalUrl(lastNonOAuthUrl))
+                                    ) {
+                                        view?.stopLoading()
+                                        val recoveryUrl = lastNonOAuthUrl
+                                            .takeIf { AquaLegalPortalAuthBridge.isTrustedAquaPortalUrl(it) }
+                                            ?: if (target.lowercase().contains("sras756.github.io")) "https://sras756.github.io/aqua-ai/" else null
+                                        if (recoveryUrl != null) {
+                                            view?.post { runCatching { view.loadUrl(recoveryUrl) } }
+                                            triggerNativePortalSignIn()
+                                        } else {
+                                            oauthNotice = "Google Sign-In cannot run inside embedded WebViews (Error 400). Tap External to sign in with your system browser."
+                                        }
+                                        return
+                                    }
+                                    if (target.isNotBlank() && !AquaLegalPortalAuthBridge.isGoogleOAuthFlowUrl(target)) {
+                                        lastNonOAuthUrl = target
+                                    }
+                                    portalAuthBridge.updateVerifiedUrl(url)
                                     viewModel.browserController.updatePageState {
                                         it.copy(
                                             currentUrl = url ?: it.currentUrl,
@@ -504,6 +615,10 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                                 }
 
                                 override fun onPageFinished(view: WebView?, url: String?) {
+                                    portalAuthBridge.updateVerifiedUrl(url)
+                                    AquaLegalPortalAuthBridge.buildPortalSyncScript(url)?.let { syncScript ->
+                                        view?.evaluateJavascript(syncScript, null)
+                                    }
                                     viewModel.browserController.updatePageState {
                                         it.copy(
                                             currentUrl = url ?: it.currentUrl,
@@ -547,6 +662,7 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                             setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
                                 viewModel.browserController.enqueueDownload(url, userAgent, contentDisposition, mimetype)
                             }
+                            addJavascriptInterface(portalAuthBridge, "AquaAndroidPortal")
                             viewModel.browserController.attachWebView(this)
                             webViewInstance = this
                         }

@@ -382,6 +382,7 @@ class VoiceAssistantManager(
             while (offset < pcmBytes.size && _isSpeaking.value) {
                 val chunk = minOf(4096, pcmBytes.size - offset)
                 track.write(pcmBytes, offset, chunk)
+                pushPcmChunkAmplitude(pcmBytes, offset, chunk)
                 offset += chunk
             }
             track.stop()
@@ -391,11 +392,37 @@ class VoiceAssistantManager(
             Log.e(TAG, "AudioTrack playback failed", e)
         } finally {
             _isSpeaking.value = false
+            _waveformBars.value = FloatArray(24) { 0.12f }
         }
+    }
+
+    private fun pushPcmChunkAmplitude(pcmBytes: ByteArray, offset: Int, length: Int) {
+        val sampleCount = length / 2
+        if (sampleCount <= 0) return
+        var sumSq = 0.0
+        var i = offset
+        val end = offset + sampleCount * 2
+        while (i + 1 < end) {
+            val lo = pcmBytes[i].toInt() and 0xFF
+            val hi = pcmBytes[i + 1].toInt()
+            val sample = (hi shl 8) or lo
+            val norm = sample / 32768.0
+            sumSq += norm * norm
+            i += 2
+        }
+        val rms = kotlin.math.sqrt(sumSq / sampleCount).toFloat()
+        val level = (0.14f + rms * 2.6f).coerceIn(0.12f, 1.0f)
+        val next = _waveformBars.value.copyOf()
+        for (idx in 0 until next.size - 1) {
+            next[idx] = next[idx + 1]
+        }
+        next[next.size - 1] = level
+        _waveformBars.value = next
     }
 
     fun stopSpeaking() {
         _isSpeaking.value = false
+        _waveformBars.value = FloatArray(24) { 0.12f }
         tts?.stop()
         try {
             currentMediaPlayer?.let { mp ->
@@ -478,6 +505,7 @@ class VoiceAssistantManager(
         }
         liveSession = null
         _isLiveSessionActive.value = false
+        _waveformBars.value = FloatArray(24) { 0.12f }
     }
 
     fun release() {

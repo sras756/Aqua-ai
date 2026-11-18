@@ -30,7 +30,8 @@ internal object AquaToolCatalog {
     fun selectActiveSpecs(
         settings: UserSettings?,
         promptHint: String = "",
-        unlockAllTools: Boolean = false
+        unlockAllTools: Boolean = false,
+        imagePluginEnabled: Boolean = true
     ): List<AquaToolSpec> {
         val includeAll = unlockAllTools || settings == null || promptHint.isBlank()
         val lower = promptHint.lowercase()
@@ -186,19 +187,41 @@ internal object AquaToolCatalog {
             )
         } else emptyList()
 
+        val imagePluginNeeded = includeAll || listOf(
+            "image", "draw", "picture", "illustration", "poster", "logo", "icon",
+            "render", "artwork", "art", "photo", "wallpaper", "visual", "sketch",
+            "avatar", "concept art", "diagram", "paint", "generate_image"
+        ).any { lower.contains(it) }
+
+        val imagePluginTools = if (imagePluginEnabled && imagePluginNeeded) {
+            listOf(
+                AquaToolSpec(
+                    "generate_image",
+                    "Generates a real high-resolution image via Aqua's Image Studio Plugin (Firebase AI Logic) and displays it in Image Studio.",
+                    listOf(
+                        s("prompt", "Detailed visual description of the image to synthesize."),
+                        s("aspectRatio", "Optional aspect ratio: 1:1, 16:9, 9:16, 4:3, or 3:4."),
+                        s("model", "Optional model: gemini-nano-banana-2.1, gemini-3-pro-image, or gemini-3.1-flash-lite-image.")
+                    )
+                )
+            )
+        } else emptyList()
+
         return coreDeviceTools +
             coreWebTools +
             extendedWebAndCommsTools +
             walletTools +
-            driveAndSdkTools
+            driveAndSdkTools +
+            imagePluginTools
     }
 
     fun buildFirebaseTool(
         settings: UserSettings?,
         promptHint: String = "",
-        unlockAllTools: Boolean = false
+        unlockAllTools: Boolean = false,
+        imagePluginEnabled: Boolean = true
     ): Tool {
-        val specs = selectActiveSpecs(settings, promptHint, unlockAllTools)
+        val specs = selectActiveSpecs(settings, promptHint, unlockAllTools, imagePluginEnabled)
         return Tool.functionDeclarations(
             specs.map { spec ->
                 FunctionDeclaration(
@@ -220,9 +243,10 @@ internal object AquaToolCatalog {
     fun buildRestFunctionDeclarationsJson(
         settings: UserSettings?,
         promptHint: String = "",
-        unlockAllTools: Boolean = false
+        unlockAllTools: Boolean = false,
+        imagePluginEnabled: Boolean = true
     ): JSONArray {
-        val specs = selectActiveSpecs(settings, promptHint, unlockAllTools)
+        val specs = selectActiveSpecs(settings, promptHint, unlockAllTools, imagePluginEnabled)
         val arr = JSONArray()
         specs.forEach { spec ->
             val obj = JSONObject().apply {

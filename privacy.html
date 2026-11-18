@@ -605,6 +605,28 @@
         });
       }
 
+      window.__aquaOnPortalAuthChanged = function () {
+        renderAuthState();
+      };
+
+      function renderNativeAndroidSignInButton() {
+        if (!mountEl || mountEl.querySelector("#aquaNativeSignInBtn")) return;
+        mountEl.innerHTML = "";
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.id = "aquaNativeSignInBtn";
+        btn.className = "icon-btn";
+        btn.style.borderColor = "var(--cyan)";
+        btn.style.color = "var(--cyan)";
+        btn.textContent = "G  Sign in with Google (App Verified)";
+        btn.addEventListener("click", () => {
+          if (window.AquaAndroidPortal && window.AquaAndroidPortal.requestNativeGoogleSignIn) {
+            window.AquaAndroidPortal.requestNativeGoogleSignIn();
+          }
+        });
+        mountEl.appendChild(btn);
+      }
+
       if (signOutBtn) {
         signOutBtn.addEventListener("click", () => {
           localStorage.removeItem(USER_KEY);
@@ -612,10 +634,23 @@
             google.accounts.id.disableAutoSelect();
           }
           renderAuthState();
+          initGsi();
         });
       }
 
       function initGsi() {
+        if (window.AquaAndroidPortal && typeof window.AquaAndroidPortal.requestNativeGoogleSignIn === "function") {
+          try {
+            const raw = window.AquaAndroidPortal.getSignedInUserJson();
+            const nativeUser = JSON.parse(raw || "{}");
+            if (nativeUser && nativeUser.email) {
+              localStorage.setItem(USER_KEY, JSON.stringify(nativeUser));
+            }
+          } catch (_) {}
+          renderNativeAndroidSignInButton();
+          renderAuthState();
+          return;
+        }
         if (window.location.protocol === "file:") {
           if (mountEl && !mountEl.hasChildNodes()) {
             mountEl.innerHTML = '<span style="font-size:0.78rem;color:var(--muted);">Open public HTTPS portal for Google Sign-In</span>';
@@ -626,6 +661,7 @@
         if (window.google && google.accounts && google.accounts.id) {
           google.accounts.id.initialize({
             client_id: CLIENT_ID,
+            ux_mode: "popup",
             callback: (response) => {
               try {
                 const payload = decodeGoogleJwt(response.credential);

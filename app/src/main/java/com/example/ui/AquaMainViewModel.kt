@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.util.Log
@@ -13,6 +14,10 @@ import com.example.ai.ContextManager
 import com.example.ai.ConversationMarkdownExporter
 import com.example.ai.DiagnosticReportExporter
 import com.example.ai.GeminiProvider
+import com.example.ai.GeneratedImageItem
+import com.example.ai.ImageGenUiState
+import com.example.ai.ImagePluginConfig
+import com.example.ai.ImagePluginEngine
 import com.example.ai.ToolCallingEngine
 import com.example.browser.AquaBrowserController
 import com.example.browser.BrowserLink
@@ -48,6 +53,7 @@ import com.example.device.DeviceTelemetry
 import com.example.device.StorageAndMemoryStats
 import com.example.security.SignatureCheckReport
 import com.example.skills.SkillParserAndValidator
+import com.example.ui.state.AquaImagePluginCoordinator
 import com.example.ui.state.AquaSystemAndDriveCoordinator
 import com.example.voice.AquaWakeWordService
 import com.example.voice.ElevenLabsSubscription
@@ -125,6 +131,24 @@ class AquaMainViewModel(
     val elevenLabsConfig: StateFlow<ElevenLabsConfig> = localPrefs.elevenLabsConfig
     val hasCompletedAiSetup: StateFlow<Boolean> = localPrefs.hasCompletedAiSetup
 
+    val imagePluginCoordinator = AquaImagePluginCoordinator(
+        localPrefs = localPrefs,
+        fileImportRepository = fileImportRepository,
+        settingsProvider = { settings.value },
+        scope = viewModelScope,
+        onAttachBitmapToChat = { bitmap, displayName ->
+            attachGeneratedBitmapForChat(bitmap, displayName)
+        },
+        onNavigateToTab = { route -> _navigateToTabEvent.value = route },
+        onBanner = { msg -> _bannerMessage.value = msg }
+    )
+
+    val imagePluginConfig: StateFlow<ImagePluginConfig> = imagePluginCoordinator.config
+    val imageGenUiState: StateFlow<ImageGenUiState> = imagePluginCoordinator.uiState
+    val generatedImageGallery: StateFlow<List<GeneratedImageItem>> = imagePluginCoordinator.gallery
+    val editBaseBitmap: StateFlow<Bitmap?> = imagePluginCoordinator.editBaseBitmap
+    val editBaseLabel: StateFlow<String?> = imagePluginCoordinator.editBaseLabel
+
     private val toolCallingEngine: ToolCallingEngine = ToolCallingEngine(
         deviceController = deviceController,
         browserController = browserController,
@@ -148,7 +172,13 @@ class AquaMainViewModel(
                 "ElevenLabs Voice ID/Key is not configured (optional); speaking via ${if (settings.value.useGeminiTts) "Gemini Native TTS" else "Android TTS"}."
             }
         },
-        sdkReportProvider = { systemAndDriveCoordinator.buildSdkAndSignatureMarkdown() }
+        sdkReportProvider = { systemAndDriveCoordinator.buildSdkAndSignatureMarkdown() },
+        imagePluginEnabledProvider = { imagePluginCoordinator.config.value.enabled },
+        onGenerateImageTool = { prompt, ratio, model ->
+            imagePluginCoordinator.generateFromAiTool(prompt, ratio, model).map { item ->
+                "Generated ${item.aspectRatio} (${item.imageSize}) image via ${item.modelUsed} and saved it to Image Studio Gallery (id=${item.id.take(8)}). Let the user know they can view, edit, or export PNG in Hub -> Image Studio."
+            }
+        }
     )
 
     private val geminiProvider: GeminiProvider = GeminiProvider(
@@ -1201,6 +1231,48 @@ class AquaMainViewModel(
     fun clearPendingAttachment() {
         _pendingAttachment.value = null
         _attachmentAuthorizedForAi.value = false
+    }
+
+    private fun attachGeneratedBitmapForChat(bitmap: Bitmap, displayName: String) {
+        val bytes = ImagePluginEngine.bitmapToPngBytes(bitmap)
+        _pendingAttachment.value = ImportedAttachment(
+            uriString = "memory://generated/$displayName",
+            displayName = displayName,
+            mimeType = "image/png",
+            sizeBytes = bytes.size.toLong(),
+            extractedTextPreview = "Generated PNG image ($displayName, ${bitmap.width}x${bitmap.height}) from Aqua Image Studio.",
+            rawBytes = bytes,
+            isImage = true
+        )
+        _attachmentAuthorizedForAi.value = false
+    }
+
+    // --- IMAGE GENERATION PLUGIN ---
+
+    fun setImagePluginEnabled(enabled: Boolean) = imagePluginCoordinator.setPluginEnabled(enabled)
+
+    fun updateImagePluginConfig(
+        modelId: String? = null,
+        aspectRatioId: String? = null,
+        imageSizeId: String? = null
+    ) = imagePluginCoordinator.updateConfig(modelId, aspectRatioId, imageSizeId)
+
+    fun generatePluginImage(prompt: String) = imagePluginCoordinator.generateFromUi(prompt)
+
+    fun pickImagePluginEditBase(uri: Uri) = imagePluginCoordinator.pickEditBaseFromUri(uri)
+
+    fun useGeneratedImageAsEditBase(item: GeneratedImageItem) = imagePluginCoordinator.useGeneratedAsEditBase(item)
+
+    fun clearImagePluginEditBase() = imagePluginCoordinator.clearEditBase()
+
+    fun selectGeneratedImage(item: GeneratedImageItem) = imagePluginCoordinator.selectGalleryItem(item)
+
+    fun deleteGeneratedImage(id: String) = imagePluginCoordinator.deleteGalleryItem(id)
+
+    fun sendGeneratedImageToChat(item: GeneratedImageItem) = imagePluginCoordinator.sendToCoreChat(item)
+
+    fun showBannerMessage(message: String) {
+        _bannerMessage.value = message
     }
 
     // --- SKILLS ENGINE ---

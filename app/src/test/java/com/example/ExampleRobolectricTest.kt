@@ -9,14 +9,21 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.ai.AquaToolCatalog
 import com.example.ai.ContextManager
 import com.example.ai.ConversationMarkdownExporter
+import com.example.ai.ImagePluginAspectRatio
+import com.example.ai.ImagePluginConfig
+import com.example.ai.ImagePluginEngine
+import com.example.ai.ImagePluginModel
+import com.example.ai.ImagePluginSize
 import com.example.ai.MessageSegment
 import com.example.browser.AquaBrowserController
+import com.example.browser.AquaLegalPortalAuthBridge
 import com.example.browser.BrowserLink
 import com.example.data.local.AiFreedomConfig
 import com.example.data.local.AquaLocalPreferences
 import com.example.data.local.AquaPersona
 import com.example.data.local.ElevenLabsConfig
 import com.example.data.local.TelemetrySample
+import com.example.data.model.AquaCoreState
 import com.example.data.model.AquaRoutine
 import com.example.data.model.AquaSkill
 import com.example.data.model.ChatMessage
@@ -33,8 +40,12 @@ import com.example.domain.AgeTier
 import com.example.domain.UserGender
 import com.example.domain.UserProfilePolicy
 import com.example.network.AquaWebClient
+import com.example.security.ComplianceState
 import com.example.security.GoogleSignatureVerifier
+import com.example.security.PlayComplianceInspector
+import com.example.security.SignatureCheckReport
 import com.example.skills.SkillParserAndValidator
+import com.example.ui.components.computeOrbWaveformAmplitude
 import com.example.voice.AquaWakeWordService
 import com.example.voice.ElevenLabsClient
 import com.example.wallet.FlashWalletConnector
@@ -763,5 +774,192 @@ class ExampleRobolectricTest {
         assertTrue(teenPrompt.contains("TEEN GUARDRAILS ACTIVE"))
         assertTrue(teenPrompt.contains("Female"))
         assertTrue(teenPrompt.contains("she/her"))
+    }
+
+    @Test
+    fun `image plugin normalizes deprecated models persists config and toggles generate_image tool`() {
+        // Deprecated or legacy models must normalize to Nano Banana 2.1
+        assertEquals(ImagePluginModel.NANO_BANANA, ImagePluginModel.fromId("gemini-3.1-flash-image"))
+        assertEquals(ImagePluginModel.NANO_BANANA, ImagePluginModel.fromId("gemini-2.5-flash-image"))
+        assertEquals(ImagePluginModel.PRO_IMAGE, ImagePluginModel.fromId("gemini-3-pro-image"))
+        assertEquals(ImagePluginModel.FLASH_LITE_IMAGE, ImagePluginModel.fromId("gemini-3.1-flash-lite-image"))
+
+        val normalized = ImagePluginConfig(
+            enabled = true,
+            modelId = "gemini-3.1-flash-image",
+            aspectRatioId = "16:9",
+            imageSizeId = "2K"
+        ).normalized()
+        assertEquals(ImagePluginModel.NANO_BANANA.id, normalized.modelId)
+        assertEquals(ImagePluginAspectRatio.LANDSCAPE_16_9.id, normalized.aspectRatioId)
+        assertEquals(ImagePluginSize.SIZE_2K.id, normalized.imageSizeId)
+
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = AquaLocalPreferences(context, "image_plugin_user")
+        assertTrue(prefs.imagePluginConfig.value.enabled)
+        prefs.setImagePluginConfig(
+            ImagePluginConfig(
+                enabled = false,
+                modelId = ImagePluginModel.PRO_IMAGE.id,
+                aspectRatioId = ImagePluginAspectRatio.PORTRAIT_9_16.id,
+                imageSizeId = ImagePluginSize.SIZE_2K.id
+            )
+        )
+        val reloaded = AquaLocalPreferences(context, "image_plugin_user").imagePluginConfig.value
+        assertFalse(reloaded.enabled)
+        assertEquals(ImagePluginModel.PRO_IMAGE.id, reloaded.modelId)
+        assertEquals(ImagePluginAspectRatio.PORTRAIT_9_16.id, reloaded.aspectRatioId)
+        assertEquals(ImagePluginSize.SIZE_2K.id, reloaded.imageSizeId)
+
+        val enabledTools = AquaToolCatalog.selectActiveSpecs(
+            settings = UserSettings(),
+            promptHint = "draw an oceanic cyberpunk skyline",
+            unlockAllTools = false,
+            imagePluginEnabled = true
+        ).map { it.name }.toSet()
+        assertTrue(enabledTools.contains("generate_image"))
+
+        val disabledTools = AquaToolCatalog.selectActiveSpecs(
+            settings = UserSettings(),
+            promptHint = "draw an oceanic cyberpunk skyline",
+            unlockAllTools = true,
+            imagePluginEnabled = false
+        ).map { it.name }.toSet()
+        assertFalse(disabledTools.contains("generate_image"))
+
+        // Verify 60s realistic timeout constant
+        assertTrue(ImagePluginEngine.GENERATION_TIMEOUT_MS >= 60_000L)
+    }
+
+    @Test
+    fun `orb waveform harmonic amplitude amplifies during gemini live sessions and stays bounded`() {
+        val idleBars = FloatArray(24) { 0.12f }
+        val activeBars = FloatArray(24) { idx -> 0.25f + ((idx % 4) * 0.2f) }
+
+        val idleSamples = (0 until 36).map { idx ->
+            computeOrbWaveformAmplitude(
+                index = idx,
+                totalPoints = 36,
+                phaseRad = 1.1f,
+                secondaryPhaseRad = 0.7f,
+                waveformBars = idleBars,
+                isLiveSessionActive = false,
+                coreState = AquaCoreState.IDLE
+            )
+        }
+        val liveSamples = (0 until 36).map { idx ->
+            computeOrbWaveformAmplitude(
+                index = idx,
+                totalPoints = 36,
+                phaseRad = 1.1f,
+                secondaryPhaseRad = 0.7f,
+                waveformBars = activeBars,
+                isLiveSessionActive = true,
+                coreState = AquaCoreState.SPEAKING
+            )
+        }
+
+        assertTrue(idleSamples.all { it in 0.08f..0.24f })
+        assertTrue(liveSamples.all { it in 0.18f..1.0f })
+        assertTrue(liveSamples.average() > idleSamples.average() * 2.0)
+    }
+
+    @Test
+    fun `play compliance inspector evaluates real manifest and flips between compliant and action required`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val trustedSig = SignatureCheckReport(
+            packageName = context.packageName,
+            versionName = "1.0",
+            versionCode = 1L,
+            signingSha1 = GoogleSignatureVerifier.REGISTERED_FIREBASE_SHA1,
+            signingSha256 = "AA:BB:CC",
+            expectedRegisteredSha1 = GoogleSignatureVerifier.REGISTERED_FIREBASE_SHA1,
+            sha1MatchesRegisteredOAuth = true,
+            webClientIdConfigured = true,
+            playServicesAvailable = true,
+            playServicesVersion = "25.0",
+            playServicesStatusLabel = "Verified & Up to Date",
+            googleAuthProviderLinked = true,
+            signedInEmail = "user@example.com",
+            overallStatusLabel = "Google Signature Verified (SHA-1 Matched)",
+            certificateCount = 1,
+            hasMultipleSigners = false
+        )
+        val adultSettings = UserProfilePolicy.normalizeSettingsProfile(
+            settings = UserSettings(),
+            ageYears = 24,
+            genderId = UserGender.PREFER_NOT_TO_SAY.id
+        )
+
+        val compliantReport = PlayComplianceInspector.evaluate(
+            context = context,
+            settings = adultSettings,
+            signatureReport = trustedSig,
+            checkedAtMs = 123456L
+        )
+        assertEquals(ComplianceState.COMPLIANT, compliantReport.overallStatus)
+        assertEquals(6, compliantReport.passedCount)
+        assertEquals(6, compliantReport.totalCount)
+        assertTrue(compliantReport.toWebQueryParams().contains("status=compliant"))
+        assertTrue(compliantReport.toWebQueryParams().contains("broadStorage=0"))
+        assertTrue(compliantReport.toWebQueryParams().contains("cleartext=false"))
+
+        // Unset age triggers Action Required cleanly
+        val unsetAgeReport = PlayComplianceInspector.evaluate(
+            context = context,
+            settings = UserSettings(ageYears = 0, ageGateConfirmed = false),
+            signatureReport = trustedSig
+        )
+        assertEquals(ComplianceState.ACTION_REQUIRED, unsetAgeReport.overallStatus)
+        assertEquals(
+            ComplianceState.ACTION_REQUIRED,
+            unsetAgeReport.checks.first { it.id == PlayComplianceInspector.CHECK_AGE_ELIGIBILITY }.status
+        )
+
+        // Restricted broad media permission, cleartext traffic, and buzzword title trigger Action Required
+        val nonCompliantSnapshot = compliantReport.snapshot.copy(
+            appName = "BEST FREE AI #1",
+            usesCleartextTraffic = true,
+            declaredPermissions = compliantReport.snapshot.declaredPermissions + "android.permission.READ_MEDIA_IMAGES"
+        )
+        val flaggedReport = PlayComplianceInspector.evaluateFromSnapshot(nonCompliantSnapshot)
+        assertEquals(ComplianceState.ACTION_REQUIRED, flaggedReport.overallStatus)
+        assertEquals(
+            ComplianceState.ACTION_REQUIRED,
+            flaggedReport.checks.first { it.id == PlayComplianceInspector.CHECK_PERMISSIONS_MINIMIZATION }.status
+        )
+        assertEquals(
+            ComplianceState.ACTION_REQUIRED,
+            flaggedReport.checks.first { it.id == PlayComplianceInspector.CHECK_APP_METADATA }.status
+        )
+        assertEquals(
+            ComplianceState.ACTION_REQUIRED,
+            flaggedReport.checks.first { it.id == PlayComplianceInspector.CHECK_TARGET_SDK_TLS }.status
+        )
+    }
+
+    @Test
+    fun `legal portal auth bridge restricts trusted origins and detects google oauth errors`() {
+        assertTrue(AquaLegalPortalAuthBridge.isTrustedAquaPortalUrl("file:///android_asset/legal/index.html"))
+        assertTrue(AquaLegalPortalAuthBridge.isTrustedAquaPortalUrl("https://sras756.github.io/aqua-ai/"))
+        assertTrue(AquaLegalPortalAuthBridge.isTrustedAquaPortalUrl("https://sras756.github.io/Aqua-ai/privacy.html"))
+        assertFalse(AquaLegalPortalAuthBridge.isTrustedAquaPortalUrl("http://sras756.github.io/aqua-ai/"))
+        assertFalse(AquaLegalPortalAuthBridge.isTrustedAquaPortalUrl("https://evil.example.com/aqua-ai/"))
+        assertFalse(AquaLegalPortalAuthBridge.isTrustedAquaPortalUrl("https://sras756.github.io/other"))
+
+        assertTrue(
+            AquaLegalPortalAuthBridge.isGoogleOriginMismatchErrorUrl(
+                "https://accounts.google.com/signin/oauth/error?authError=origin_mismatch"
+            )
+        )
+        assertTrue(
+            AquaLegalPortalAuthBridge.isGoogleOAuthFlowUrl(
+                "https://accounts.google.com/o/oauth2/v2/auth?client_id=123"
+            )
+        )
+        assertFalse(AquaLegalPortalAuthBridge.isGoogleOAuthFlowUrl("https://sras756.github.io/aqua-ai/"))
+
+        assertNotNull(AquaLegalPortalAuthBridge.buildPortalSyncScript("https://sras756.github.io/aqua-ai/"))
+        assertNull(AquaLegalPortalAuthBridge.buildPortalSyncScript("https://untrusted.example.com/"))
     }
 }

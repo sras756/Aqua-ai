@@ -5,6 +5,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -75,9 +76,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -101,25 +104,72 @@ import org.json.JSONArray
 import kotlin.math.cos
 import kotlin.math.sin
 
+internal fun computeOrbWaveformAmplitude(
+    index: Int,
+    totalPoints: Int,
+    phaseRad: Float,
+    secondaryPhaseRad: Float,
+    waveformBars: FloatArray,
+    isLiveSessionActive: Boolean,
+    coreState: AquaCoreState
+): Float {
+    val safeTotal = totalPoints.coerceAtLeast(1)
+    val normPos = index.toFloat() / safeTotal.toFloat()
+    val angle = (normPos * 2.0 * kotlin.math.PI).toFloat()
+
+    val barSample = if (waveformBars.isNotEmpty()) {
+        waveformBars[index % waveformBars.size].coerceIn(0.05f, 1.0f)
+    } else {
+        0.12f
+    }
+
+    return when {
+        isLiveSessionActive -> {
+            val h1 = kotlin.math.abs(sin(angle * 3f + phaseRad))
+            val h2 = kotlin.math.abs(cos(angle * 5f - secondaryPhaseRad * 1.4f))
+            val h3 = kotlin.math.abs(sin(angle * 8f + phaseRad * 1.9f))
+            val liveWave = 0.24f + 0.42f * h1 + 0.20f * h2 + 0.14f * h3
+            val merged = (liveWave * 0.72f) + (barSample * 0.45f)
+            merged.coerceIn(0.18f, 1.0f)
+        }
+        coreState == AquaCoreState.LISTENING || coreState == AquaCoreState.SPEAKING -> {
+            val dynamicHarmonic = 0.14f * kotlin.math.abs(sin(angle * 4f + phaseRad))
+            (barSample * 0.86f + dynamicHarmonic).coerceIn(0.12f, 1.0f)
+        }
+        coreState == AquaCoreState.THINKING || coreState == AquaCoreState.EXECUTING_TOOL -> {
+            val pulseWave = 0.20f + 0.18f * kotlin.math.abs(sin(angle * 2f + phaseRad))
+            pulseWave.coerceIn(0.14f, 0.50f)
+        }
+        else -> {
+            val gentleIdle = 0.10f + 0.08f * kotlin.math.abs(sin(angle * 2f + phaseRad * 0.5f))
+            gentleIdle.coerceIn(0.08f, 0.24f)
+        }
+    }
+}
+
 @Composable
 fun AquaCoreOrb(
     coreState: AquaCoreState,
     waveformBars: FloatArray,
     personaBadge: String = "AUTO",
+    isLiveSessionActive: Boolean = false,
     onTapOrb: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val c = AquaTheme.colors
     val interactionSource = remember { MutableInteractionSource() }
     val transition = rememberInfiniteTransition(label = "aqua_core")
+    val twoPi = (2.0 * kotlin.math.PI).toFloat()
+
     val pulse by transition.animateFloat(
         initialValue = 0.90f,
-        targetValue = 1.11f,
+        targetValue = if (isLiveSessionActive) 1.15f else 1.10f,
         animationSpec = infiniteRepeatable(
             animation = tween(
-                durationMillis = when (coreState) {
-                    AquaCoreState.THINKING, AquaCoreState.EXECUTING_TOOL -> 650
-                    AquaCoreState.LISTENING, AquaCoreState.SPEAKING -> 850
+                durationMillis = when {
+                    isLiveSessionActive -> 720
+                    coreState == AquaCoreState.THINKING || coreState == AquaCoreState.EXECUTING_TOOL -> 650
+                    coreState == AquaCoreState.LISTENING || coreState == AquaCoreState.SPEAKING -> 850
                     else -> 2400
                 },
                 easing = FastOutSlowInEasing
@@ -128,12 +178,34 @@ fun AquaCoreOrb(
         ),
         label = "pulse"
     )
+    val wavePhaseRad by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = twoPi,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = if (isLiveSessionActive) 1450 else 2800,
+                easing = LinearEasing
+            )
+        ),
+        label = "wave_phase"
+    )
+    val secondaryPhaseRad by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = twoPi,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = if (isLiveSessionActive) 2250 else 4100,
+                easing = LinearEasing
+            )
+        ),
+        label = "secondary_wave_phase"
+    )
     val ripplePhase by transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(
-                durationMillis = if (coreState == AquaCoreState.IDLE) 3200 else 1500,
+                durationMillis = if (isLiveSessionActive) 1200 else if (coreState == AquaCoreState.IDLE) 3200 else 1500,
                 easing = LinearEasing
             )
         ),
@@ -143,28 +215,46 @@ fun AquaCoreOrb(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 8500, easing = LinearEasing)
+            animation = tween(durationMillis = if (isLiveSessionActive) 5200 else 8500, easing = LinearEasing)
         ),
         label = "rotation"
     )
     val stateScale by animateFloatAsState(
-        targetValue = when (coreState) {
-            AquaCoreState.LISTENING, AquaCoreState.SPEAKING -> 1.05f
-            AquaCoreState.THINKING, AquaCoreState.EXECUTING_TOOL -> 1.02f
+        targetValue = when {
+            isLiveSessionActive -> 1.07f
+            coreState == AquaCoreState.LISTENING || coreState == AquaCoreState.SPEAKING -> 1.05f
+            coreState == AquaCoreState.THINKING || coreState == AquaCoreState.EXECUTING_TOOL -> 1.02f
             else -> 1f
         },
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
         label = "orb_state_scale"
     )
+    val liveIntensity by animateFloatAsState(
+        targetValue = when {
+            isLiveSessionActive -> 1.0f
+            coreState == AquaCoreState.LISTENING || coreState == AquaCoreState.SPEAKING -> 0.74f
+            coreState == AquaCoreState.THINKING || coreState == AquaCoreState.EXECUTING_TOOL -> 0.42f
+            else -> 0.16f
+        },
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+        label = "live_intensity"
+    )
+    val orbDiameter by animateDpAsState(
+        targetValue = if (isLiveSessionActive) 204.dp else 180.dp,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "orb_diameter"
+    )
 
-    val primaryGlow = when (coreState) {
-        AquaCoreState.LISTENING -> c.accentTeal
-        AquaCoreState.THINKING -> c.accentAzure
-        AquaCoreState.EXECUTING_TOOL -> c.amber
-        AquaCoreState.SPEAKING -> c.accentCyan
-        AquaCoreState.ERROR -> c.error
-        AquaCoreState.IDLE -> c.accentCyan
+    val primaryGlow = when {
+        isLiveSessionActive -> c.accentTeal
+        coreState == AquaCoreState.LISTENING -> c.accentTeal
+        coreState == AquaCoreState.THINKING -> c.accentAzure
+        coreState == AquaCoreState.EXECUTING_TOOL -> c.amber
+        coreState == AquaCoreState.SPEAKING -> c.accentCyan
+        coreState == AquaCoreState.ERROR -> c.error
+        else -> c.accentCyan
     }
+    val secondaryGlow = if (isLiveSessionActive) c.accentCyan else c.accentTeal
 
     Column(
         modifier = modifier,
@@ -172,7 +262,7 @@ fun AquaCoreOrb(
     ) {
         Box(
             modifier = Modifier
-                .size(176.dp)
+                .size(orbDiameter)
                 .graphicsLayer {
                     scaleX = stateScale
                     scaleY = stateScale
@@ -189,14 +279,14 @@ fun AquaCoreOrb(
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val center = Offset(size.width / 2f, size.height / 2f)
-                val baseRadius = size.minDimension * 0.295f * pulse
+                val baseRadius = size.minDimension * 0.265f * pulse
 
                 // Outer holographic aura
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            primaryGlow.copy(alpha = if (c.isDark) 0.40f else 0.26f),
-                            c.accentAzure.copy(alpha = if (c.isDark) 0.16f else 0.11f),
+                            primaryGlow.copy(alpha = (if (c.isDark) 0.44f else 0.28f) * (0.7f + 0.4f * liveIntensity)),
+                            secondaryGlow.copy(alpha = if (c.isDark) 0.18f else 0.12f),
                             Color.Transparent
                         ),
                         center = center,
@@ -207,45 +297,137 @@ fun AquaCoreOrb(
                 )
 
                 // Expanding sonar wave ring
-                val waveRadius = baseRadius * (1.05f + ripplePhase * 0.58f)
-                val waveAlpha = (1f - ripplePhase) * if (coreState == AquaCoreState.IDLE) 0.20f else 0.45f
+                val waveRadius = baseRadius * (1.06f + ripplePhase * (0.48f + 0.26f * liveIntensity))
+                val waveAlpha = (1f - ripplePhase) * (0.18f + 0.36f * liveIntensity)
                 drawCircle(
                     color = primaryGlow.copy(alpha = waveAlpha),
                     radius = waveRadius,
                     center = center,
-                    style = Stroke(width = 2.0f)
+                    style = Stroke(width = if (isLiveSessionActive) 2.6f else 2.0f)
                 )
 
-                // Outer counter-rotating ring
+                // Closed harmonic spline voice waveform halo around the orb
+                val haloVertices = 48
+                val haloRadiusBase = baseRadius * (1.16f + 0.08f * liveIntensity)
+                val haloMaxDeviation = size.minDimension * (0.04f + 0.095f * liveIntensity)
+                val haloPts = Array(haloVertices) { i ->
+                    val theta = (i.toFloat() / haloVertices) * twoPi + Math.toRadians((rotation * 0.35f).toDouble()).toFloat()
+                    val amp = computeOrbWaveformAmplitude(
+                        index = i,
+                        totalPoints = haloVertices,
+                        phaseRad = wavePhaseRad,
+                        secondaryPhaseRad = secondaryPhaseRad,
+                        waveformBars = waveformBars,
+                        isLiveSessionActive = isLiveSessionActive,
+                        coreState = coreState
+                    )
+                    val r = haloRadiusBase + amp * haloMaxDeviation
+                    Offset(
+                        x = center.x + r * cos(theta),
+                        y = center.y + r * sin(theta)
+                    )
+                }
+                val haloPath = Path().apply {
+                    val startMid = Offset(
+                        (haloPts[haloVertices - 1].x + haloPts[0].x) / 2f,
+                        (haloPts[haloVertices - 1].y + haloPts[0].y) / 2f
+                    )
+                    moveTo(startMid.x, startMid.y)
+                    for (i in 0 until haloVertices) {
+                        val curr = haloPts[i]
+                        val next = haloPts[(i + 1) % haloVertices]
+                        val mid = Offset((curr.x + next.x) / 2f, (curr.y + next.y) / 2f)
+                        quadraticTo(curr.x, curr.y, mid.x, mid.y)
+                    }
+                    close()
+                }
+                drawPath(
+                    path = haloPath,
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            primaryGlow.copy(alpha = 0.06f + 0.18f * liveIntensity),
+                            secondaryGlow.copy(alpha = 0.02f + 0.12f * liveIntensity),
+                            Color.Transparent
+                        ),
+                        center = center,
+                        radius = haloRadiusBase + haloMaxDeviation
+                    )
+                )
+                drawPath(
+                    path = haloPath,
+                    brush = Brush.sweepGradient(
+                        colors = listOf(
+                            primaryGlow.copy(alpha = 0.35f + 0.55f * liveIntensity),
+                            secondaryGlow.copy(alpha = 0.45f + 0.50f * liveIntensity),
+                            c.accentAzure.copy(alpha = 0.35f + 0.45f * liveIntensity),
+                            primaryGlow.copy(alpha = 0.35f + 0.55f * liveIntensity)
+                        ),
+                        center = center
+                    ),
+                    style = Stroke(width = 1.8f + 1.8f * liveIntensity)
+                )
+
+                // Radial spectrum spokes orbiting the orb perimeter
+                val spokeCount = 36
+                val spokeInnerBase = baseRadius * 1.07f
+                val spokeMaxLen = size.minDimension * (0.045f + 0.115f * liveIntensity)
+                val spinOffsetRad = Math.toRadians((rotation * 0.5).toDouble()).toFloat()
+                for (i in 0 until spokeCount) {
+                    val theta = (i.toFloat() / spokeCount) * twoPi + spinOffsetRad
+                    val amp = computeOrbWaveformAmplitude(
+                        index = i,
+                        totalPoints = spokeCount,
+                        phaseRad = wavePhaseRad,
+                        secondaryPhaseRad = secondaryPhaseRad,
+                        waveformBars = waveformBars,
+                        isLiveSessionActive = isLiveSessionActive,
+                        coreState = coreState
+                    )
+                    val len = spokeMaxLen * amp
+                    val cosT = cos(theta)
+                    val sinT = sin(theta)
+                    val start = Offset(center.x + spokeInnerBase * cosT, center.y + spokeInnerBase * sinT)
+                    val end = Offset(center.x + (spokeInnerBase + len) * cosT, center.y + (spokeInnerBase + len) * sinT)
+                    val barColor = lerp(primaryGlow, secondaryGlow, amp.coerceIn(0f, 1f))
+                    drawLine(
+                        color = barColor.copy(alpha = 0.38f + 0.56f * liveIntensity),
+                        start = start,
+                        end = end,
+                        strokeWidth = (2.4f + 1.8f * liveIntensity),
+                        cap = StrokeCap.Round
+                    )
+                }
+
+                // Counter-rotating outer orbital track
                 drawCircle(
-                    color = c.accentTeal.copy(alpha = 0.30f),
-                    radius = baseRadius * 1.42f,
+                    color = secondaryGlow.copy(alpha = 0.28f),
+                    radius = baseRadius * 1.46f,
                     center = center,
-                    style = Stroke(width = 1.6f)
+                    style = Stroke(width = 1.5f)
                 )
                 val revRad = Math.toRadians((-rotation * 0.7).toDouble())
                 drawCircle(
-                    color = c.accentTeal,
-                    radius = 4.8f,
+                    color = secondaryGlow,
+                    radius = 4.6f,
                     center = Offset(
-                        x = center.x + (baseRadius * 1.42f * cos(revRad)).toFloat(),
-                        y = center.y + (baseRadius * 1.42f * sin(revRad)).toFloat()
+                        x = center.x + (baseRadius * 1.46f * cos(revRad)).toFloat(),
+                        y = center.y + (baseRadius * 1.46f * sin(revRad)).toFloat()
                     )
                 )
 
-                // Primary orbital ring
+                // Primary orbital ring + dot
                 drawCircle(
                     color = primaryGlow.copy(alpha = 0.56f),
-                    radius = baseRadius * 1.22f,
+                    radius = baseRadius * 1.24f,
                     center = center,
-                    style = Stroke(width = 2.8f)
+                    style = Stroke(width = 2.6f)
                 )
                 val rad = Math.toRadians(rotation.toDouble())
                 val orbitDot = Offset(
-                    x = center.x + (baseRadius * 1.22f * cos(rad)).toFloat(),
-                    y = center.y + (baseRadius * 1.22f * sin(rad)).toFloat()
+                    x = center.x + (baseRadius * 1.24f * cos(rad)).toFloat(),
+                    y = center.y + (baseRadius * 1.24f * sin(rad)).toFloat()
                 )
-                drawCircle(color = c.textPrimary, radius = 5.6f, center = orbitDot)
+                drawCircle(color = c.textPrimary, radius = 5.5f, center = orbitDot)
 
                 // Inner luminescent core
                 drawCircle(
@@ -260,38 +442,108 @@ fun AquaCoreOrb(
             }
 
             Icon(
-                imageVector = if (coreState == AquaCoreState.LISTENING) Icons.Filled.Mic else Icons.Filled.GraphicEq,
-                contentDescription = "Aqua Core State: $coreState",
+                imageVector = if (isLiveSessionActive || coreState == AquaCoreState.LISTENING) Icons.Filled.Mic else Icons.Filled.GraphicEq,
+                contentDescription = if (isLiveSessionActive) "Gemini Live Voice Active" else "Aqua Core State: $coreState",
                 tint = c.onAccent,
-                modifier = Modifier.size(30.dp)
+                modifier = Modifier.size(if (isLiveSessionActive) 34.dp else 30.dp)
             )
         }
 
         Spacer(Modifier.height(6.dp))
 
-        // Live Voice Waveform Visualizer with organic idle shimmer
+        // Horizontal Canvas Voice Waveform Ribbon & Equalizer Visualizer
         Canvas(
             modifier = Modifier
-                .fillMaxWidth(0.64f)
-                .height(26.dp)
+                .fillMaxWidth(if (isLiveSessionActive) 0.78f else 0.68f)
+                .height(if (isLiveSessionActive) 40.dp else 30.dp)
+                .testTag("aqua_orb_waveform_canvas")
         ) {
+            val midY = size.height / 2f
+            drawLine(
+                color = primaryGlow.copy(alpha = 0.16f),
+                start = Offset(0f, midY),
+                end = Offset(size.width, midY),
+                strokeWidth = 1.4f
+            )
+
+            // Mirrored equalizer bars
             val count = waveformBars.size.coerceAtLeast(1)
             val step = size.width / count
-            val midY = size.height / 2f
             for (i in 0 until count) {
-                val amp = if (coreState == AquaCoreState.IDLE) {
-                    0.18f + 0.08f * sin((ripplePhase * 6.28f) + i * 0.55f).let { kotlin.math.abs(it) }
-                } else {
-                    waveformBars[i]
-                }
+                val amp = computeOrbWaveformAmplitude(
+                    index = i,
+                    totalPoints = count,
+                    phaseRad = wavePhaseRad,
+                    secondaryPhaseRad = secondaryPhaseRad,
+                    waveformBars = waveformBars,
+                    isLiveSessionActive = isLiveSessionActive,
+                    coreState = coreState
+                )
                 val halfH = (size.height * 0.44f * amp).coerceAtLeast(2.5f)
                 val x = i * step + step / 2f
                 drawLine(
-                    color = primaryGlow,
+                    color = lerp(primaryGlow, secondaryGlow, (i.toFloat() / count)).copy(alpha = 0.35f + 0.55f * liveIntensity),
                     start = Offset(x, midY - halfH),
                     end = Offset(x, midY + halfH),
-                    strokeWidth = (step * 0.46f).coerceAtLeast(3f),
+                    strokeWidth = (step * 0.40f).coerceAtLeast(2.8f),
                     cap = StrokeCap.Round
+                )
+            }
+
+            // Dual overlapping Bezier harmonic ribbons active during voice / Gemini Live sessions
+            if (isLiveSessionActive || coreState == AquaCoreState.LISTENING || coreState == AquaCoreState.SPEAKING) {
+                val ribbonSamples = 40
+                val dx = size.width / (ribbonSamples - 1)
+                val wavePath1 = Path()
+                val wavePath2 = Path()
+                for (s in 0 until ribbonSamples) {
+                    val x = s * dx
+                    val normX = s.toFloat() / (ribbonSamples - 1)
+                    // Window taper smoothly at edges to 0
+                    val window = sin(normX * kotlin.math.PI).toFloat()
+                    val amp = computeOrbWaveformAmplitude(
+                        index = s,
+                        totalPoints = ribbonSamples,
+                        phaseRad = wavePhaseRad,
+                        secondaryPhaseRad = secondaryPhaseRad,
+                        waveformBars = waveformBars,
+                        isLiveSessionActive = isLiveSessionActive,
+                        coreState = coreState
+                    )
+                    val y1 = midY + sin(normX * 4f * twoPi + wavePhaseRad) * (size.height * 0.42f * amp * window)
+                    val y2 = midY + cos(normX * 3f * twoPi - secondaryPhaseRad) * (size.height * 0.32f * amp * window)
+                    if (s == 0) {
+                        wavePath1.moveTo(x, y1)
+                        wavePath2.moveTo(x, y2)
+                    } else {
+                        val prevX = (s - 1) * dx
+                        val prevNormX = (s - 1).toFloat() / (ribbonSamples - 1)
+                        val prevWin = sin(prevNormX * kotlin.math.PI).toFloat()
+                        val prevAmp = computeOrbWaveformAmplitude(
+                            index = s - 1,
+                            totalPoints = ribbonSamples,
+                            phaseRad = wavePhaseRad,
+                            secondaryPhaseRad = secondaryPhaseRad,
+                            waveformBars = waveformBars,
+                            isLiveSessionActive = isLiveSessionActive,
+                            coreState = coreState
+                        )
+                        val py1 = midY + sin(prevNormX * 4f * twoPi + wavePhaseRad) * (size.height * 0.42f * prevAmp * prevWin)
+                        val py2 = midY + cos(prevNormX * 3f * twoPi - secondaryPhaseRad) * (size.height * 0.32f * prevAmp * prevWin)
+                        val midX = (prevX + x) / 2f
+                        wavePath1.quadraticTo(prevX, py1, midX, (py1 + y1) / 2f)
+                        wavePath2.quadraticTo(prevX, py2, midX, (py2 + y2) / 2f)
+                    }
+                }
+                drawPath(
+                    path = wavePath1,
+                    brush = Brush.horizontalGradient(listOf(c.accentCyan, c.accentTeal, c.accentAzure)),
+                    style = Stroke(width = if (isLiveSessionActive) 3.0f else 2.2f, cap = StrokeCap.Round)
+                )
+                drawPath(
+                    path = wavePath2,
+                    color = secondaryGlow.copy(alpha = 0.65f),
+                    style = Stroke(width = 1.8f, cap = StrokeCap.Round)
                 )
             }
         }
@@ -303,22 +555,40 @@ fun AquaCoreOrb(
         ) {
             AquaStatusPulseDot(
                 color = primaryGlow,
-                active = coreState != AquaCoreState.IDLE,
+                active = isLiveSessionActive || coreState != AquaCoreState.IDLE,
                 size = 8.dp
             )
             Text(
-                text = when (coreState) {
-                    AquaCoreState.IDLE -> "AQUA CORE READY"
-                    AquaCoreState.LISTENING -> "LISTENING..."
-                    AquaCoreState.THINKING -> "GEMINI REASONING..."
-                    AquaCoreState.EXECUTING_TOOL -> "EXECUTING TOOL..."
-                    AquaCoreState.SPEAKING -> "SPEAKING (TAP TO STOP)"
-                    AquaCoreState.ERROR -> "RECOVERY STANDBY"
+                text = when {
+                    isLiveSessionActive -> "GEMINI LIVE ACTIVE (TAP TO END)"
+                    coreState == AquaCoreState.IDLE -> "AQUA CORE READY"
+                    coreState == AquaCoreState.LISTENING -> "LISTENING..."
+                    coreState == AquaCoreState.THINKING -> "GEMINI REASONING..."
+                    coreState == AquaCoreState.EXECUTING_TOOL -> "EXECUTING TOOL..."
+                    coreState == AquaCoreState.SPEAKING -> "SPEAKING (TAP TO STOP)"
+                    else -> "RECOVERY STANDBY"
                 },
                 style = MaterialTheme.typography.labelMedium,
                 color = primaryGlow,
                 fontWeight = FontWeight.SemiBold
             )
+            if (isLiveSessionActive) {
+                Surface(
+                    color = c.accentTeal.copy(alpha = 0.22f),
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier
+                        .border(1.dp, c.accentTeal.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                        .testTag("aqua_orb_live_badge")
+                ) {
+                    Text(
+                        text = "LIVE",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = c.accentTeal,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
             Surface(
                 color = primaryGlow.copy(alpha = 0.15f),
                 shape = RoundedCornerShape(6.dp),

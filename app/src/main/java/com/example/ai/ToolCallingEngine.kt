@@ -39,20 +39,32 @@ class ToolCallingEngine(
     private val freedomConfigProvider: (() -> AiFreedomConfig)? = null,
     private val aiStatusProvider: (() -> String)? = null,
     private val onSpeakWithElevenLabs: ((String) -> String)? = null,
-    private val sdkReportProvider: (() -> String)? = null
+    private val sdkReportProvider: (() -> String)? = null,
+    private val imagePluginEnabledProvider: (() -> Boolean)? = null,
+    private val onGenerateImageTool: (suspend (prompt: String, aspectRatio: String?, model: String?) -> Result<String>)? = null
 ) {
 
     fun buildToolDeclarations(
         settings: UserSettings? = null,
         promptHint: String = "",
         unlockAllTools: Boolean = false
-    ): Tool = AquaToolCatalog.buildFirebaseTool(settings, promptHint, unlockAllTools)
+    ): Tool = AquaToolCatalog.buildFirebaseTool(
+        settings = settings,
+        promptHint = promptHint,
+        unlockAllTools = unlockAllTools,
+        imagePluginEnabled = imagePluginEnabledProvider?.invoke() ?: true
+    )
 
     fun buildRestToolDeclarations(
         settings: UserSettings? = null,
         promptHint: String = "",
         unlockAllTools: Boolean = false
-    ): JSONArray = AquaToolCatalog.buildRestFunctionDeclarationsJson(settings, promptHint, unlockAllTools)
+    ): JSONArray = AquaToolCatalog.buildRestFunctionDeclarationsJson(
+        settings = settings,
+        promptHint = promptHint,
+        unlockAllTools = unlockAllTools,
+        imagePluginEnabled = imagePluginEnabledProvider?.invoke() ?: true
+    )
     // Unified declarations provided via AquaToolCatalog above.
 
     suspend fun executeFunctionCall(
@@ -1300,6 +1312,34 @@ class ToolCallingEngine(
                         ?: "Voice synthesis callback is unavailable in headless mode."
                     onTrace(AgentStepTrace("Voice Synthesis", name, "completed", outcome.take(100)))
                     jsonResult(true, outcome)
+                }
+
+                "generate_image" -> {
+                    val enabled = imagePluginEnabledProvider?.invoke() ?: true
+                    if (!enabled) {
+                        onTrace(AgentStepTrace("Image Plugin", name, "paused", "Image Studio Plugin is paused"))
+                        return jsonResult(false, "Image Studio Plugin is currently paused. Ask the user to enable it in Hub -> Image Studio.")
+                    }
+                    val prompt = argStr("prompt")
+                    if (prompt.isBlank()) {
+                        return jsonResult(false, "Provide a non-empty visual prompt for image generation.")
+                    }
+                    val ratio = argStr("aspectRatio").ifBlank { null }
+                    val model = argStr("model").ifBlank { null }
+                    val handler = onGenerateImageTool
+                        ?: return jsonResult(false, "Image generation callback is unavailable in headless mode.")
+                    val result = handler(prompt, ratio, model)
+                    result.fold(
+                        onSuccess = { summary ->
+                            onTrace(AgentStepTrace("Image Plugin", name, "completed", summary.take(120)))
+                            jsonResult(true, summary)
+                        },
+                        onFailure = { err ->
+                            val msg = err.localizedMessage ?: "Image generation failed."
+                            onTrace(AgentStepTrace("Image Plugin", name, "failed", msg.take(120)))
+                            jsonResult(false, msg)
+                        }
+                    )
                 }
 
                 else -> {

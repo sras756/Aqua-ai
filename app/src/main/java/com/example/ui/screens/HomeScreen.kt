@@ -230,10 +230,11 @@ fun HomeScreen(
 
     AquaBackdropBox(
         modifier = Modifier.fillMaxSize(),
-        accentColor = when (coreState) {
-            AquaCoreState.LISTENING -> c.accentTeal
-            AquaCoreState.EXECUTING_TOOL -> c.amber
-            AquaCoreState.ERROR -> c.error
+        accentColor = when {
+            isLiveActive -> c.accentTeal
+            coreState == AquaCoreState.LISTENING -> c.accentTeal
+            coreState == AquaCoreState.EXECUTING_TOOL -> c.amber
+            coreState == AquaCoreState.ERROR -> c.error
             else -> c.accentCyan
         }
     ) {
@@ -264,11 +265,14 @@ fun HomeScreen(
                         item {
                             AquaAnimatedEntrance(index = 0) {
                                 AquaCoreOrb(
-                                    coreState = if (isLiveActive) AquaCoreState.SPEAKING else coreState,
+                                    coreState = coreState,
                                     waveformBars = waveformBars,
                                     personaBadge = activePersona.badge,
+                                    isLiveSessionActive = isLiveActive,
                                     onTapOrb = {
-                                        if (isSpeaking) {
+                                        if (isLiveActive) {
+                                            viewModel.toggleLiveVoiceSession()
+                                        } else if (isSpeaking) {
                                             viewModel.stopSpeaking()
                                         } else if (isListening) {
                                             viewModel.stopVoiceCapture()

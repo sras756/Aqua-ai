@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.security.PlayComplianceInspector
 import com.example.ui.AquaMainViewModel
 import com.example.ui.auth.signOutUser
 import com.example.ui.components.AquaAnimatedEntrance
@@ -239,7 +240,11 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                 }
 
                 item {
+                    val complianceReport = remember(settings, signatureReport) {
+                        PlayComplianceInspector.evaluate(context, settings, signatureReport)
+                    }
                     LegalTrustLinksCard(
+                        complianceReport = complianceReport,
                         onOpenLegalDoc = { doc -> activeLegalDialog = doc }
                     )
                 }
@@ -250,6 +255,8 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
             LegalReaderFullScreenModal(
                 context = context,
                 activeDoc = activeLegalDialog ?: "privacy",
+                settings = settings,
+                signatureReport = signatureReport,
                 onChangeDoc = { activeLegalDialog = it },
                 onOpenInAppBrowser = { url ->
                     activeLegalDialog = null

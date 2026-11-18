@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Dashboard
@@ -72,6 +73,7 @@ import com.example.ui.screens.BrowserScreen
 import com.example.ui.screens.DriveVaultScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.HubScreen
+import com.example.ui.screens.ImagePluginScreen
 import com.example.ui.screens.MemoryAndHistoryScreen
 import com.example.ui.screens.RoutinesScreen
 import com.example.ui.screens.SdkAndSignatureScreen
@@ -105,6 +107,7 @@ private val AQUA_RAIL_TABS = listOf(
     AquaTab("home", "Core", Icons.Filled.GraphicEq),
     AquaTab("hub", "Hub", Icons.Filled.Dashboard),
     AquaTab("routines", "Routines", Icons.Filled.AutoMode),
+    AquaTab("image_plugin", "Studio", Icons.Filled.AutoAwesome),
     AquaTab("drive", "Drive", Icons.Filled.CloudSync),
     AquaTab("sdk", "SDK", Icons.Filled.VerifiedUser),
     AquaTab("skills", "Skills", Icons.Filled.Extension),
@@ -252,7 +255,7 @@ private fun AuthenticatedAquaShell(
         }
     }
 
-    val hubSubRoutes = setOf("drive", "sdk", "skills", "memory", "settings")
+    val hubSubRoutes = setOf("image_plugin", "drive", "sdk", "skills", "memory", "settings")
     if (currentTab != "home") {
         BackHandler {
             currentTab = if (currentTab in hubSubRoutes) {
@@ -355,6 +358,7 @@ private fun AuthenticatedAquaShell(
                                     onOpenCommandPalette = { showCommandPalette = true }
                                 )
                                 "routines" -> RoutinesScreen(viewModel = viewModel)
+                                "image_plugin" -> ImagePluginScreen(viewModel = viewModel)
                                 "drive" -> DriveVaultScreen(viewModel = viewModel)
                                 "sdk" -> SdkAndSignatureScreen(viewModel = viewModel)
                                 "skills" -> SkillsScreen(viewModel = viewModel)
