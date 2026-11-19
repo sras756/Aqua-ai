@@ -5,6 +5,7 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -63,6 +64,7 @@ import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.MainActivity
+import com.example.ai.configureAppCheck
 import com.example.device.DeviceTelemetry
 import com.example.launcher.engine.AquaLauncherEngine
 import com.example.launcher.engine.LauncherAiActionProposal
@@ -72,6 +74,7 @@ import com.example.launcher.engine.LauncherThemeEngine
 import com.example.launcher.model.GestureActionType
 import com.example.launcher.model.GestureTrigger
 import com.example.launcher.model.LauncherWidgetType
+import com.example.security.hasOfficialPlaySigningCertificate
 import com.example.ui.screens.launcher.LauncherAppDrawerContent
 import com.example.ui.screens.launcher.LauncherDefaultHomeAndSyncTab
 import com.example.ui.screens.launcher.LauncherHomeWorkspace
@@ -105,6 +108,16 @@ class AquaLauncherActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!hasOfficialPlaySigningCertificate(this)) {
+            Toast.makeText(
+                this,
+                "This app must be installed from the official Google Play release.",
+                Toast.LENGTH_LONG
+            ).show()
+            finish()
+            return
+        }
+        configureAppCheck(this, intent)
         enableEdgeToEdge()
         engine = AquaLauncherEngine.getInstance(applicationContext)
         aiController = LauncherAiController(engine)

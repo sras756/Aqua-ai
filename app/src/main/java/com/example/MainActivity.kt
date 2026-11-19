@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
@@ -11,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.fragment.app.FragmentActivity
 import com.example.ai.configureAppCheck
+import com.example.security.hasOfficialPlaySigningCertificate
 import com.example.ui.navigation.AquaRootApp
 import com.example.voice.AquaWakeWordService
 
@@ -22,7 +24,16 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // MUST be the very first statement before setContent or any Firebase.ai call
+        if (!hasOfficialPlaySigningCertificate(this)) {
+            Toast.makeText(
+                this,
+                "This app must be installed from the official Google Play release.",
+                Toast.LENGTH_LONG
+            ).show()
+            finish()
+            return
+        }
+        // MUST run before setContent or any Firebase.ai call
         configureAppCheck(this, intent)
         enableEdgeToEdge()
         handleIncomingIntent(intent)

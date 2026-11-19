@@ -17,8 +17,8 @@ android {
     applicationId = "com.aistudio.aquaai.vqrzmn"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    versionCode = 3
+    versionName = "1.0.2"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -118,7 +118,7 @@ dependencies {
   implementation(libs.googleid)
   implementation(libs.kotlin.bip39)
   implementation(libs.play.services.auth)
-  implementation(libs.firebase.appcheck.recaptcha)
+  implementation(libs.firebase.appcheck.playintegrity)
   implementation(libs.firebase.appcheck.debug)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)

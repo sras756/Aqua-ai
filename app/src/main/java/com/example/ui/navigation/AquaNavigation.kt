@@ -10,6 +10,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -45,10 +47,12 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -84,6 +88,7 @@ import com.example.ui.theme.AquaAiTheme
 import com.example.ui.theme.AquaTheme
 import com.example.wallet.FlashWalletConnector
 import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.auth
@@ -126,6 +131,30 @@ fun AquaRootApp(
     browserQuery: String? = null,
     onConsumeBrowserQuery: () -> Unit = {}
 ) {
+    val appContext = LocalContext.current.applicationContext
+    if (FirebaseApp.getApps(appContext).isEmpty()) {
+        AquaAiTheme(darkThemeMode = "aqua_abyss") {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "Firebase is not configured",
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                    Text(
+                        text = "This build needs the Firebase Android configuration file (google-services.json). Add the file for this app and rebuild.",
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+        return
+    }
+
     val currentUser by produceState<FirebaseUser?>(initialValue = Firebase.auth.currentUser) {
         val listener = FirebaseAuth.AuthStateListener { auth ->
             value = auth.currentUser

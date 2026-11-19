@@ -87,6 +87,10 @@ Once pushed to a **Public** GitHub repository:
 1. Open the **Actions** tab to run **Build & Publish Aqua AI Android Package** (`.github/workflows/android-release.yml`) to build debug/release APKs & AABs (`KEYSTORE_BASE64`, `STORE_PASSWORD`, `KEY_PASSWORD`).
 2. Publish the interactive legal portal (`index.html`, `privacy.html`, `terms.html`) via **Settings → Pages → Source: GitHub Actions**. Both Privacy Policy and Terms & Conditions include live **Sign in with Google** (Google Identity Services) client-side verification and local policy acknowledgement badges.
 
+#### GitHub Release Assets
+Public releases include the newest signed `Aqua-AI.apk`, its `.sha256` checksum, the signed `Aqua-AI.aab`, and its `.sha256` checksum. Release builds verify the Google Play App Signing certificate SHA-256:
+`D4:66:B3:05:C7:B8:97:FF:3B:0A:5C:BA:E0:DE:AC:A7:74:FD:70:C4:3E:4F:B3:A9:8D:6B:97:E2:75:CD:65:A2`.
+
 ---
 
 ## Legal Portal & Support

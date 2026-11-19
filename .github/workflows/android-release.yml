@@ -3,7 +3,7 @@ name: Build & Publish Aqua AI Android Package
 on:
   push:
     branches: ["main"]
-    tags: ["v1.0.0*"]
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -13,6 +13,10 @@ jobs:
   build-android-package:
     name: Build APK & AAB Package
     runs-on: ubuntu-latest
+    env:
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
     steps:
       - name: Checkout repository
@@ -48,14 +52,21 @@ jobs:
         run: gradle :app:assembleDebug :app:bundleDebug --no-daemon
 
       - name: Build Signed Release APK & AAB (when release keystore secrets are configured)
-        if: ${{ secrets.KEYSTORE_BASE64 != '' && secrets.STORE_PASSWORD != '' && secrets.KEY_PASSWORD != '' }}
+        if: ${{ env.KEYSTORE_BASE64 != '' && env.STORE_PASSWORD != '' && env.KEY_PASSWORD != '' }}
         env:
-          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > my-upload-key.jks
+          echo "${KEYSTORE_BASE64}" | base64 --decode > my-upload-key.jks
           gradle :app:assembleRelease :app:bundleRelease --no-daemon
+
+      - name: Stage New Release APK
+        if: ${{ env.KEYSTORE_BASE64 != '' && env.STORE_PASSWORD != '' && env.KEY_PASSWORD != '' }}
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk dist/Aqua-AI.apk
+          cp app/build/outputs/bundle/release/app-release.aab dist/Aqua-AI.aab
+          sha256sum dist/Aqua-AI.apk > dist/Aqua-AI.apk.sha256
+          sha256sum dist/Aqua-AI.aab > dist/Aqua-AI.aab.sha256
 
       - name: Upload APK & AAB Build Artifacts
         uses: actions/upload-artifact@v4
@@ -66,18 +77,22 @@ jobs:
             app/build/outputs/bundle/debug/app-debug.aab
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/bundle/release/app-release.aab
+            dist/Aqua-AI.apk
+            dist/Aqua-AI.apk.sha256
+            dist/Aqua-AI.aab
+            dist/Aqua-AI.aab.sha256
           if-no-files-found: warn
 
       - name: Publish Public GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        if: ${{ (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') && env.KEYSTORE_BASE64 != '' && env.STORE_PASSWORD != '' && env.KEY_PASSWORD != '' }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('v1.0.{0}', github.run_number) }}
           name: Aqua AI Android Package (${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('build-{0}', github.run_number) }})
           generate_release_notes: true
           files: |
-            app/build/outputs/apk/debug/app-debug.apk
-            app/build/outputs/bundle/debug/app-debug.aab
-            app/build/outputs/apk/release/app-release.apk
-            app/build/outputs/bundle/release/app-release.aab
+            dist/Aqua-AI.apk
+            dist/Aqua-AI.apk.sha256
+            dist/Aqua-AI.aab
+            dist/Aqua-AI.aab.sha256
           fail_on_unmatched_files: false
