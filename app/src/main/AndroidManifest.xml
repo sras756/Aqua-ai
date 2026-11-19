@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Least-privilege network, voice, foreground microphone, camera (QR), biometric, location, wallpaper & optional search permissions -->
+    <!-- Least-privilege network, voice, foreground microphone, camera (QR), biometric, location, alarm & optional search permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
@@ -15,26 +15,16 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
-    <uses-permission android:name="android.permission.SET_WALLPAPER" />
-    <uses-permission android:name="android.permission.SET_WALLPAPER_HINTS" />
-    <uses-permission android:name="android.permission.READ_CONTACTS" />
-    <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <uses-feature android:name="android.hardware.location" android:required="false" />
 
-    <!-- Play-compliant <queries> declarations for launcher apps, widgets, home settings & wallet deep-links -->
+    <!-- Play-compliant <queries> declarations for launchable apps & wallet/https deep-links -->
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
-        </intent>
-        <intent>
-            <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
-        </intent>
-        <intent>
-            <action android:name="android.settings.HOME_SETTINGS" />
         </intent>
         <intent>
             <action android:name="android.intent.action.VIEW" />
@@ -96,25 +86,6 @@
             </intent-filter>
         </activity>
 
-        <!-- Standalone Android HOME replacement activity (Aqua Launcher) -->
-        <activity
-            android:name=".ui.AquaLauncherActivity"
-            android:clearTaskOnLaunch="true"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
-            android:excludeFromRecents="true"
-            android:exported="true"
-            android:label="@string/launcher_name"
-            android:launchMode="singleTask"
-            android:stateNotNeeded="true"
-            android:theme="@style/Theme.MyApplication"
-            android:windowSoftInputMode="adjustPan">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.HOME" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity>
-
         <service
             android:name=".voice.AquaWakeWordService"
             android:exported="false"
@@ -137,19 +108,6 @@
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
-        </service>
-
-        <service
-            android:name=".launcher.wallpaper.AquaLiveWallpaperService"
-            android:exported="true"
-            android:label="@string/live_wallpaper_label"
-            android:permission="android.permission.BIND_WALLPAPER">
-            <intent-filter>
-                <action android:name="android.service.wallpaper.WallpaperService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.service.wallpaper"
-                android:resource="@xml/aqua_live_wallpaper" />
         </service>
     </application>
 

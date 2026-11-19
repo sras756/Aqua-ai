@@ -10,7 +10,7 @@ import org.json.JSONObject
 
 /**
  * Origin-restricted bridge allowing Aqua AI's Legal Portal pages (both bundled local assets
- * and https://sras756.github.io/aqua-ai) to authenticate using Android's native Credential
+ * and https://sras756.github.io/Aqua-ai) to authenticate using Android's native Credential
  * Manager / Firebase Auth session instead of triggering Google's WebView OAuth Error 400.
  */
 class AquaLegalPortalAuthBridge(

@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SettingsApplications
+import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.FilterChip
@@ -61,6 +62,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -81,6 +83,7 @@ import com.example.data.model.UserSettings
 import com.example.device.DeviceTelemetry
 import com.example.security.ComplianceCheckItem
 import com.example.security.ComplianceState
+import com.example.security.PlayComplianceHistoryStore
 import com.example.security.PlayComplianceInspector
 import com.example.security.PlayComplianceReport
 import com.example.security.SignatureCheckReport
@@ -358,14 +361,24 @@ fun LegalReaderFullScreenModal(
     val complianceReport = remember(settings, signatureReport, refreshTick, activeDoc) {
         PlayComplianceInspector.evaluate(context, settings, signatureReport)
     }
+    var complianceHistory by remember {
+        mutableStateOf(PlayComplianceHistoryStore.loadHistory(context))
+    }
+    LaunchedEffect(complianceReport, refreshTick) {
+        complianceHistory = PlayComplianceHistoryStore.recordEvaluation(
+            context = context,
+            report = complianceReport,
+            forceRecord = refreshTick > 0
+        )
+    }
 
     val externalUrl = when (activeDoc) {
-        "index" -> "https://sras756.github.io/aqua-ai/"
-        "terms" -> "https://sras756.github.io/aqua-ai/terms.html"
-        else -> "https://sras756.github.io/aqua-ai/privacy.html"
+        "index" -> "https://sras756.github.io/Aqua-ai/"
+        "terms" -> "https://sras756.github.io/Aqua-ai/terms.html"
+        else -> "https://sras756.github.io/Aqua-ai/privacy.html"
     }
     val assetUrl = when (activeDoc) {
-        "index" -> "file:///android_asset/legal/index.html?${complianceReport.toWebQueryParams()}"
+        "index" -> "file:///android_asset/legal/index.html?${complianceReport.toWebQueryParams(complianceHistory)}"
         "terms" -> "file:///android_asset/legal/terms.html"
         else -> "file:///android_asset/legal/privacy.html"
     }
@@ -570,7 +583,9 @@ fun LegalReaderFullScreenModal(
                         item(key = "compliance_status_card") {
                             ComplianceStatusPortalCard(
                                 report = complianceReport,
-                                onRecheck = { refreshTick++ }
+                                historyCount = complianceHistory.size,
+                                onRecheck = { refreshTick++ },
+                                onOpenTrendDashboard = { useWebViewMode = true }
                             )
                         }
                     }
@@ -733,7 +748,9 @@ private fun PermissionRow(
 @Composable
 private fun ComplianceStatusPortalCard(
     report: PlayComplianceReport,
-    onRecheck: () -> Unit
+    historyCount: Int,
+    onRecheck: () -> Unit,
+    onOpenTrendDashboard: () -> Unit
 ) {
     val c = AquaTheme.colors
     val statusAccent = if (report.isCompliant) c.success else c.amber
@@ -780,7 +797,7 @@ private fun ComplianceStatusPortalCard(
             }
 
             Text(
-                text = "Live Google Play Policy Audit • ${report.passedCount}/${report.totalCount} checks passed • Audited $checkedTime • API ${report.snapshot.targetSdkVersion} (min ${report.snapshot.minSdkVersion})",
+                text = "Live Google Play Policy Audit • ${report.passedCount}/${report.totalCount} checks passed • Audited $checkedTime • API ${report.snapshot.targetSdkVersion} (min ${report.snapshot.minSdkVersion}) • $historyCount logged audit(s)",
                 style = MaterialTheme.typography.bodySmall,
                 color = c.textMuted
             )
@@ -801,6 +818,18 @@ private fun ComplianceStatusPortalCard(
                 Icon(Icons.Filled.Refresh, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("Re-run Environment Compliance Check", color = c.accentCyan)
+            }
+
+            OutlinedButton(
+                onClick = onOpenTrendDashboard,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag("legal_compliance_trend_dashboard_button")
+            ) {
+                Icon(Icons.Filled.Timeline, contentDescription = null, tint = c.accentTeal, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Open D3.js Historical Trend Dashboard", color = c.accentTeal)
             }
         }
     }

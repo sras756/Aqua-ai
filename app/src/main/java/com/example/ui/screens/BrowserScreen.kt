@@ -561,15 +561,16 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                                     if (!(url.startsWith("http://") || url.startsWith("https://"))) {
                                         return true
                                     }
+                                    val isMainFrame = request?.isForMainFrame != false
                                     if (AquaLegalPortalAuthBridge.isGoogleOriginMismatchErrorUrl(url) ||
-                                        AquaLegalPortalAuthBridge.isGoogleOAuthFlowUrl(url)
+                                        (isMainFrame && AquaLegalPortalAuthBridge.isGoogleOAuthFlowUrl(url))
                                     ) {
                                         val isPortalOrigin = AquaLegalPortalAuthBridge.isTrustedAquaPortalUrl(lastNonOAuthUrl) ||
                                             url.lowercase().contains("sras756.github.io")
                                         if (isPortalOrigin) {
                                             val portalUrl = lastNonOAuthUrl
                                                 .takeIf { AquaLegalPortalAuthBridge.isTrustedAquaPortalUrl(it) }
-                                                ?: "https://sras756.github.io/aqua-ai/"
+                                                ?: "https://sras756.github.io/Aqua-ai/"
                                             view?.post { runCatching { view.loadUrl(portalUrl) } }
                                             triggerNativePortalSignIn()
                                         } else {
@@ -590,7 +591,7 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                                         view?.stopLoading()
                                         val recoveryUrl = lastNonOAuthUrl
                                             .takeIf { AquaLegalPortalAuthBridge.isTrustedAquaPortalUrl(it) }
-                                            ?: if (target.lowercase().contains("sras756.github.io")) "https://sras756.github.io/aqua-ai/" else null
+                                            ?: if (target.lowercase().contains("sras756.github.io")) "https://sras756.github.io/Aqua-ai/" else null
                                         if (recoveryUrl != null) {
                                             view?.post { runCatching { view.loadUrl(recoveryUrl) } }
                                             triggerNativePortalSignIn()
@@ -820,6 +821,7 @@ private fun BrowserStartHub(
     val c = AquaTheme.colors
     val quickSites = remember {
         listOf(
+            "Aqua AI Trust Portal" to "https://sras756.github.io/Aqua-ai/",
             "DuckDuckGo" to "https://duckduckgo.com",
             "Wikipedia" to "https://en.m.wikipedia.org",
             "CoinGecko" to "https://www.coingecko.com",

@@ -85,7 +85,12 @@ gradle :app:assembleDebug :app:bundleDebug
 ### Automated GitHub Packages & GitHub Pages Legal Portal
 Once pushed to a **Public** GitHub repository:
 1. Open the **Actions** tab to run **Build & Publish Aqua AI Android Package** (`.github/workflows/android-release.yml`) to build debug/release APKs & AABs (`KEYSTORE_BASE64`, `STORE_PASSWORD`, `KEY_PASSWORD`).
-2. Publish the interactive legal portal (`index.html`, `privacy.html`, `terms.html`) via **Settings → Pages → Source: GitHub Actions**. Both Privacy Policy and Terms & Conditions include live **Sign in with Google** (Google Identity Services) client-side verification and local policy acknowledgement badges.
+2. Publish the interactive legal portal (`index.html`, `privacy.html`, `terms.html`) via **Settings → Pages → Source: GitHub Actions** (`https://sras756.github.io/Aqua-ai/`). Both Privacy Policy and Terms & Conditions include live **Sign in with Google** (Google Identity Services) client-side verification and local policy acknowledgement badges.
+3. **External Web Browser OAuth Origin Setup (Fixes `Error 400: origin_mismatch`)**:
+   - In [Google Cloud Console → APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials?project=gen-lang-client-0405170912), open OAuth 2.0 Web Client `299712147014-tr9jkmpjf6nj5h66ekissl1arb2es3rp.apps.googleusercontent.com`.
+   - Under **Authorized JavaScript origins**, add the exact origin (scheme + host only, no trailing slash or `/Aqua-ai/` path):
+     - `https://sras756.github.io`
+   - Inside the Aqua AI Android app (Legal Portal modal and Aqua Browser), Google Sign-In automatically uses native Android Credential Manager (`AquaLegalPortalAuthBridge`) and works immediately.
 
 #### GitHub Release Assets
 Public releases include the newest signed `Aqua-AI.apk`, its `.sha256` checksum, the signed `Aqua-AI.aab`, and its `.sha256` checksum. Release builds verify the Google Play App Signing certificate SHA-256:
@@ -94,7 +99,7 @@ Public releases include the newest signed `Aqua-AI.apk`, its `.sha256` checksum,
 ---
 
 ## Legal Portal & Support
-- [Legal & Capabilities Portal](index.html)
-- [Privacy Policy](privacy.html)
-- [Terms & Conditions](terms.html)
+- [Legal & Capabilities Portal](https://sras756.github.io/Aqua-ai/) (`index.html`)
+- [Privacy Policy](https://sras756.github.io/Aqua-ai/privacy.html) (`privacy.html`)
+- [Terms & Conditions](https://sras756.github.io/Aqua-ai/terms.html) (`terms.html`)
 - Developer Support: `srasmarkhor7289@gmail.com`

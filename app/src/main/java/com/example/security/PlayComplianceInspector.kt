@@ -13,6 +13,8 @@ import com.example.data.model.UserSettings
 import com.example.domain.AgeTier
 import com.example.domain.UserProfilePolicy
 import com.example.voice.AquaWakeWordService
+import org.json.JSONArray
+import org.json.JSONObject
 
 enum class ComplianceState(val label: String) {
     COMPLIANT("Compliant"),
@@ -42,6 +44,15 @@ data class ComplianceEnvironmentSnapshot(
     val signatureReport: SignatureCheckReport
 )
 
+data class ComplianceHistoryPoint(
+    val timestampMs: Long,
+    val passedCount: Int,
+    val totalCount: Int,
+    val status: ComplianceState,
+    val ageTierId: String,
+    val targetSdkVersion: Int
+)
+
 data class PlayComplianceReport(
     val overallStatus: ComplianceState,
     val passedCount: Int,
@@ -52,7 +63,7 @@ data class PlayComplianceReport(
 ) {
     val isCompliant: Boolean get() = overallStatus == ComplianceState.COMPLIANT
 
-    fun toWebQueryParams(): String {
+    fun toWebQueryParams(history: List<ComplianceHistoryPoint> = emptyList()): String {
         val broadStorageCount = checks.firstOrNull { it.id == PlayComplianceInspector.CHECK_PERMISSIONS_MINIMIZATION }
             ?.let { if (it.status == ComplianceState.COMPLIANT) 0 else 1 } ?: 0
         val fgsOk = checks.firstOrNull { it.id == PlayComplianceInspector.CHECK_FOREGROUND_SERVICE }
@@ -69,6 +80,10 @@ data class PlayComplianceReport(
             append("&ageTier=").append(Uri.encode(snapshot.ageTier.id))
             append("&sigOk=").append(snapshot.signatureReport.isTrustedForGoogleSignIn)
             append("&status=").append(if (isCompliant) "compliant" else "action_required")
+            val encodedHistory = PlayComplianceHistoryStore.encodeCompactHistory(history)
+            if (encodedHistory.isNotBlank()) {
+                append("&history=").append(Uri.encode(encodedHistory))
+            }
         }
     }
 }
@@ -419,5 +434,115 @@ object PlayComplianceInspector {
                 remediation = "Run on a Google Play Services enabled device with valid APK signing SHA-1 and Firebase OAuth default_web_client_id."
             )
         }
+    }
+}
+
+/**
+ * Persists real PlayComplianceInspector audit results in device-local SharedPreferences
+ * without ever synthesizing placeholder or demo history points.
+ */
+object PlayComplianceHistoryStore {
+    private const val PREFS_NAME = "aqua_compliance_audit_history"
+    private const val KEY_HISTORY_JSON = "history_json_v1"
+    private const val MAX_STORED_POINTS = 40
+    private const val MIN_AUTO_RECORD_INTERVAL_MS = 15 * 60 * 1000L
+
+    fun loadHistory(context: Context): List<ComplianceHistoryPoint> {
+        val appContext = context.applicationContext ?: context
+        val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val raw = prefs.getString(KEY_HISTORY_JSON, null).orEmpty()
+        if (raw.isBlank()) return emptyList()
+        return runCatching {
+            val arr = JSONArray(raw)
+            buildList {
+                for (i in 0 until arr.length()) {
+                    val obj = arr.optJSONObject(i) ?: continue
+                    val ts = obj.optLong("ts", 0L)
+                    val passed = obj.optInt("passed", -1)
+                    val total = obj.optInt("total", 0)
+                    if (ts <= 0L || total <= 0 || passed < 0) continue
+                    val compliant = obj.optBoolean("compliant", passed == total)
+                    add(
+                        ComplianceHistoryPoint(
+                            timestampMs = ts,
+                            passedCount = passed.coerceIn(0, total),
+                            totalCount = total,
+                            status = if (compliant) ComplianceState.COMPLIANT else ComplianceState.ACTION_REQUIRED,
+                            ageTierId = obj.optString("ageTier", ""),
+                            targetSdkVersion = obj.optInt("targetSdk", 36)
+                        )
+                    )
+                }
+            }.sortedBy { it.timestampMs }
+        }.getOrDefault(emptyList())
+    }
+
+    fun recordEvaluation(
+        context: Context,
+        report: PlayComplianceReport,
+        forceRecord: Boolean = false
+    ): List<ComplianceHistoryPoint> {
+        val current = loadHistory(context).toMutableList()
+        val last = current.lastOrNull()
+        val stateChanged = last == null ||
+            last.passedCount != report.passedCount ||
+            last.totalCount != report.totalCount ||
+            last.status != report.overallStatus ||
+            last.ageTierId != report.snapshot.ageTier.id ||
+            last.targetSdkVersion != report.snapshot.targetSdkVersion
+        val intervalElapsed = last == null ||
+            (report.checkedAtMs - last.timestampMs) >= MIN_AUTO_RECORD_INTERVAL_MS
+
+        if (forceRecord || stateChanged || intervalElapsed) {
+            current += ComplianceHistoryPoint(
+                timestampMs = report.checkedAtMs,
+                passedCount = report.passedCount,
+                totalCount = report.totalCount,
+                status = report.overallStatus,
+                ageTierId = report.snapshot.ageTier.id,
+                targetSdkVersion = report.snapshot.targetSdkVersion
+            )
+            val trimmed = current.sortedBy { it.timestampMs }.takeLast(MAX_STORED_POINTS)
+            saveHistory(context, trimmed)
+            return trimmed
+        }
+        return current
+    }
+
+    fun clearHistory(context: Context) {
+        val appContext = context.applicationContext ?: context
+        appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY_HISTORY_JSON)
+            .apply()
+    }
+
+    fun encodeCompactHistory(history: List<ComplianceHistoryPoint>): String {
+        if (history.isEmpty()) return ""
+        return history.takeLast(24).joinToString(";") { pt ->
+            val ok = if (pt.status == ComplianceState.COMPLIANT) 1 else 0
+            "${pt.timestampMs}:${pt.passedCount}:${pt.totalCount}:$ok"
+        }
+    }
+
+    private fun saveHistory(context: Context, points: List<ComplianceHistoryPoint>) {
+        val appContext = context.applicationContext ?: context
+        val arr = JSONArray()
+        points.forEach { pt ->
+            arr.put(
+                JSONObject().apply {
+                    put("ts", pt.timestampMs)
+                    put("passed", pt.passedCount)
+                    put("total", pt.totalCount)
+                    put("compliant", pt.status == ComplianceState.COMPLIANT)
+                    put("ageTier", pt.ageTierId)
+                    put("targetSdk", pt.targetSdkVersion)
+                }
+            )
+        }
+        appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_HISTORY_JSON, arr.toString())
+            .apply()
     }
 }

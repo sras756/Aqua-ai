@@ -5,11 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Aqua AI — Legal, Privacy &amp; Security Trust Portal</title>
   <meta name="description" content="Official trust portal, Sign in with Google verification, Privacy Policy, Terms & Conditions, Google Signature Check, Google Drive Vault, and Android SDK architecture for Aqua AI (com.aistudio.aquaai.vqrzmn)." />
+  <link rel="canonical" href="https://sras756.github.io/Aqua-ai/" />
+  <meta property="og:url" content="https://sras756.github.io/Aqua-ai/" />
   <link rel="icon" type="image/png" href="public/branding/aqua-ai-logo-512.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js" defer></script>
   <style>
     :root {
       --bg: #030b16;
@@ -578,6 +581,72 @@
       color: var(--amber);
       font-weight: 600;
     }
+    .trend-kpis {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 10px;
+      margin: 14px 0;
+    }
+    .trend-kpi {
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 14px;
+    }
+    .trend-kpi-label {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .trend-kpi-val {
+      font-family: "Outfit", sans-serif;
+      font-size: 1.28rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .trend-chart-wrap {
+      position: relative;
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px 12px 10px;
+      min-height: 270px;
+      overflow: hidden;
+    }
+    .trend-tooltip {
+      position: absolute;
+      pointer-events: none;
+      opacity: 0;
+      z-index: 15;
+      background: var(--surface-solid);
+      border: 1px solid var(--border-strong);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 0.78rem;
+      color: var(--text);
+      box-shadow: var(--shadow);
+      min-width: 170px;
+      transition: opacity 0.12s ease;
+    }
+    .trend-legend {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 14px;
+      margin-top: 10px;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .legend-dot {
+      display: inline-block;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      margin-right: 5px;
+    }
     a { color: var(--cyan); }
     footer {
       margin-top: 32px;
@@ -616,6 +685,7 @@
       <nav class="nav-links" aria-label="Primary Navigation">
         <a class="active" href="index.html">Overview</a>
         <a href="#compliance-status">Compliance Status</a>
+        <a href="#compliance-trend">Trend Dashboard</a>
         <a href="#features">All Features</a>
         <a href="#permissions-audit">Permissions Audit</a>
         <a href="privacy.html">Privacy Policy</a>
@@ -674,6 +744,16 @@
         <button class="icon-btn" type="button" id="ackLegalBtn" style="display:none;border-color:var(--cyan);color:var(--cyan);">✓ Acknowledge Privacy &amp; Terms</button>
         <span class="ack-badge" id="ackStatusBadge" style="display:none;"></span>
         <button class="icon-btn" type="button" id="gsiSignOutBtn" style="display:none;">Sign Out</button>
+        <button class="icon-btn" type="button" id="oauthHelpToggleBtn" style="display:none;font-size:0.76rem;" title="Configure Authorized JavaScript Origin or Custom Client ID">⚙ OAuth Origin</button>
+      </div>
+      <div id="oauthOriginNotice" style="display:none;flex-basis:100%;margin-top:4px;padding:12px 14px;border-radius:14px;background:var(--surface-elevated);border:1px solid rgba(251,191,36,0.45);font-size:0.83rem;color:var(--muted);">
+        <strong style="color:var(--amber);display:block;margin-bottom:4px;">Google OAuth 2.0 JavaScript Origin Setup (Fixes Error 400: origin_mismatch)</strong>
+        <div>In Google Cloud Console → <em>APIs &amp; Services → Credentials</em>, add <code id="oauthOriginValue">https://sras756.github.io</code> under <strong>Authorized JavaScript origins</strong> for OAuth Web Client <code id="oauthClientValue"></code> (exact scheme + host only, without <code>/Aqua-ai/</code>).</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px;">
+          <button class="icon-btn" type="button" id="copyOriginBtn">Copy Origin</button>
+          <input id="customClientIdInput" type="text" placeholder="Optional custom Web OAuth Client ID (.apps.googleusercontent.com)" style="flex:1;min-width:220px;padding:6px 10px;border-radius:10px;border:1px solid var(--border);background:var(--code-bg);color:var(--text);font-size:0.78rem;font-family:'JetBrains Mono',monospace;" />
+          <button class="icon-btn" type="button" id="saveCustomClientBtn">Apply Client ID</button>
+        </div>
       </div>
     </section>
 
@@ -690,6 +770,77 @@
       </div>
       <p id="complianceSummaryText" style="margin:4px 0 0;">Evaluating runtime environment configuration against Google Play policies…</p>
       <div class="compliance-grid" id="complianceChecksList"></div>
+    </section>
+
+    <section class="card" id="compliance-trend" aria-live="polite" style="margin-bottom:24px;">
+      <div class="compliance-header">
+        <div>
+          <span class="badge" style="margin-bottom:6px;">● D3.JS HISTORICAL TELEMETRY • REAL AUDIT LOG</span>
+          <h2 style="margin:0;">Compliance Status Trend Dashboard</h2>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <button class="icon-btn" type="button" id="logAuditSnapshotBtn">↻ Log Audit</button>
+          <button class="icon-btn" type="button" id="exportComplianceHistoryBtn">⇩ Export JSON</button>
+          <button class="icon-btn" type="button" id="clearComplianceHistoryBtn">✕ Clear Log</button>
+        </div>
+      </div>
+      <p style="margin:4px 0 12px;">
+        Interactive D3.js trend line charting real recorded Google Play policy evaluations across app and portal sessions (no synthetic or placeholder data).
+      </p>
+
+      <div class="features-toolbar" style="margin-bottom:12px;">
+        <div class="filter-tabs" role="tablist" aria-label="Filter compliance trend range">
+          <button class="filter-tab trend-range-tab active" type="button" data-range="all">All Logged</button>
+          <button class="filter-tab trend-range-tab" type="button" data-range="10">Last 10</button>
+          <button class="filter-tab trend-range-tab" type="button" data-range="24h">24 Hours</button>
+          <button class="filter-tab trend-range-tab" type="button" data-range="7d">7 Days</button>
+        </div>
+        <span class="features-count" id="trendWindowLabel">Showing real recorded audits</span>
+      </div>
+
+      <div class="trend-kpis">
+        <div class="trend-kpi">
+          <div class="trend-kpi-label">Latest Score</div>
+          <div class="trend-kpi-val" id="trendLatestScore">—</div>
+        </div>
+        <div class="trend-kpi">
+          <div class="trend-kpi-label">Compliant Rate</div>
+          <div class="trend-kpi-val" id="trendPassRate">—</div>
+        </div>
+        <div class="trend-kpi">
+          <div class="trend-kpi-label">Logged Audits</div>
+          <div class="trend-kpi-val" id="trendTotalCount">0</div>
+        </div>
+        <div class="trend-kpi">
+          <div class="trend-kpi-label">Last Audited</div>
+          <div class="trend-kpi-val" id="trendLastTimestamp" style="font-size:0.95rem;">—</div>
+        </div>
+      </div>
+
+      <div class="trend-chart-wrap" id="d3ComplianceChartWrap">
+        <div id="d3ComplianceChart"></div>
+        <div class="trend-tooltip" id="d3ComplianceTooltip"></div>
+      </div>
+
+      <div class="trend-legend">
+        <span><span class="legend-dot" style="background:var(--cyan);"></span>Adherence Score (%)</span>
+        <span><span class="legend-dot" style="background:var(--emerald);"></span>Compliant Check (100%)</span>
+        <span><span class="legend-dot" style="background:var(--amber);"></span>Action Required (&lt;100%)</span>
+      </div>
+
+      <div class="matrix-wrap" style="margin-top:14px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Audit Timestamp</th>
+              <th>Source</th>
+              <th>Score</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="complianceHistoryTableBody"></tbody>
+        </table>
+      </div>
     </section>
 
     <section class="bento">
@@ -1088,6 +1239,9 @@
           root.setAttribute("data-theme", next);
           localStorage.setItem(key, next);
           syncLabel();
+          if (typeof renderComplianceDashboard === "function") {
+            renderComplianceDashboard();
+          }
         });
       }
 
@@ -1123,7 +1277,16 @@
       }
 
       // Google Identity Services Portal Verification & Local Policy Ack
-      const CLIENT_ID = "299712147014-tr9jkmpjf6nj5h66ekissl1arb2es3rp.apps.googleusercontent.com";
+      const DEFAULT_CLIENT_ID = "299712147014-tr9jkmpjf6nj5h66ekissl1arb2es3rp.apps.googleusercontent.com";
+      const CLIENT_OVERRIDE_KEY = "aqua_web_oauth_client_id";
+      const queryClientId = new URLSearchParams(window.location.search).get("client_id");
+      if (queryClientId && queryClientId.endsWith(".apps.googleusercontent.com")) {
+        localStorage.setItem(CLIENT_OVERRIDE_KEY, queryClientId.trim());
+      }
+      function getActiveClientId() {
+        const stored = (localStorage.getItem(CLIENT_OVERRIDE_KEY) || "").trim();
+        return stored.endsWith(".apps.googleusercontent.com") ? stored : DEFAULT_CLIENT_ID;
+      }
       const USER_KEY = "aqua_google_user";
       const ACK_KEY = "aqua_legal_ack";
       const signedOutEl = document.getElementById("gsiSignedOutInfo");
@@ -1135,6 +1298,13 @@
       const ackBtn = document.getElementById("ackLegalBtn");
       const ackBadge = document.getElementById("ackStatusBadge");
       const signOutBtn = document.getElementById("gsiSignOutBtn");
+      const oauthHelpBtn = document.getElementById("oauthHelpToggleBtn");
+      const oauthNoticeEl = document.getElementById("oauthOriginNotice");
+      const oauthOriginValEl = document.getElementById("oauthOriginValue");
+      const oauthClientValEl = document.getElementById("oauthClientValue");
+      const copyOriginBtn = document.getElementById("copyOriginBtn");
+      const customClientInput = document.getElementById("customClientIdInput");
+      const saveCustomClientBtn = document.getElementById("saveCustomClientBtn");
 
       function decodeGoogleJwt(token) {
         const parts = (token || "").split(".");
@@ -1191,7 +1361,310 @@
           .replace(/"/g, "&quot;");
       }
 
-      function evaluateCompliance() {
+      const COMPLIANCE_HISTORY_KEY = "aqua_compliance_history_v1";
+      let activeTrendRange = "all";
+      let complianceSeededFromQuery = false;
+
+      function loadComplianceHistory() {
+        let items = [];
+        try {
+          const parsed = JSON.parse(localStorage.getItem(COMPLIANCE_HISTORY_KEY) || "[]");
+          if (Array.isArray(parsed)) {
+            items = parsed.filter((x) => x && Number(x.ts) > 0 && Number(x.total) > 0);
+          }
+        } catch (_) {}
+
+        if (!complianceSeededFromQuery) {
+          complianceSeededFromQuery = true;
+          const rawHist = new URLSearchParams(window.location.search).get("history");
+          if (rawHist) {
+            const byTs = new Map(items.map((x) => [Number(x.ts), x]));
+            rawHist.split(";").forEach((seg) => {
+              const parts = seg.split(":");
+              if (parts.length < 4) return;
+              const ts = parseInt(parts[0], 10);
+              const passed = parseInt(parts[1], 10);
+              const total = parseInt(parts[2], 10);
+              const compliant = parts[3] === "1";
+              if (ts > 0 && total > 0 && passed >= 0 && !byTs.has(ts)) {
+                byTs.set(ts, { ts, passed, total, compliant, source: "Android Runtime" });
+              }
+            });
+            items = Array.from(byTs.values()).sort((a, b) => a.ts - b.ts).slice(-40);
+            localStorage.setItem(COMPLIANCE_HISTORY_KEY, JSON.stringify(items));
+          }
+        }
+        return items.sort((a, b) => a.ts - b.ts);
+      }
+
+      function recordCompliancePoint(passed, total, allCompliant, forceLog) {
+        const list = loadComplianceHistory();
+        const now = Date.now();
+        const last = list[list.length - 1];
+        const source = new URLSearchParams(window.location.search).has("ageTier")
+          ? "Android Runtime"
+          : "Web Portal";
+        const changed = !last || last.passed !== passed || last.total !== total || last.compliant !== allCompliant;
+        const stale = !last || (now - last.ts) >= (5 * 60 * 1000);
+
+        if (forceLog || changed || stale) {
+          list.push({
+            ts: now,
+            passed,
+            total,
+            compliant: allCompliant,
+            source
+          });
+          const trimmed = list.slice(-40);
+          localStorage.setItem(COMPLIANCE_HISTORY_KEY, JSON.stringify(trimmed));
+          return trimmed;
+        }
+        return list;
+      }
+
+      function filterHistoryByRange(items, range) {
+        const now = Date.now();
+        if (range === "10") return items.slice(-10);
+        if (range === "24h") return items.filter((d) => (now - d.ts) <= 24 * 60 * 60 * 1000);
+        if (range === "7d") return items.filter((d) => (now - d.ts) <= 7 * 24 * 60 * 60 * 1000);
+        return items;
+      }
+
+      function renderComplianceDashboard() {
+        const allItems = loadComplianceHistory();
+        const visible = filterHistoryByRange(allItems, activeTrendRange);
+        const latest = visible[visible.length - 1] || allItems[allItems.length - 1];
+
+        const latestEl = document.getElementById("trendLatestScore");
+        const rateEl = document.getElementById("trendPassRate");
+        const countBadgeEl = document.getElementById("trendTotalCount");
+        const lastTsEl = document.getElementById("trendLastTimestamp");
+        const windowLabelEl = document.getElementById("trendWindowLabel");
+        const tbody = document.getElementById("complianceHistoryTableBody");
+        const chartHost = document.getElementById("d3ComplianceChart");
+        const tooltipEl = document.getElementById("d3ComplianceTooltip");
+
+        if (latestEl) {
+          if (latest) {
+            const pct = Math.round((latest.passed / latest.total) * 100);
+            latestEl.textContent = latest.passed + " / " + latest.total + " (" + pct + "%)";
+            latestEl.style.color = latest.compliant ? "var(--emerald)" : "var(--amber)";
+          } else {
+            latestEl.textContent = "—";
+          }
+        }
+        if (rateEl) {
+          if (visible.length > 0) {
+            const compliantCount = visible.filter((d) => d.compliant).length;
+            const pct = Math.round((compliantCount / visible.length) * 100);
+            rateEl.textContent = pct + "%";
+            rateEl.style.color = pct === 100 ? "var(--emerald)" : "var(--amber)";
+          } else {
+            rateEl.textContent = "—";
+          }
+        }
+        if (countBadgeEl) countBadgeEl.textContent = String(visible.length);
+        if (lastTsEl) {
+          lastTsEl.textContent = latest
+            ? new Date(latest.ts).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" })
+            : "—";
+        }
+        if (windowLabelEl) {
+          windowLabelEl.textContent = visible.length + " of " + allItems.length + " real audit(s) plotted";
+        }
+
+        if (tbody) {
+          const recent = visible.slice(-8).reverse();
+          if (recent.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4">No compliance audits logged yet. Click <strong>Log Audit</strong> above to record a real environment evaluation.</td></tr>';
+          } else {
+            tbody.innerHTML = recent.map((d) => {
+              const pct = Math.round((d.passed / d.total) * 100);
+              const tsText = new Date(d.ts).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+              const pillCls = d.compliant ? "status-compliant" : "status-action";
+              const pillLabel = d.compliant ? "Compliant" : "Action Required";
+              return "<tr>" +
+                "<td>" + escapeHtml(tsText) + "</td>" +
+                "<td>" + escapeHtml(d.source || "Portal") + "</td>" +
+                "<td><strong>" + d.passed + " / " + d.total + "</strong> (" + pct + "%)</td>" +
+                '<td><span class="status-pill ' + pillCls + '">' + pillLabel + "</span></td>" +
+                "</tr>";
+            }).join("");
+          }
+        }
+
+        if (!chartHost) return;
+        chartHost.innerHTML = "";
+        if (!window.d3) {
+          chartHost.innerHTML = '<div style="padding:36px 16px;text-align:center;color:var(--muted);font-size:0.88rem;">D3.js library could not be loaded (offline environment). Real audit KPIs and table rows above remain live.</div>';
+          return;
+        }
+        if (visible.length === 0) {
+          chartHost.innerHTML = '<div style="padding:36px 16px;text-align:center;color:var(--muted);font-size:0.88rem;">No compliance checks logged in this range yet.</div>';
+          return;
+        }
+
+        const cs = getComputedStyle(document.documentElement);
+        const cyan = cs.getPropertyValue("--cyan").trim() || "#22d3ee";
+        const teal = cs.getPropertyValue("--teal").trim() || "#2dd4bf";
+        const emerald = cs.getPropertyValue("--emerald").trim() || "#34d399";
+        const amber = cs.getPropertyValue("--amber").trim() || "#fbbf24";
+        const muted = cs.getPropertyValue("--muted").trim() || "#93b3cc";
+        const border = cs.getPropertyValue("--border").trim() || "rgba(56,189,248,0.22)";
+
+        const width = Math.max(300, chartHost.clientWidth || 640);
+        const height = 240;
+        const margin = { top: 20, right: 20, bottom: 38, left: 46 };
+        const innerW = width - margin.left - margin.right;
+        const innerH = height - margin.top - margin.bottom;
+
+        const data = visible.map((d, idx) => ({
+          idx,
+          ts: d.ts,
+          date: new Date(d.ts),
+          passed: d.passed,
+          total: d.total,
+          pct: (d.passed / d.total) * 100,
+          compliant: d.compliant,
+          source: d.source || "Portal"
+        }));
+
+        const svg = d3.select(chartHost)
+          .append("svg")
+          .attr("viewBox", "0 0 " + width + " " + height)
+          .attr("width", "100%")
+          .attr("height", height)
+          .attr("role", "img")
+          .attr("aria-label", "D3.js Compliance Status Historical Trend Chart");
+
+        const defs = svg.append("defs");
+        const grad = defs.append("linearGradient")
+          .attr("id", "aquaComplianceAreaGrad")
+          .attr("x1", "0%").attr("y1", "0%")
+          .attr("x2", "0%").attr("y2", "100%");
+        grad.append("stop").attr("offset", "0%").attr("stop-color", cyan).attr("stop-opacity", 0.34);
+        grad.append("stop").attr("offset", "100%").attr("stop-color", teal).attr("stop-opacity", 0.02);
+
+        const g = svg.append("g").attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+        const minTs = data[0].ts;
+        const maxTs = data[data.length - 1].ts;
+        const useTimeScale = data.length > 1 && (maxTs - minTs) > 1000;
+        const xScale = useTimeScale
+          ? d3.scaleTime().domain([new Date(minTs), new Date(maxTs)]).range([0, innerW])
+          : d3.scalePoint().domain(data.map((d) => d.idx)).range([0, innerW]).padding(0.5);
+
+        const yScale = d3.scaleLinear().domain([0, 100]).range([innerH, 0]);
+        const getX = (d) => useTimeScale ? xScale(d.date) : xScale(d.idx);
+
+        // Horizontal percentage gridlines
+        g.append("g")
+          .selectAll("line")
+          .data([0, 25, 50, 75, 100])
+          .join("line")
+          .attr("x1", 0)
+          .attr("x2", innerW)
+          .attr("y1", (v) => yScale(v))
+          .attr("y2", (v) => yScale(v))
+          .attr("stroke", border)
+          .attr("stroke-dasharray", (v) => (v === 100 ? "5,4" : "2,4"));
+
+        // 100% Compliant target label
+        g.append("text")
+          .attr("x", innerW - 4)
+          .attr("y", yScale(100) - 5)
+          .attr("text-anchor", "end")
+          .attr("fill", emerald)
+          .attr("font-size", "10px")
+          .attr("font-family", "JetBrains Mono, monospace")
+          .text("100% Compliant Target");
+
+        const yAxis = d3.axisLeft(yScale).ticks(4).tickFormat((v) => v + "%");
+        const yAxisG = g.append("g").call(yAxis);
+        yAxisG.selectAll("text").attr("fill", muted).attr("font-size", "10px").attr("font-family", "JetBrains Mono, monospace");
+        yAxisG.selectAll("path, line").attr("stroke", border);
+
+        const xAxis = useTimeScale
+          ? d3.axisBottom(xScale).ticks(Math.min(5, data.length))
+          : d3.axisBottom(xScale).tickFormat((idx) => {
+              const item = data[idx];
+              return item ? item.date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+            });
+        const xAxisG = g.append("g")
+          .attr("transform", "translate(0," + innerH + ")")
+          .call(xAxis);
+        xAxisG.selectAll("text").attr("fill", muted).attr("font-size", "10px").attr("font-family", "JetBrains Mono, monospace");
+        xAxisG.selectAll("path, line").attr("stroke", border);
+
+        if (data.length >= 2) {
+          const area = d3.area()
+            .x((d) => getX(d))
+            .y0(innerH)
+            .y1((d) => yScale(d.pct))
+            .curve(d3.curveMonotoneX);
+
+          const line = d3.line()
+            .x((d) => getX(d))
+            .y((d) => yScale(d.pct))
+            .curve(d3.curveMonotoneX);
+
+          g.append("path")
+            .datum(data)
+            .attr("fill", "url(#aquaComplianceAreaGrad)")
+            .attr("d", area);
+
+          g.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", cyan)
+            .attr("stroke-width", 2.6)
+            .attr("stroke-linecap", "round")
+            .attr("d", line);
+        }
+
+        const focusLine = g.append("line")
+          .attr("y1", 0)
+          .attr("y2", innerH)
+          .attr("stroke", cyan)
+          .attr("stroke-dasharray", "3,3")
+          .style("opacity", 0);
+
+        g.selectAll("circle.audit-dot")
+          .data(data)
+          .join("circle")
+          .attr("class", "audit-dot")
+          .attr("cx", (d) => getX(d))
+          .attr("cy", (d) => yScale(d.pct))
+          .attr("r", data.length === 1 ? 7 : 5)
+          .attr("fill", (d) => (d.compliant ? emerald : amber))
+          .attr("stroke", "#030b16")
+          .attr("stroke-width", 2)
+          .style("cursor", "pointer")
+          .on("mouseenter click", function (event, d) {
+            const cx = getX(d);
+            focusLine.attr("x1", cx).attr("x2", cx).style("opacity", 0.7);
+            if (tooltipEl) {
+              const tsFmt = d.date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+              tooltipEl.innerHTML =
+                '<div style="font-weight:700;color:' + (d.compliant ? "var(--emerald)" : "var(--amber)") + ';">' +
+                (d.compliant ? "Compliant" : "Action Required") + " • " + Math.round(d.pct) + "%</div>" +
+                '<div>Score: <strong>' + d.passed + " / " + d.total + " checks</strong></div>" +
+                '<div style="color:var(--muted);">Source: ' + escapeHtml(d.source) + "</div>" +
+                '<div style="color:var(--muted);font-size:0.72rem;">' + escapeHtml(tsFmt) + "</div>";
+              const left = Math.min(width - 185, Math.max(8, cx + margin.left - 80));
+              const top = Math.max(6, yScale(d.pct) + margin.top - 72);
+              tooltipEl.style.left = left + "px";
+              tooltipEl.style.top = top + "px";
+              tooltipEl.style.opacity = "1";
+            }
+          })
+          .on("mouseleave", function () {
+            focusLine.style("opacity", 0);
+            if (tooltipEl) tooltipEl.style.opacity = "0";
+          });
+      }
+
+      function evaluateCompliance(forceLog) {
         const params = new URLSearchParams(window.location.search);
         const appName = (params.get("appName") || "Aqua AI").trim();
         const targetSdkRaw = params.get("targetSdk");
@@ -1340,10 +1813,48 @@
               "</article>";
           }).join("");
         }
+
+        recordCompliancePoint(passed, checks.length, allCompliant, Boolean(forceLog));
+        renderComplianceDashboard();
       }
 
       const recheckBtn = document.getElementById("recheckComplianceBtn");
-      if (recheckBtn) recheckBtn.addEventListener("click", evaluateCompliance);
+      if (recheckBtn) recheckBtn.addEventListener("click", () => evaluateCompliance(true));
+
+      const logAuditSnapshotBtn = document.getElementById("logAuditSnapshotBtn");
+      if (logAuditSnapshotBtn) logAuditSnapshotBtn.addEventListener("click", () => evaluateCompliance(true));
+
+      const clearHistoryBtn = document.getElementById("clearComplianceHistoryBtn");
+      if (clearHistoryBtn) {
+        clearHistoryBtn.addEventListener("click", () => {
+          localStorage.removeItem(COMPLIANCE_HISTORY_KEY);
+          renderComplianceDashboard();
+        });
+      }
+
+      const exportHistoryBtn = document.getElementById("exportComplianceHistoryBtn");
+      if (exportHistoryBtn) {
+        exportHistoryBtn.addEventListener("click", () => {
+          const payload = JSON.stringify({ exportedAt: new Date().toISOString(), audits: loadComplianceHistory() }, null, 2);
+          const blob = new Blob([payload], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "aqua-ai-compliance-history.json";
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        });
+      }
+
+      Array.from(document.querySelectorAll(".trend-range-tab")).forEach((tab) => {
+        tab.addEventListener("click", () => {
+          activeTrendRange = tab.getAttribute("data-range") || "all";
+          document.querySelectorAll(".trend-range-tab").forEach((t) => t.classList.toggle("active", t === tab));
+          renderComplianceDashboard();
+        });
+      });
+
+      window.addEventListener("resize", () => renderComplianceDashboard());
 
       if (ackBtn) {
         ackBtn.addEventListener("click", () => {
@@ -1392,8 +1903,47 @@
         });
       }
 
+      if (oauthHelpBtn && oauthNoticeEl) {
+        if (oauthOriginValEl && window.location.origin && window.location.origin !== "null") {
+          oauthOriginValEl.textContent = window.location.origin;
+        }
+        if (oauthClientValEl) oauthClientValEl.textContent = getActiveClientId();
+        if (customClientInput) {
+          const override = localStorage.getItem(CLIENT_OVERRIDE_KEY) || "";
+          if (override) customClientInput.value = override;
+        }
+        oauthHelpBtn.addEventListener("click", () => {
+          oauthNoticeEl.style.display = oauthNoticeEl.style.display === "none" ? "block" : "none";
+        });
+      }
+      if (copyOriginBtn && navigator.clipboard) {
+        copyOriginBtn.addEventListener("click", () => {
+          const originText = (window.location.origin && window.location.origin !== "null") ? window.location.origin : "https://sras756.github.io";
+          navigator.clipboard.writeText(originText).then(() => {
+            copyOriginBtn.textContent = "✓ Copied " + originText;
+            setTimeout(() => { copyOriginBtn.textContent = "Copy Origin"; }, 2200);
+          });
+        });
+      }
+      if (saveCustomClientBtn && customClientInput) {
+        saveCustomClientBtn.addEventListener("click", () => {
+          const val = customClientInput.value.trim();
+          if (!val) {
+            localStorage.removeItem(CLIENT_OVERRIDE_KEY);
+          } else if (val.endsWith(".apps.googleusercontent.com")) {
+            localStorage.setItem(CLIENT_OVERRIDE_KEY, val);
+          } else {
+            return;
+          }
+          if (oauthClientValEl) oauthClientValEl.textContent = getActiveClientId();
+          initGsi();
+        });
+      }
+
       function initGsi() {
         if (window.AquaAndroidPortal && typeof window.AquaAndroidPortal.requestNativeGoogleSignIn === "function") {
+          if (oauthHelpBtn) oauthHelpBtn.style.display = "none";
+          if (oauthNoticeEl) oauthNoticeEl.style.display = "none";
           try {
             const raw = window.AquaAndroidPortal.getSignedInUserJson();
             const nativeUser = JSON.parse(raw || "{}");
@@ -1413,10 +1963,16 @@
           renderAuthState();
           return;
         }
+        if (oauthHelpBtn) oauthHelpBtn.style.display = "inline-flex";
         if (window.google && google.accounts && google.accounts.id) {
+          const activeClientId = getActiveClientId();
+          if (oauthClientValEl) oauthClientValEl.textContent = activeClientId;
           google.accounts.id.initialize({
-            client_id: CLIENT_ID,
+            client_id: activeClientId,
             ux_mode: "popup",
+            error_callback: () => {
+              if (oauthNoticeEl) oauthNoticeEl.style.display = "block";
+            },
             callback: (response) => {
               try {
                 const payload = decodeGoogleJwt(response.credential);
@@ -1426,6 +1982,7 @@
                   email: payload.email || "",
                   picture: payload.picture || ""
                 }));
+                if (oauthNoticeEl) oauthNoticeEl.style.display = "none";
                 renderAuthState();
                 evaluateCompliance();
               } catch (e) {
@@ -1433,6 +1990,7 @@
               }
             }
           });
+          mountEl.innerHTML = "";
           google.accounts.id.renderButton(mountEl, {
             theme: root.getAttribute("data-theme") === "light" ? "outline" : "filled_black",
             size: "large",
@@ -1445,8 +2003,11 @@
       }
 
       renderAuthState();
-      evaluateCompliance();
-      window.addEventListener("load", initGsi);
+      evaluateCompliance(false);
+      window.addEventListener("load", () => {
+        initGsi();
+        renderComplianceDashboard();
+      });
     })();
   </script>
 </body>

@@ -42,6 +42,7 @@ import com.example.domain.UserProfilePolicy
 import com.example.network.AquaWebClient
 import com.example.security.ComplianceState
 import com.example.security.GoogleSignatureVerifier
+import com.example.security.PlayComplianceHistoryStore
 import com.example.security.PlayComplianceInspector
 import com.example.security.SignatureCheckReport
 import com.example.skills.SkillParserAndValidator
@@ -959,7 +960,68 @@ class ExampleRobolectricTest {
         )
         assertFalse(AquaLegalPortalAuthBridge.isGoogleOAuthFlowUrl("https://sras756.github.io/aqua-ai/"))
 
+        assertNotNull(AquaLegalPortalAuthBridge.buildPortalSyncScript("https://sras756.github.io/Aqua-ai/"))
         assertNotNull(AquaLegalPortalAuthBridge.buildPortalSyncScript("https://sras756.github.io/aqua-ai/"))
         assertNull(AquaLegalPortalAuthBridge.buildPortalSyncScript("https://untrusted.example.com/"))
+    }
+
+    @Test
+    fun `play compliance history store persists real evaluations and encodes compact trend query`() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        PlayComplianceHistoryStore.clearHistory(context)
+        assertTrue(PlayComplianceHistoryStore.loadHistory(context).isEmpty())
+
+        val trustedSig = SignatureCheckReport(
+            packageName = context.packageName,
+            versionName = "1.0",
+            versionCode = 1L,
+            signingSha1 = GoogleSignatureVerifier.REGISTERED_FIREBASE_SHA1,
+            signingSha256 = "AA:BB:CC",
+            expectedRegisteredSha1 = GoogleSignatureVerifier.REGISTERED_FIREBASE_SHA1,
+            sha1MatchesRegisteredOAuth = true,
+            webClientIdConfigured = true,
+            playServicesAvailable = true,
+            playServicesVersion = "25.0",
+            playServicesStatusLabel = "Verified & Up to Date",
+            googleAuthProviderLinked = true,
+            signedInEmail = "user@example.com",
+            overallStatusLabel = "Google Signature Verified (SHA-1 Matched)",
+            certificateCount = 1,
+            hasMultipleSigners = false
+        )
+
+        val unsetReport = PlayComplianceInspector.evaluate(
+            context = context,
+            settings = UserSettings(ageYears = 0, ageGateConfirmed = false),
+            signatureReport = trustedSig,
+            checkedAtMs = 1_700_000_000_000L
+        )
+        val afterFirst = PlayComplianceHistoryStore.recordEvaluation(context, unsetReport)
+        assertEquals(1, afterFirst.size)
+        assertEquals(5, afterFirst.first().passedCount)
+        assertEquals(ComplianceState.ACTION_REQUIRED, afterFirst.first().status)
+
+        val adultReport = PlayComplianceInspector.evaluate(
+            context = context,
+            settings = UserProfilePolicy.normalizeSettingsProfile(
+                settings = UserSettings(),
+                ageYears = 24,
+                genderId = UserGender.PREFER_NOT_TO_SAY.id
+            ),
+            signatureReport = trustedSig,
+            checkedAtMs = 1_700_000_060_000L
+        )
+        val afterChange = PlayComplianceHistoryStore.recordEvaluation(context, adultReport)
+        assertEquals(2, afterChange.size)
+        assertEquals(6, afterChange.last().passedCount)
+        assertEquals(ComplianceState.COMPLIANT, afterChange.last().status)
+
+        val query = adultReport.toWebQueryParams(afterChange)
+        assertTrue(query.contains("history="))
+        val encoded = PlayComplianceHistoryStore.encodeCompactHistory(afterChange)
+        assertEquals("1700000000000:5:6:0;1700000060000:6:6:1", encoded)
+
+        PlayComplianceHistoryStore.clearHistory(context)
+        assertTrue(PlayComplianceHistoryStore.loadHistory(context).isEmpty())
     }
 }
