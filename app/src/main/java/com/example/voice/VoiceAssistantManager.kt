@@ -1,8 +1,10 @@
 package com.example.voice
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
@@ -16,8 +18,13 @@ import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.example.ai.GeminiProvider
 import com.example.ai.ToolCallingEngine
+import com.example.core.voice.AquaAudioFocusController
+import com.example.core.voice.AquaVoiceLanguageDetector
+import com.example.core.voice.DetectedVoiceLanguage
+import com.example.core.voice.SpeechErrorMapper
 import com.example.data.local.ElevenLabsConfig
 import com.example.data.local.SecureConfigStore
 import com.example.data.model.AgentStepTrace
@@ -60,6 +67,13 @@ class VoiceAssistantManager(
     private var liveSession: LiveSession? = null
     private var liveJob: Job? = null
 
+    private val audioFocusController = AquaAudioFocusController(
+        context = context,
+        onFocusLost = {
+            if (_isSpeaking.value) stopSpeaking()
+        }
+    )
+
     private val _isListening = MutableStateFlow(false)
     val isListening: StateFlow<Boolean> = _isListening.asStateFlow()
 
@@ -81,6 +95,11 @@ class VoiceAssistantManager(
     private val _activeVoiceEngine = MutableStateFlow("Android TTS")
     val activeVoiceEngine: StateFlow<String> = _activeVoiceEngine.asStateFlow()
 
+    private val _detectedLanguage = MutableStateFlow(DetectedVoiceLanguage.ENGLISH)
+    val detectedLanguage: StateFlow<DetectedVoiceLanguage> = _detectedLanguage.asStateFlow()
+
+    val audioFocusActive: StateFlow<Boolean> = audioFocusController.hasAudioFocus
+
     init {
         initAndroidTts()
     }
@@ -97,11 +116,13 @@ class VoiceAssistantManager(
                     override fun onDone(utteranceId: String?) {
                         _isSpeaking.value = false
                         _waveformBars.value = FloatArray(24) { 0.12f }
+                        audioFocusController.abandonFocus()
                     }
 
                     @Deprecated("Deprecated in Java")
                     override fun onError(utteranceId: String?) {
                         _isSpeaking.value = false
+                        audioFocusController.abandonFocus()
                     }
                 })
             }
@@ -112,13 +133,31 @@ class VoiceAssistantManager(
         languageTag: String,
         onFinalResult: (String) -> Unit
     ) {
-        // Voice interruption: immediately stop any ongoing speech
+        // Barge-in interruption: immediately stop any ongoing speech and transition audio focus
         stopSpeaking()
         _voiceError.value = null
 
+        val hasMicPermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!hasMicPermission) {
+            _voiceError.value = "Microphone permission not granted. Type your message directly as fallback."
+            return
+        }
+
+        audioFocusController.requestSpeechFocus(exclusiveForCapture = true)
+        val normalizedTag = AquaVoiceLanguageDetector.normalizeRecognitionTag(languageTag)
+        _detectedLanguage.value = if (normalizedTag.startsWith("ur", ignoreCase = true)) {
+            DetectedVoiceLanguage.URDU
+        } else {
+            DetectedVoiceLanguage.ENGLISH
+        }
+
         mainHandler.post {
             if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-                _voiceError.value = "Speech recognition service is unavailable on this device."
+                audioFocusController.abandonFocus()
+                _voiceError.value = "Speech recognition service is unavailable on this device. Use text input below."
                 return@post
             }
             speechRecognizer?.destroy()
@@ -146,23 +185,27 @@ class VoiceAssistantManager(
 
                 override fun onEndOfSpeech() {
                     _isListening.value = false
+                    audioFocusController.abandonFocus()
                 }
 
                 override fun onError(error: Int) {
                     _isListening.value = false
                     _waveformBars.value = FloatArray(24) { 0.12f }
-                    if (error != SpeechRecognizer.ERROR_NO_MATCH && error != SpeechRecognizer.ERROR_CLIENT) {
-                        _voiceError.value = "Speech error code $error"
+                    audioFocusController.abandonFocus()
+                    if (!SpeechErrorMapper.isSilentIgnore(error)) {
+                        _voiceError.value = SpeechErrorMapper.describe(error)
                     }
                 }
 
                 override fun onResults(results: Bundle?) {
                     _isListening.value = false
                     _waveformBars.value = FloatArray(24) { 0.12f }
+                    audioFocusController.abandonFocus()
                     val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     val text = matches?.firstOrNull()?.trim().orEmpty()
                     _partialTranscript.value = ""
                     if (text.isNotEmpty()) {
+                        _detectedLanguage.value = AquaVoiceLanguageDetector.detectLanguage(text, normalizedTag)
                         onFinalResult(text)
                     }
                 }
@@ -173,6 +216,9 @@ class VoiceAssistantManager(
                         ?.firstOrNull()
                         .orEmpty()
                     _partialTranscript.value = partial
+                    if (partial.isNotBlank()) {
+                        _detectedLanguage.value = AquaVoiceLanguageDetector.detectLanguage(partial, normalizedTag)
+                    }
                 }
 
                 override fun onEvent(eventType: Int, params: Bundle?) {}
@@ -180,7 +226,7 @@ class VoiceAssistantManager(
 
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag.ifBlank { "en-US" })
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, normalizedTag)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
             }
@@ -193,6 +239,7 @@ class VoiceAssistantManager(
             speechRecognizer?.stopListening()
             _isListening.value = false
             _waveformBars.value = FloatArray(24) { 0.12f }
+            audioFocusController.abandonFocus()
         }
     }
 
@@ -205,6 +252,9 @@ class VoiceAssistantManager(
         val clean = text.replace(Regex("[*_`#>]"), " ").trim()
         if (clean.isEmpty()) return
         stopSpeaking()
+        audioFocusController.requestSpeechFocus(exclusiveForCapture = false)
+        val detected = AquaVoiceLanguageDetector.detectLanguage(clean, settings.voiceLanguage)
+        _detectedLanguage.value = detected
 
         val elevenKey = secureConfigStore.getElevenLabsApiKey()
         val elevenVoiceId = secureConfigStore.getElevenLabsVoiceId()
@@ -240,7 +290,7 @@ class VoiceAssistantManager(
                 _activeVoiceEngine.value = "Gemini Native TTS"
                 val audioRes = geminiProvider.synthesizeGeminiTtsAudio(
                     text = clean,
-                    languageCode = settings.voiceLanguage
+                    languageCode = detected.bcp47Tag
                 )
                 audioRes.onSuccess { pcmBytes ->
                     playPcmAudio(pcmBytes)
@@ -317,12 +367,14 @@ class VoiceAssistantManager(
                     runCatching { mp.release() }
                     if (currentMediaPlayer === mp) currentMediaPlayer = null
                     _isSpeaking.value = false
+                    audioFocusController.abandonFocus()
                     runCatching { file.delete() }
                 }
                 setOnErrorListener { mp, _, _ ->
                     runCatching { mp.release() }
                     if (currentMediaPlayer === mp) currentMediaPlayer = null
                     _isSpeaking.value = false
+                    audioFocusController.abandonFocus()
                     runCatching { file.delete() }
                     true
                 }
@@ -333,6 +385,7 @@ class VoiceAssistantManager(
         } catch (e: Exception) {
             Log.e(TAG, "ElevenLabs MP3 playback failed", e)
             _isSpeaking.value = false
+            audioFocusController.abandonFocus()
             runCatching { file.delete() }
         }
     }
@@ -340,9 +393,10 @@ class VoiceAssistantManager(
     private fun speakWithAndroidTts(text: String, settings: UserSettings) {
         if (!ttsReady) {
             _isSpeaking.value = false
+            audioFocusController.abandonFocus()
             return
         }
-        val locale = Locale.forLanguageTag(settings.voiceLanguage.ifBlank { "en-US" })
+        val locale = AquaVoiceLanguageDetector.resolveTtsLocale(settings.voiceLanguage, text)
         tts?.language = locale
         tts?.setSpeechRate(settings.voiceSpeed.toFloat().coerceIn(0.5f, 2.0f))
         tts?.setPitch(settings.voicePitch.toFloat().coerceIn(0.5f, 2.0f))
@@ -393,6 +447,7 @@ class VoiceAssistantManager(
         } finally {
             _isSpeaking.value = false
             _waveformBars.value = FloatArray(24) { 0.12f }
+            audioFocusController.abandonFocus()
         }
     }
 
@@ -439,6 +494,7 @@ class VoiceAssistantManager(
         } catch (_: Exception) {
         }
         currentAudioTrack = null
+        audioFocusController.abandonFocus()
     }
 
     @OptIn(PublicPreviewAPI::class)

@@ -4,6 +4,12 @@ import android.app.Activity
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import com.example.core.database.DriveFileMetadataEntity
+import com.example.core.database.DriveSyncQueueEntity
+import com.example.core.drive.AquaDriveSyncCoordinator
+import com.example.core.drive.ConflictResolutionStrategy
+import com.example.core.security.PermissionPolicyStore
+import com.example.data.local.AquaCacheDatabase
 import com.example.data.local.SecureConfigStore
 import com.example.data.repository.AquaFirestoreRepository
 import com.example.data.repository.DriveAboutInfo
@@ -12,13 +18,17 @@ import com.example.data.repository.DriveBackupMetadata
 import com.example.data.repository.GoogleDriveHistoryRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
  * Clean modular coordinator handling Google Drive Vault OAuth authorization,
- * approved Drive API key management, quota telemetry, and history backups.
+ * 10-folder WorkManager sync queue, conflict resolution, approved Drive API key management,
+ * quota telemetry, and history backups/restores.
  */
 class AquaSystemAndDriveCoordinator(
     private val appContext: Context,
@@ -27,8 +37,31 @@ class AquaSystemAndDriveCoordinator(
     private val secureConfigStore: SecureConfigStore,
     private val driveHistoryRepo: GoogleDriveHistoryRepository,
     private val scope: CoroutineScope,
-    private val onBanner: (String) -> Unit
+    private val onBanner: (String) -> Unit,
+    private val cacheDb: AquaCacheDatabase? = null,
+    private val permissionPolicyStore: PermissionPolicyStore? = null
 ) {
+    val syncCoordinator: AquaDriveSyncCoordinator? = cacheDb?.let { db ->
+        AquaDriveSyncCoordinator(
+            context = appContext,
+            syncQueueDao = db.driveSyncQueueDao(),
+            metadataDao = db.driveFileMetadataDao(),
+            database = db,
+            permissionPolicyStore = permissionPolicyStore
+        )
+    }
+
+    val syncPendingCount: StateFlow<Int> = (cacheDb?.driveSyncQueueDao()?.observePendingCount(currentUserId) ?: flowOf(0))
+        .stateIn(scope, SharingStarted.WhileSubscribed(5000L), 0)
+
+    val syncConflicts: StateFlow<List<DriveSyncQueueEntity>> = (cacheDb?.driveSyncQueueDao()?.observeConflicts(currentUserId) ?: flowOf(emptyList()))
+        .stateIn(scope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
+    val driveHierarchyFiles: StateFlow<List<DriveFileMetadataEntity>> = (cacheDb?.driveFileMetadataDao()?.observeFiles(currentUserId) ?: flowOf(emptyList()))
+        .stateIn(scope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
+    private val _syncStateBadge = MutableStateFlow("Synced")
+    val syncStateBadge: StateFlow<String> = _syncStateBadge.asStateFlow()
     private val _driveBusy = MutableStateFlow(false)
     val driveBusy: StateFlow<Boolean> = _driveBusy.asStateFlow()
 
@@ -299,19 +332,70 @@ class AquaSystemAndDriveCoordinator(
         }
     }
 
+    fun syncNow(activity: Activity?) {
+        val sync = syncCoordinator ?: run {
+            refreshDriveBackups(activity)
+            return
+        }
+        runWithDriveToken(activity) { token ->
+            _syncStateBadge.value = "Syncing"
+            val summary = sync.flushQueue(
+                userId = currentUserId,
+                accessToken = token,
+                apiKey = driveHistoryRepo.resolveEffectiveApiKey()
+            )
+            _syncStateBadge.value = when {
+                summary.conflictCount > 0 -> "Conflict"
+                summary.errorCount > 0 -> "Error"
+                else -> "Synced"
+            }
+            _driveStatusLabel.value = summary.message
+            onBanner(summary.message)
+        }
+    }
+
+    fun resolveConflict(activity: Activity?, mutationId: String, strategy: ConflictResolutionStrategy) {
+        val sync = syncCoordinator ?: return
+        runWithDriveToken(activity) { token ->
+            _syncStateBadge.value = "Syncing"
+            sync.resolveConflict(
+                userId = currentUserId,
+                mutationId = mutationId,
+                strategy = strategy,
+                accessToken = token,
+                apiKey = driveHistoryRepo.resolveEffectiveApiKey()
+            ).onSuccess { msg ->
+                _syncStateBadge.value = "Synced"
+                _driveStatusLabel.value = msg
+                onBanner(msg)
+            }.onFailure { err ->
+                _syncStateBadge.value = "Error"
+                onBanner(err.localizedMessage ?: "Conflict resolution failed.")
+            }
+        }
+    }
+
     fun restoreHistoryFromGoogleDrive(activity: Activity?, fileId: String) {
         runWithDriveToken(activity) { token ->
             val snap = driveHistoryRepo.downloadAndParseSnapshot(token, fileId).getOrElse {
                 onBanner(it.localizedMessage ?: "Failed to download Drive backup.")
                 return@runWithDriveToken
             }
+            val roomCounts = syncCoordinator?.restoreSnapshotIntoRoom(currentUserId, snap) ?: (0 to 0)
             firestoreRepo.importDriveSnapshot(snap)
                 .onSuccess { (convsAdded, memoriesAdded) ->
-                    _driveStatusLabel.value = "Restored $convsAdded new conversation(s) & $memoriesAdded memory item(s)"
-                    onBanner("Restored $convsAdded conversation(s) and $memoriesAdded memory item(s) from Google Drive.")
+                    val effectiveConvs = maxOf(convsAdded, roomCounts.first)
+                    val effectiveMems = maxOf(memoriesAdded, roomCounts.second)
+                    _driveStatusLabel.value = "Restored $effectiveConvs conversation(s) & $effectiveMems memory item(s)"
+                    onBanner("Restored $effectiveConvs conversation(s) and $effectiveMems memory item(s) cleanly into local & cloud Vault.")
                 }
                 .onFailure { err ->
-                    onBanner("Restore merge failed: ${err.localizedMessage}")
+                    if (roomCounts.first > 0 || roomCounts.second > 0) {
+                        _driveStatusLabel.value = "Restored ${roomCounts.first} chats locally (Room SSOT)"
+                        onBanner("Restored ${roomCounts.first} conversation(s) and ${roomCounts.second} memories into encrypted local SSOT.")
+                    } else {
+                        onBanner("Restore merge failed: ${err.localizedMessage}")
+                    }
                 }
         }
     }

@@ -3,6 +3,12 @@ package com.example.ai
 import android.graphics.Bitmap
 import android.util.Base64
 import android.util.Log
+import com.example.core.ai.AiUsageMeterTracker
+import com.example.core.ai.AquaTaskPlan
+import com.example.core.ai.ContextCompactor
+import com.example.core.ai.ExponentialBackoffExecutor
+import com.example.core.ai.TaskPlanner
+import com.example.core.database.AiUsageMeterDao
 import com.example.data.local.AiFreedomConfig
 import com.example.data.local.SecureConfigStore
 import com.example.data.model.AgentStepTrace
@@ -61,8 +67,12 @@ data class AgentExecutionResult(
 class GeminiProvider(
     private val secureConfigStore: SecureConfigStore,
     private val fileImportRepository: FileImportRepository,
-    private val toolCallingEngine: ToolCallingEngine
+    private val toolCallingEngine: ToolCallingEngine,
+    aiUsageMeterDao: AiUsageMeterDao? = null,
+    userIdProvider: () -> String = { "" }
 ) {
+    private val usageTracker = AiUsageMeterTracker(aiUsageMeterDao, userIdProvider)
+
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
@@ -169,6 +179,46 @@ class GeminiProvider(
             ?.firstOrNull()
             ?: throw IllegalStateException("TTS model returned no inline audio payload.")
         part.inlineData
+    }
+
+    /**
+     * Generates a structured JSON task plan separately from tool execution loops.
+     */
+    suspend fun generateTaskPlan(
+        userPrompt: String,
+        languageTag: String = "en-US"
+    ): Result<AquaTaskPlan> = runCatching {
+        val startMs = System.currentTimeMillis()
+        val planConfig = generationConfig {
+            temperature = 0.2f
+            maxOutputTokens = 1024
+            responseMimeType = "application/json"
+            responseSchema = TaskPlanner.buildTaskPlanSchema()
+        }
+        val plannerModel = Firebase.ai(backend = GenerativeBackend.googleAI()).generativeModel(
+            modelName = UserSettings.MODEL_FLASH_LITE,
+            generationConfig = planConfig,
+            systemInstruction = content {
+                text(
+                    "Break the user's request into a clean JSON execution plan. " +
+                        "Detect language ('en' or 'ur'). Voice locale hint: $languageTag."
+                )
+            }
+        )
+        val response = withTimeout(25_000L) {
+            plannerModel.generateContent(userPrompt)
+        }
+        val meta = response.usageMetadata
+        usageTracker.record(
+            sessionId = "planner",
+            modelId = UserSettings.MODEL_FLASH_LITE,
+            promptTokens = meta?.promptTokenCount ?: 0,
+            outputTokens = meta?.candidatesTokenCount ?: 0,
+            totalTokens = meta?.totalTokenCount ?: 0,
+            latencyMs = System.currentTimeMillis() - startMs
+        )
+        TaskPlanner.parsePlanJson(response.text.orEmpty())
+            ?: throw IllegalStateException("Planner returned unparseable JSON plan.")
     }
 
     /**
@@ -474,10 +524,18 @@ class GeminiProvider(
         onStreamChunk: (String) -> Unit,
         onTrace: (AgentStepTrace) -> Unit
     ): Result<AgentExecutionResult> {
+        val turnStartMs = System.currentTimeMillis()
+        val compacted = ContextCompactor.compact(history)
+        val effectiveSystemInstruction = if (compacted.summaryBlock.isNotBlank()) {
+            "$systemInstructionText\n\n## Compacted Conversation Context\n${compacted.summaryBlock}"
+        } else {
+            systemInstructionText
+        }
+
         val useGroundingInsteadOfTools = shouldUseWebOrMapsGrounding(userPrompt, settings)
         val model = buildModel(
             modelName = modelToUse,
-            systemInstructionText = systemInstructionText,
+            systemInstructionText = effectiveSystemInstruction,
             settings = settings,
             enableFunctionTools = !useGroundingInsteadOfTools && attachment == null,
             enableSearchGrounding = settings.fullInternetAccessEnabled && settings.searchGroundingEnabled && useGroundingInsteadOfTools,
@@ -487,14 +545,15 @@ class GeminiProvider(
             freedomConfig = freedomConfig
         )
 
-        val historyContents = history
-            .filter { it.role == "user" || it.role == "model" }
-            .takeLast(12)
+        val historyContents = compacted.retainedMessages
             .map { msg ->
                 content(role = msg.role) { text(msg.content) }
             }
 
         val userContent = buildUserContent(userPrompt, attachment)
+        var promptTokens = 0
+        var outputTokens = 0
+        var totalTokens = 0
 
         if (useGroundingInsteadOfTools || attachment != null) {
             val sb = StringBuilder()
@@ -506,6 +565,11 @@ class GeminiProvider(
                         sb.append(t)
                         onStreamChunk(sb.toString())
                     }
+                    chunk.usageMetadata?.let { meta ->
+                        promptTokens = maxOf(promptTokens, meta.promptTokenCount ?: 0)
+                        outputTokens = maxOf(outputTokens, meta.candidatesTokenCount ?: 0)
+                        totalTokens = maxOf(totalTokens, meta.totalTokenCount ?: 0)
+                    }
                     chunk.candidates.firstOrNull()?.groundingMetadata?.groundingChunks?.forEach { gChunk ->
                         val title = gChunk.web?.title ?: gChunk.maps?.title
                         val uri = gChunk.web?.uri ?: gChunk.maps?.uri
@@ -516,6 +580,14 @@ class GeminiProvider(
                     }
                 }
             }
+            usageTracker.record(
+                sessionId = "chat",
+                modelId = modelToUse,
+                promptTokens = promptTokens,
+                outputTokens = outputTokens,
+                totalTokens = totalTokens,
+                latencyMs = System.currentTimeMillis() - turnStartMs
+            )
             val finalText = sb.toString().ifBlank { "I processed your input, but no text summary was returned." }
             return Result.success(AgentExecutionResult(finalText, modelToUse, traces, groundingSources))
         }
@@ -546,6 +618,11 @@ class GeminiProvider(
                     if (chunk.functionCalls.isNotEmpty()) {
                         pendingCalls.addAll(chunk.functionCalls)
                     }
+                    chunk.usageMetadata?.let { meta ->
+                        promptTokens = maxOf(promptTokens, meta.promptTokenCount ?: 0)
+                        outputTokens = maxOf(outputTokens, meta.candidatesTokenCount ?: 0)
+                        totalTokens = maxOf(totalTokens, meta.totalTokenCount ?: 0)
+                    }
                 }
             }
 
@@ -575,6 +652,14 @@ class GeminiProvider(
             nextTurnContent = Content(role = "user", parts = responseParts)
         }
 
+        usageTracker.record(
+            sessionId = "chat_agent",
+            modelId = modelToUse,
+            promptTokens = promptTokens,
+            outputTokens = outputTokens,
+            totalTokens = totalTokens,
+            latencyMs = System.currentTimeMillis() - turnStartMs
+        )
         val finalText = aggregatedText.toString().trim().ifBlank {
             "Task execution finished (${traces.size} tool step(s))."
         }
@@ -682,9 +767,16 @@ class GeminiProvider(
         onTrace: (AgentStepTrace) -> Unit
     ): Result<AgentExecutionResult> = withContext(Dispatchers.IO) {
         runCatching {
+            val turnStartMs = System.currentTimeMillis()
+            val compacted = ContextCompactor.compact(history)
+            val effectiveSystemInstruction = if (compacted.summaryBlock.isNotBlank()) {
+                "$systemInstruction\n\n## Compacted Conversation Context\n${compacted.summaryBlock}"
+            } else {
+                systemInstruction
+            }
             val useGroundingInsteadOfTools = shouldUseWebOrMapsGrounding(userPrompt, settings)
             val contents = JSONArray()
-            history.filter { it.role == "user" || it.role == "model" }.takeLast(12).forEach { msg ->
+            compacted.retainedMessages.forEach { msg ->
                 contents.put(JSONObject().apply {
                     put("role", msg.role)
                     put("parts", JSONArray().put(JSONObject().put("text", msg.content)))
@@ -743,11 +835,15 @@ class GeminiProvider(
             val aggregatedText = StringBuilder()
             val url = "https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent"
 
+            var totalPromptTokens = 0
+            var totalOutputTokens = 0
+            var totalTokens = 0
+
             var step = 0
             while (step < maxSteps) {
                 step++
                 val bodyJson = JSONObject().apply {
-                    put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", systemInstruction))))
+                    put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", effectiveSystemInstruction))))
                     put("contents", contents)
                     put("generationConfig", genConfig)
                     if (toolsArray.length() > 0) {
@@ -755,22 +851,37 @@ class GeminiProvider(
                     }
                 }.toString()
 
-                val req = Request.Builder()
-                    .url(url)
-                    .header("x-goog-api-key", apiKey)
-                    .post(bodyJson.toRequestBody("application/json".toMediaType()))
-                    .build()
-
-                val respJson = httpClient.newCall(req).execute().use { resp ->
-                    val rawBody = resp.body?.string().orEmpty()
-                    if (!resp.isSuccessful) {
-                        val serverMsg = runCatching {
-                            JSONObject(rawBody).optJSONObject("error")?.optString("message", "")
-                        }.getOrNull().orEmpty()
-                        val detail = if (serverMsg.isNotBlank()) "HTTP ${resp.code}: $serverMsg" else "HTTP ${resp.code}"
-                        throw IllegalStateException("Direct Google AI Studio API returned $detail.")
+                val respJson = ExponentialBackoffExecutor.executeWithRetry(
+                    maxAttempts = 3,
+                    initialDelayMs = 600L,
+                    shouldRetry = { err ->
+                        val msg = err.message.orEmpty()
+                        msg.contains("HTTP 429") || msg.contains("HTTP 500") || msg.contains("HTTP 502") || msg.contains("HTTP 503")
                     }
-                    JSONObject(rawBody.ifBlank { "{}" })
+                ) {
+                    val req = Request.Builder()
+                        .url(url)
+                        .header("x-goog-api-key", apiKey)
+                        .post(bodyJson.toRequestBody("application/json".toMediaType()))
+                        .build()
+
+                    httpClient.newCall(req).execute().use { resp ->
+                        val rawBody = resp.body?.string().orEmpty()
+                        if (!resp.isSuccessful) {
+                            val serverMsg = runCatching {
+                                JSONObject(rawBody).optJSONObject("error")?.optString("message", "")
+                            }.getOrNull().orEmpty()
+                            val detail = if (serverMsg.isNotBlank()) "HTTP ${resp.code}: $serverMsg" else "HTTP ${resp.code}"
+                            throw IllegalStateException("Direct Google AI Studio API returned $detail.")
+                        }
+                        JSONObject(rawBody.ifBlank { "{}" })
+                    }
+                }
+
+                respJson.optJSONObject("usageMetadata")?.let { usage ->
+                    totalPromptTokens += usage.optInt("promptTokenCount", 0)
+                    totalOutputTokens += usage.optInt("candidatesTokenCount", 0)
+                    totalTokens += usage.optInt("totalTokenCount", 0)
                 }
 
                 val firstCand = respJson.optJSONArray("candidates")?.optJSONObject(0)
@@ -854,6 +965,15 @@ class GeminiProvider(
                     }
                 )
             }
+
+            usageTracker.record(
+                sessionId = "direct_rest",
+                modelId = modelName,
+                promptTokens = totalPromptTokens,
+                outputTokens = totalOutputTokens,
+                totalTokens = totalTokens,
+                latencyMs = System.currentTimeMillis() - turnStartMs
+            )
 
             val finalText = aggregatedText.toString().trim().ifBlank {
                 if (traces.isNotEmpty()) "Task execution finished (${traces.size} tool step(s))."

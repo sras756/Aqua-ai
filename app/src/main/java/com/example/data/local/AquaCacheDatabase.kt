@@ -10,7 +10,32 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.example.core.database.AgentTaskDao
+import com.example.core.database.AgentTaskEntity
+import com.example.core.database.AiUsageMeterDao
+import com.example.core.database.AiUsageMeterEntity
+import com.example.core.database.AuditLogDao
+import com.example.core.database.AuditLogEntity
+import com.example.core.database.AutomationWorkflowDao
+import com.example.core.database.AutomationWorkflowEntity
+import com.example.core.database.BookmarkDao
+import com.example.core.database.BookmarkEntity
+import com.example.core.database.ChatMessageEntity
+import com.example.core.database.ConversationDao
+import com.example.core.database.ConversationEntity
+import com.example.core.database.DriveFileMetadataDao
+import com.example.core.database.DriveFileMetadataEntity
+import com.example.core.database.DriveSyncQueueDao
+import com.example.core.database.DriveSyncQueueEntity
+import com.example.core.database.MemoryDao
+import com.example.core.database.MemoryEntity
+import com.example.core.database.MemoryFtsEntity
+import com.example.core.database.WorkspaceDocumentDao
+import com.example.core.database.WorkspaceDocumentEntity
+import com.example.core.database.WorkspaceDocumentFtsEntity
+import com.example.core.security.AquaDatabaseKeyManager
 import kotlinx.coroutines.flow.Flow
+import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Entity(tableName = "device_action_logs")
 data class DeviceActionLogEntity(
@@ -147,27 +172,74 @@ interface WalletCacheDao {
         CachedWalletTxEntity::class,
         WalletCustomTokenEntity::class,
         WalletCustomNetworkEntity::class,
-        WalletAddressBookEntity::class
+        WalletAddressBookEntity::class,
+        ConversationEntity::class,
+        ChatMessageEntity::class,
+        MemoryEntity::class,
+        MemoryFtsEntity::class,
+        WorkspaceDocumentEntity::class,
+        WorkspaceDocumentFtsEntity::class,
+        BookmarkEntity::class,
+        AgentTaskEntity::class,
+        AuditLogEntity::class,
+        DriveSyncQueueEntity::class,
+        DriveFileMetadataEntity::class,
+        AiUsageMeterEntity::class,
+        AutomationWorkflowEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AquaCacheDatabase : RoomDatabase() {
     abstract fun deviceActionLogDao(): DeviceActionLogDao
     abstract fun walletCacheDao(): WalletCacheDao
+    abstract fun conversationDao(): ConversationDao
+    abstract fun memoryDao(): MemoryDao
+    abstract fun workspaceDocumentDao(): WorkspaceDocumentDao
+    abstract fun bookmarkDao(): BookmarkDao
+    abstract fun agentTaskDao(): AgentTaskDao
+    abstract fun auditLogDao(): AuditLogDao
+    abstract fun driveSyncQueueDao(): DriveSyncQueueDao
+    abstract fun driveFileMetadataDao(): DriveFileMetadataDao
+    abstract fun aiUsageMeterDao(): AiUsageMeterDao
+    abstract fun automationWorkflowDao(): AutomationWorkflowDao
 
     companion object {
+        const val ENCRYPTED_DB_NAME = "aqua_ssot_encrypted.db"
+        private const val LEGACY_PLAINTEXT_DB_NAME = "aqua_local_cache.db"
+
         @Volatile
         private var INSTANCE: AquaCacheDatabase? = null
 
         fun getInstance(context: Context): AquaCacheDatabase {
             return INSTANCE ?: synchronized(this) {
-                INSTANCE ?: Room.databaseBuilder(
-                    context.applicationContext,
-                    AquaCacheDatabase::class.java,
-                    "aqua_local_cache.db"
-                ).fallbackToDestructiveMigration(dropAllTables = true).build().also { INSTANCE = it }
+                INSTANCE ?: buildDatabase(context.applicationContext).also { INSTANCE = it }
             }
+        }
+
+        fun createInMemoryForTesting(context: Context): AquaCacheDatabase {
+            return Room.inMemoryDatabaseBuilder(
+                context.applicationContext,
+                AquaCacheDatabase::class.java
+            ).allowMainThreadQueries().build()
+        }
+
+        private fun buildDatabase(appContext: Context): AquaCacheDatabase {
+            runCatching { appContext.deleteDatabase(LEGACY_PLAINTEXT_DB_NAME) }
+            val builder = Room.databaseBuilder(
+                appContext,
+                AquaCacheDatabase::class.java,
+                ENCRYPTED_DB_NAME
+            ).fallbackToDestructiveMigration(dropAllTables = true)
+
+            if (AquaDatabaseKeyManager.isSqlCipherNativeAvailable()) {
+                val passphrase = AquaDatabaseKeyManager.getOrCreateDatabasePassphrase(appContext)
+                builder.openHelperFactory(SupportOpenHelperFactory(passphrase))
+            } else if (!AquaDatabaseKeyManager.isRobolectricEnvironment()) {
+                throw SecurityException("SQLCipher native library unavailable; refusing to open unencrypted SSOT database.")
+            }
+
+            return builder.build()
         }
     }
 }

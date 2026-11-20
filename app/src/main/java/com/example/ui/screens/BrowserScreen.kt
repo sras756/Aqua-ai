@@ -457,6 +457,94 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
             }
         }
 
+        AnimatedVisibility(visible = pageState.lastSecurityWarning != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(c.deepSurface)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Filled.WarningAmber, contentDescription = null, tint = c.amber, modifier = Modifier.size(18.dp))
+                Text(
+                    text = pageState.lastSecurityWarning.orEmpty(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.amber,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = { viewModel.browserController.updatePageState { it.copy(lastSecurityWarning = null) } }) {
+                    Icon(Icons.Filled.Close, contentDescription = "Dismiss warning", tint = c.textMuted)
+                }
+            }
+        }
+
+        // Local Multi-Tab + Incognito Strip & Saved Tabs
+        val localTabSessions by viewModel.browserTabSessions.collectAsStateWithLifecycle()
+        val currentTabId by viewModel.browserController.activeTabId.collectAsStateWithLifecycle()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            LazyRow(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(localTabSessions, key = { it.tabId }) { sess ->
+                    val selected = sess.tabId == currentTabId
+                    Surface(
+                        color = if (sess.isIncognito) c.deepSurface else if (selected) c.accentCyan.copy(alpha = 0.16f) else c.cardSurface,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .border(
+                                1.dp,
+                                if (sess.isIncognito) c.amber else if (selected) c.accentCyan else c.borderGlow,
+                                RoundedCornerShape(12.dp)
+                            )
+                            .clickable { viewModel.browserController.switchTab(sess.tabId) }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Text(
+                                text = (if (sess.isIncognito) "Incognito • " else "") + sess.title.take(18),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (sess.isIncognito) c.amber else c.textPrimary,
+                                maxLines = 1
+                            )
+                            if (localTabSessions.size > 1 || sess.isIncognito) {
+                                Icon(
+                                    imageVector = Icons.Filled.Close,
+                                    contentDescription = "Close tab",
+                                    tint = c.textMuted,
+                                    modifier = Modifier
+                                        .size(13.dp)
+                                        .clickable { viewModel.browserController.closeTab(sess.tabId) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            OutlinedButton(
+                onClick = { viewModel.browserController.openNewTab(isIncognito = false) },
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+            ) {
+                Text("+Tab", style = MaterialTheme.typography.labelSmall, color = c.accentCyan)
+            }
+            OutlinedButton(
+                onClick = { viewModel.browserController.openNewTab(isIncognito = true) },
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+            ) {
+                Text("+Private", style = MaterialTheme.typography.labelSmall, color = c.amber)
+            }
+        }
+
         // Saved Browser Tabs strip
         if (tabs.isNotEmpty()) {
             LazyRow(
@@ -642,18 +730,24 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                             }
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                                 setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
-                                settings.safeBrowsingEnabled = !onEmulator
+                                settings.safeBrowsingEnabled = true
                             }
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
+                            settings.allowFileAccess = false
+                            settings.allowContentAccess = false
+                            @Suppress("DEPRECATION")
+                            settings.allowFileAccessFromFileURLs = false
+                            @Suppress("DEPRECATION")
+                            settings.allowUniversalAccessFromFileURLs = false
                             settings.loadsImagesAutomatically = true
                             settings.useWideViewPort = true
                             settings.loadWithOverviewMode = true
                             settings.mediaPlaybackRequiresUserGesture = true
                             settings.setGeolocationEnabled(false)
                             settings.setSupportMultipleWindows(false)
-                            settings.cacheMode = if (onEmulator) WebSettings.LOAD_NO_CACHE else WebSettings.LOAD_DEFAULT
-                            settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                            settings.cacheMode = if (onEmulator || pageState.isIncognito) WebSettings.LOAD_NO_CACHE else WebSettings.LOAD_DEFAULT
+                            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
 
                             webViewClient = object : WebViewClient() {
                                 override fun shouldOverrideUrlLoading(

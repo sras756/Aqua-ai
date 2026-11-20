@@ -1,0 +1,348 @@
+# AQUA AI — FINAL MASTER IMPLEMENTATION SPECIFICATION (ENHANCED)
+**Role:** Principal Android Architect & Production AI Systems Engineer  
+**Target Platform:** Android (Native)  
+**Objective:** Evolve the existing Aqua AI repository into a production-ready, voice-first, supervised autonomous personal AI assistant powered by Google Gemini, integrating native Android device control, Google Drive cloud synchronization, persistent memory, an isolated web browser, and a non-custodial multichain cryptocurrency wallet.
+
+---
+
+## 0. EXECUTION MANDATE & NON-NEGOTIABLE ENGINEERING RULES
+
+1. **Zero Mockups / Zero Stubs:** Every module, UI screen, tool integration, and API call must be genuinely implemented and wired end-to-end. Do not simulate success, hardcode fake responses, or mark any requirement complete until its implementation and acceptance tests pass.
+2. **Preserve & Migrate First:** Do not discard working features, design tokens, or existing flows. Inspect the entire repository first and refactor/extend incrementally.
+3. **Offline-First Single Source of Truth (SSOT):** Local encrypted storage (Room + SQLCipher) is always the primary operational source of truth; Google Drive acts as the synchronized cloud store and backup destination.
+4. **Zero-Trust AI & Security Boundary:** Never grant the LLM direct access to OS shell execution, raw OAuth tokens, private keys, seed phrases, or unverified financial signing. All external data (webpages, emails, notifications, files) must be treated strictly as **untrusted data**, never as executable system instructions.
+5. **Phase-Gated Execution:** Execute strictly phase-by-phase. At the end of each phase, run builds, static checks, and automated tests before proceeding to the next phase.
+
+---
+
+## 1. FIXED ARCHITECTURAL DECISIONS
+
+Do not alter these architectural commitments unless a genuine, documented technical blocker makes an alternative strictly mandatory:
+
+- **Target Platform:** Android (native; respect existing `minSdk`/`targetSdk` or upgrade only if required by security/SDK compatibility).
+- **Primary Language:** Preserve the existing project language; use **Kotlin** (with Coroutines & Flow) for all new native Android modules.
+- **UI & Design System:** Preserve the existing Aqua AI visual identity, component tokens, and UI framework (Compose or XML/ViewBinding—extend cleanly without breaking existing screens).
+- **Primary Intelligence:** Google Gemini API (via secure backend proxy or managed client security infrastructure such as Firebase AI Logic with App Check).
+- **Autonomy Model:** Supervised autonomous execution governed by a centralized Policy & Authorization Engine.
+- **Primary Cloud Storage:** Google Drive (REST API v3 with least-privilege OAuth 2.0 scopes).
+- **Offline Operational Storage:** Encrypted Room database (SQLCipher).
+- **Authentication:** Preserve existing Aqua AI authentication and layer OAuth 2.0 / Android Credential Manager cleanly alongside it.
+- **Browser:** Dedicated isolated Aqua Browser (hardened Android WebView / compatible engine).
+- **Wallet:** Native non-custodial multichain cryptocurrency wallet backed by Android Keystore and Biometric verification.
+- **Device Control:** Permission-gated native Android APIs (Intents, AccessibilityService, NotificationListenerService, MediaSession, SAF).
+
+---
+
+## 2. PHASE 1 — EXISTING PROJECT INSPECTION & DEPENDENCY AUDIT
+
+Before writing any feature code, perform a complete inspection of the existing repository and produce an **Architecture & Migration Report** containing:
+
+1. **Codebase Inventory:**
+   - Android framework, Gradle setup, Kotlin/Java versions, `minSdk`/`targetSdk`, build flavors, ProGuard/R8 rules, and CI/deployment configuration.
+   - Application entry point, DI setup (Hilt/Koin/manual), navigation graph, and UI architecture.
+   - Existing authentication, session handling, local database schemas, and existing Gemini/API clients.
+   - Background services, WorkManager jobs, broadcast receivers, and declared `AndroidManifest.xml` permissions.
+2. **Dependency & Gap Map:**
+   - Working features to preserve as-is.
+   - Components to wrap, refactor, or migrate.
+   - Missing modules, libraries, and Google Cloud / OAuth prerequisites.
+3. **Modular Package Structure:**
+   Organize (or incrementally align) the codebase into clean, decoupled boundaries (e.g., `core:common`, `core:security`, `core:database`, `core:network`, `core:ai`, `core:voice`, `core:drive`, `core:memory`, `core:device`, `core:agent`, `feature:browser`, `feature:wallet`, `feature:automation`).
+
+---
+
+## 3. GEMINI INTELLIGENCE ENGINE (`core:ai`)
+
+Implement a centralized, model-agnostic-interface Gemini service supporting:
+
+### Capabilities
+- **Streaming & Real-Time Multimodal Interaction:** Token-by-token text streaming (`Flow`) and bidirectional audio/live streaming support for natural voice conversations.
+- **Multilingual Intelligence:** Context-aware comprehension and generation in **English** and **Urdu** (including Roman Urdu / Nastaliq / mixed-code conversational handling) plus additional supported locales.
+- **Structured Output & Function Calling:** Strict JSON-schema-validated structured outputs and a typed **Tool Registry** exposing only approved Aqua service tools.
+- **Task Planning & Recovery:** Separate **Planning** calls from **Tool Execution** loops; support automatic retry with exponential backoff, context-window compaction/summarization, rate-limit handling, and graceful offline/API-failure fallbacks.
+- **Observability & Configuration:** Model selector/routing (e.g., fast Flash-tier for voice/routing, Pro-tier for deep reasoning/planning), configurable temperature/safety/system prompts, and persistent token & usage metering per session/task.
+
+### Security Requirements
+- **Zero Embedded Secrets:** Never embed raw Gemini API keys in `BuildConfig`, XML resources, assets, or APK binaries. Route calls through a secure backend proxy or managed client-attestation infrastructure (e.g., Firebase AI Logic + Firebase App Check).
+- **Controlled Tool Interface:** Every Gemini tool call must pass schema validation and be intercepted by the **Aqua Agent Authorization Gate** before execution.
+
+---
+
+## 4. AQUA VOICE ENGINE (`core:voice`)
+
+Implement a low-latency, voice-first pipeline supporting:
+
+- **Speech-to-Text (STT) & Text-to-Speech (TTS):** Support real-time streaming speech recognition and natural spoken responses with configurable voice speed/pitch.
+- **Multilingual Auto-Detection:** Seamless switching and recognition for **English** and **Urdu**, accurately rendering spoken summaries and command transcriptions.
+- **Voice Interruption (Barge-In):** Immediately halt TTS playback and capture user speech when the user interrupts mid-response.
+- **Listening Modes:**
+  - Push-to-talk / tap-to-speak.
+  - Continuous conversation mode during explicitly activated sessions.
+  - Optional opt-in wake-word detection (battery-conscious and clearly toggleable).
+  - Background voice operation only where permitted by Android OS policies, running as a compliant **Foreground Service** (`foregroundServiceType="microphone"`).
+- **Safety & UX Controls:**
+  - Runtime `RECORD_AUDIO` permission flow with clear rationale and degraded text-only fallback if denied.
+  - Persistent, unmistakable listening indicator and Foreground Service notification with an **immediate one-tap Stop-Listening / Mute control**.
+  - Proper `AudioManager` audio-focus negotiation (ducking/pausing media during interaction and restoring cleanly).
+
+---
+
+## 5. ANDROID DEVICE CONTROL ENGINE (`core:device`)
+
+Implement authorized, native Android integrations using official APIs:
+
+### Supported Capabilities
+- **App & Screen Navigation:** Launch installed apps via `PackageManager` intents; open supported deep links, websites, and system settings screens.
+- **Notifications & Media:** Read, dismiss, or reply to authorized notifications (`NotificationListenerService`); control active media playback (`MediaSessionManager` / `AudioManager`).
+- **Screen Context & Accessibility:** Read permitted on-screen UI hierarchies and perform explicit accessibility gestures/clicks (`AccessibilityService`) strictly upon authorized user/agent triggers.
+- **Files, Sharing & System State:** Read/write files in authorized directories via **Storage Access Framework (SAF)** / `MediaStore`; trigger system share sheets; create reminders/alarms; inspect battery, thermal, storage, and network connectivity state.
+
+### Constraints & Compliance
+- **Explicit Consent Disclosures:** Prominent in-app disclosure before requesting Accessibility or Notification Listener permissions, explaining exact data usage (compliant with Android & Google Play policies).
+- **Mandatory Authorization Gate:** Every device-control action must pass through the **Authorization Engine** (no silent background UI automation without prior policy approval).
+
+---
+
+## 6. GOOGLE DRIVE CLOUD STORAGE & SYNC ENGINE (`core:drive`)
+
+Google Drive is the primary cloud storage and backup destination.
+
+### Authentication & Scopes
+- Implement OAuth 2.0 using modern Android standards (**Credential Manager + `AuthorizationClient`** or **AppAuth-Android with PKCE**).
+- Request **minimum necessary Drive API scopes** (e.g., `drive.file` for app-created/user-authorized workspace folders; avoid broad full-drive read/write scopes unless explicitly opted into by the user for File Manager features).
+
+### Mandatory Google Drive Folder Structure
+Create and maintain a root `Aqua AI/` directory containing isolated subfolders:
+1. `Account data/`
+2. `Conversations/`
+3. `Memory/`
+4. `AI documents/`
+5. `Research/`
+6. `Browser bookmarks/`
+7. `Task history/`
+8. `Automation records/`
+9. `Backups/`
+10. `Exports/`
+
+### Synchronization Engine Requirements
+- **Room-First + WorkManager:** Write all changes locally to encrypted Room first, enqueue sync mutations in an **Offline Change Queue**, and process via `WorkManager` (`NetworkType.CONNECTED`) for automatic and manual sync.
+- **Conflict Detection & Versioning:** Track Drive `fileId`, `modifiedTime`, `version`/ETag, and local SHA-256 content hashes. Detect concurrent edits, preserve conflict copies or prompt resolution, and handle retries with exponential backoff.
+- **Search, Retrieval & Restore:** Support full metadata/content search across synced documents and one-tap **Backup Restoration** into Room.
+- **Sync Telemetry UI:** Real-time sync state indicators (`Synced`, `Syncing`, `Pending Offline`, `Conflict`, `Error`).
+- **Strict Secret Exclusion Filter (Non-Negotiable):** Enforce an automated pre-upload sanitization filter that **blocks** wallet mnemonics, private keys, keystore blobs, OAuth tokens, raw device identifiers, or unencrypted credentials from ever entering the Drive sync queue.
+
+---
+
+## 7. AQUA MEMORY ENGINE (`core:memory`)
+
+Implement a structured, inspectable, persistent memory system stored in encrypted Room (with FTS4/FTS5 full-text indexing) and selectively synced to `Aqua AI/Memory/`:
+
+### Memory Tiers
+1. **Short-Term Session Context:** Rolling conversation buffer with automatic token-budget management.
+2. **Long-Term Structured Memory:** Categorized facts, user preferences, recurring instructions, and project knowledge with confidence scores, timestamps, and source provenance.
+3. **Episodic & Task Memory:** Searchable task history, conversation summaries, and user notes.
+
+### User Sovereignty Controls
+- Users must be able to **search, inspect, edit, pin, export (JSON/Markdown), and permanently delete** any memory item (propagating deletions cleanly to Google Drive).
+
+---
+
+## 8. AQUA BROWSER (`feature:browser`)
+
+Build a dedicated, security-hardened Android browser (WebView / GeckoView / equivalent Android-compatible engine) deeply integrated with Aqua's research capabilities:
+
+### Core & AI Browser Features
+- **Standard Browser Controls:** Omnibox (URL + search suggestions), multi-tab management, bookmarks (synced to Drive), history, download manager (with Security Guardian scan), and **Private/Incognito tabs** (isolated cookie/storage profile, zero history/memory persistence).
+- **Reading & Intelligence:** Reader mode (clean DOM extraction), inline page translation (including English <-> Urdu), AI webpage summarization, multi-tab comparison, **Research Mode** with verifiable source citations/links, and structured content extraction.
+
+### Security & Prompt-Injection Firewall
+- **WebView Hardening:** Enable Safe Browsing, block `file://` and `content://` access (`allowFileAccess = false`, `allowContentAccess = false`), enforce HTTPS/block mixed content, isolate site cookies/storage, and restrict JS interfaces strictly to sanitized, read-only extraction scripts.
+- **Prompt-Injection Defense:** Extracted DOM text, metadata, and URLs must be wrapped in strict untrusted-data delimiters when passed to Gemini. **No webpage content may alter system instructions, forge approvals, or invoke Aqua tools directly.**
+
+### Dual Workspace Access Modes
+1. **USER VIEW:** Clean, read-only presentation of AI-generated reports, summaries, and workspace artifacts. Prevents accidental corruption of AI-structured records while allowing user annotation/export/deletion.
+2. **AI WORKSPACE:** Authorized read/write sandbox where the Aqua Agent creates research reports, synthesizes cross-source findings, updates working notes, and organizes files (persisted locally and synced to `Aqua AI/Research/` and `AI documents/`).
+- **Data Ownership:** Users retain full ownership to export or permanently delete any workspace content at any time.
+
+---
+
+## 9. AQUA NATIVE MULTICHAIN WALLET (`feature:wallet`)
+
+Develop a modular, non-custodial, zero-trust cryptocurrency wallet engine.
+
+### Blockchain Architecture
+Define a clean `ChainAdapter` interface with production implementations for:
+- **Bitcoin** (BIP-44/49/84/86, UTXO management, fee rate estimation)
+- **Ethereum** (EIP-155, ERC-20, EIP-1559 gas estimation)
+- **Polygon** (EVM adapter)
+- **BNB Smart Chain** (EVM adapter)
+- **Solana** (Ed25519 / SPL tokens, priority fee & blockhash handling)
+- **Extensible Registry:** Plug-and-play support for additional EVM/non-EVM chains.
+
+### Wallet Capabilities
+- Create new HD wallet (BIP-39 mnemonic generation via `SecureRandom`), import existing wallet, derive addresses, and verify recovery backup.
+- Real-time native & token balances, transaction history, QR code scanner/generator (EIP-681 / BIP-21 / Solana Pay), network switcher, dynamic fee estimates, transaction status tracking, and supported dApp connection (e.g., WalletConnect v2 with domain verification).
+
+### Cryptographic & Signing Security (Critical)
+- **Audited Cryptography Only:** Use vetted open-source cryptographic libraries for BIP-39/BIP-32/secp256k1/Ed25519; never implement custom cryptographic primitives.
+- **Hardware-Backed Key Storage:** Encrypt seeds and private keys using a Data Encryption Key wrapped by **Android Keystore** (StrongBox where available). Exclude all wallet databases and preferences from `android:allowBackup` and Drive sync.
+- **Biometric & PIN Gating:** Require `BiometricPrompt` (or strong device/wallet PIN fallback) to reveal recovery phrases or authorize transaction signing. Apply `WindowManager.LayoutParams.FLAG_SECURE` on all sensitive wallet/seed screens.
+- **Transaction Validation & Simulation:** Verify destination address checksums, warn on suspicious/unverified contracts or approvals via Security Guardian, and display human-readable transaction simulation/fee breakdowns before signing.
+- **Strict AI Air-Gap:** Gemini may query *public* blockchain data, explain transactions, and construct *unsigned* transaction drafts. **Gemini must never read private keys, access decrypted keystores, or trigger silent transaction signing.** Signing requires explicit user review and independent native confirmation.
+
+---
+
+## 10. SUPERVISED AUTONOMOUS AGENT ENGINE (`core:agent`)
+
+Implement the central orchestration engine governing all multi-step tasks.
+
+### Formal Task State Machine
+Every task must transition deterministically through:
+`CREATED -> PLANNING -> AWAITING_APPROVAL -> EXECUTING -> VERIFYING -> COMPLETED | FAILED | CANCELLED | ROLLED_BACK`
+
+1. **Receive Instruction** (Voice, Chat, Automation trigger, or Share intent)
+2. **Understand Objective & Gather Authorized Context** (Memory, Drive, Screen, Web)
+3. **Generate Structured Execution Plan** (Ordered steps, required tools, risk classification)
+4. **Check Permissions & Risk Tier**
+5. **Request Explicit User Approval** (if Risk Tier >= 2)
+6. **Execute Authorized Tool Actions** (with progress streaming & cancellation checks)
+7. **Verify Outcome** (post-condition check; trigger retry or error recovery on failure)
+8. **Persist Immutable Audit Log & Task History**
+9. **Report Concise Outcome** (UI + optional spoken summary)
+
+### Risk Classification & Supervision Matrix
+- **Tier 0 (Auto-Execute):** Read-only queries, local search, summarization, web search within approved permissions.
+- **Tier 1 (Workspace-Scoped):** Creating/updating notes or AI Workspace documents, bookmarking.
+- **Tier 2 (Explicit Confirmation Required):** Sending communications, modifying/deleting user files, controlling device UI/settings, changing calendar/contacts.
+- **Tier 3 (Explicit Confirmation + Biometric/Strong Auth):** Financial transaction signing, granting sensitive OS/OAuth scopes, exporting sensitive data, bulk deletions.
+
+### Agent Controls
+- Concurrent/queued task manager with live step-by-step progress UI.
+- Instant **Pause / Cancel** button for active tasks.
+- Automatic failure recovery, retry limits, and immutable local audit logs (`AuditLogEntity`).
+
+---
+
+## 11. ADDITIONAL AQUA MODULES & CAPABILITIES
+
+Implement the following integrated modules cleanly on top of the core engines:
+
+1. **Aqua Automation Studio (`feature:automation`):** Visual & conversational builder for reusable command macros, scheduled `WorkManager` tasks, and conditional multi-step workflows (subject to the same Risk Tier approval rules).
+2. **Aqua Knowledge Brain:** Local + Drive RAG pipeline indexing authorized documents, notes, and research to answer grounded questions with exact file citations.
+3. **Aqua Floating Assistant:** Optional movable overlay orb (`SYSTEM_ALERT_WINDOW`, explicitly opt-in) providing instant voice/text invocation over other apps.
+4. **Aqua Screen Intelligence:** On-demand screen capture/accessibility tree analysis (never continuous unprompted recording) to summarize, translate, or act on current screen content.
+5. **Aqua Security Guardian:** Real-time URL phishing/malicious domain checks, APK/download risk warnings, prompt-injection alerts, and smart-contract/address scam warnings for the Wallet.
+6. **Aqua File Manager:** Unified file browser spanning authorized local SAF folders and the `Aqua AI/` Google Drive hierarchy (search, rename, move, tag, summarize, delete).
+7. **Aqua Developer Mode:** Optional GitHub OAuth/PAT integration (stored in encrypted Keystore), repository tree inspection, code explanation, diff review, and authorized dev assistance.
+8. **Aqua Notifications:** Categorized Android notification channels for task completions, pending approval prompts (with inline Approve/Reject actions where safe), sync alerts, and reminders.
+
+---
+
+## 12. GOOGLE ECOSYSTEM EXPANSION (MODULAR CONNECTORS)
+
+Build a clean `GoogleConnector` plugin architecture prepared for optional services:
+- **Gmail**
+- **Google Calendar**
+- **Google Contacts**
+- **Google Photos**
+
+**Strict Rules:**
+- Each connector must have **independent OAuth 2.0 scope authorization**, an individual enable/disable toggle in Settings, and one-tap **Scope Revocation**.
+- **Never assume** that basic Google Sign-In or Google Drive access grants permission to Gmail, Calendar, Contacts, or Photos.
+
+---
+
+## 13. CENTRALIZED SECURITY ARCHITECTURE (`core:security`)
+
+Enforce defense-in-depth across the entire application:
+
+- **6 Granular Permission Domains** (independently toggleable & auditable in Settings):
+  1. `READ_ACCESS` (local files, memory, screen context)
+  2. `WRITE_ACCESS` (AI workspace, file creation/modification)
+  3. `DEVICE_CONTROL` (apps, accessibility, notifications, settings)
+  4. `CLOUD_STORAGE` (Google Drive & optional ecosystem connectors)
+  5. `BACKGROUND_EXECUTION` (scheduled automations, background voice, sync)
+  6. `FINANCIAL_AUTHORIZATION` (wallet viewing vs. explicit biometric-gated signing)
+- **Cryptographic & Transport Hardening:** TLS 1.3 / HTTPS everywhere, certificate pinning where applicable, SQLCipher database encryption with Keystore-backed keys, EncryptedSharedPreferences/DataStore for session metadata, and `FLAG_SECURE` on sensitive views.
+- **Zero External Authority:** No external website, email body, notification text, downloaded file, or QR payload can independently authorize or elevate an Aqua tool permission.
+- **Privacy & Compliance:** Full user data export and one-tap local + cloud wipe functionality, plus comprehensive redacted audit logs (never log secrets, seed phrases, or bearer tokens).
+
+---
+
+## 14. USER INTERFACE & EXPERIENCE
+
+Preserve Aqua AI's existing design system while delivering a cohesive, responsive, accessible Android UI:
+
+- **Visual Identity:** Aqua blue and cyan accent palette, full Dark and Light theme support, smooth transitions, and an **animated AI Orb** reflecting real-time states (`Idle`, `Listening`, `Thinking`, `Speaking`, `Awaiting Approval`, `Executing`).
+- **Voice-First & Accessible:** Clear microphone/stop controls, live transcription/captions, TalkBack content descriptions, dynamic font scaling, and persistent **Permission & Sync Status Indicators**.
+- **Primary Navigation Sections:**
+  1. `Home` (Dashboard, quick actions, active tasks, orb)
+  2. `Voice` (Full-screen conversational voice interface)
+  3. `Chat` (Multimodal text/file chat with streaming & tool cards)
+  4. `Browser` (Tabs, Research Mode, User View / AI Workspace toggle)
+  5. `Memory` (Inspect, search, edit, export, forget)
+  6. `Drive` (Sync status, folder explorer, backups)
+  7. `Wallet` (Multichain assets, send/receive, history, security checks)
+  8. `Automation` (Workflows, schedules, templates)
+  9. `Device Control` (Permission matrix, quick controls, active services)
+  10. `Settings` (Account, Security, Gemini Model/Usage, Connectors, Developer Mode, Diagnostics)
+
+---
+
+## 15. PHASED IMPLEMENTATION ROADMAP
+
+Execute sequentially. **Every phase must compile cleanly (`assembleDebug` + unit/integration tests passing) before advancing.**
+
+- **Phase 1:** Repository Inspection, Architecture Report, Dependency Map, Modular Core & Encrypted Room Baseline.
+- **Phase 2:** Gemini Intelligence Engine (Secure Credential Setup, Streaming, Tool Registry) & Aqua Voice Engine (STT/TTS, English/Urdu, Barge-in, Foreground Service).
+- **Phase 3:** Supervised Autonomous Agent Engine (State Machine, Risk Matrix, Approval UI, Audit Logs).
+- **Phase 4:** Android Device Control Engine (Intents, Notifications, Media, Accessibility, SAF, Permission Matrix).
+- **Phase 5:** Google OAuth 2.0 (Credential Manager / PKCE) & Google Drive Sync Engine (Folder Hierarchy, Offline Queue, Conflict Resolution, Backup/Restore).
+- **Phase 6:** Aqua Memory Engine (Short/Long-term, FTS Search, Provenance, Edit/Forget, Drive Sync).
+- **Phase 7:** Aqua Browser (Hardened WebView, Tabs, Research Mode, Prompt-Injection Firewall, User View / AI Workspace).
+- **Phase 8:** Native Multichain Wallet (BTC/ETH/SOL/POL/BSC Adapters, Keystore + Biometric Signing, Simulation, Security Guardian checks).
+- **Phase 9:** Additional Modules (Automation Studio, Knowledge Brain, Floating Assistant, Screen Intelligence, File Manager, Developer Mode, Modular Google Connectors).
+- **Phase 10:** End-to-End Security Audit, Performance/Memory Profiling, Automated Test Suite Completion, R8/ProGuard Hardening, Release Signing Config, and Final Documentation.
+
+---
+
+## 16. ACCEPTANCE TESTS & VERIFICATION MATRIX
+
+The final application must pass automated and end-to-end verification demonstrating all 17 scenarios:
+
+1. **Voice Comprehension:** Understands English and Urdu voice commands accurately and supports mid-speech interruption.
+2. **Gemini Communication:** Streams responses, uses structured tool calling, and tracks token usage without embedded APK secrets.
+3. **Task Planning & Execution:** Plans multi-step tasks, surfaces transparent step progress, and verifies outcomes.
+4. **Device App Control:** Launches supported Android apps and system screens via authorized intents/services.
+5. **Authorized File Access:** Reads and manages user-authorized local files via SAF/File Manager.
+6. **Drive Conversation Sync:** Automatically and manually syncs conversations/memory to the `Aqua AI/` Drive structure.
+7. **Cloud Backup Restore:** Restores supported Drive backups cleanly into local encrypted Room storage.
+8. **Web Search & Summarization:** Navigates, extracts, compares, and cites webpages in Aqua Browser while blocking prompt injection.
+9. **Persistent Memory:** Remembers preferences/facts across restarts and allows user inspection, editing, export, and deletion.
+10. **Workspace Document Creation:** Creates and organizes structured reports/notes in AI Workspace (read-only in User View).
+11. **Native Wallet Creation:** Generates/imports multichain wallets with hardware-backed Keystore encryption and recovery verification (never uploaded to Drive).
+12. **Air-Gapped Transaction Prep:** Gemini prepares/explains an unsigned transaction without accessing private keys; native UI completes biometric-gated signing.
+13. **Risk-Gated Approvals:** Blocks Tier 2/3 sensitive actions until explicit user confirmation (and biometric auth where required).
+14. **Task Cancellation:** Immediately halts running tasks and leaves system state consistent upon user cancellation.
+15. **Unauthorized Operation Rejection:** Rejects disallowed permissions, unapproved tool invocations, and webpage-injected tool calls (logged in audit log).
+16. **Offline Resilience:** Remains functional with cached memory, local history, queued Drive mutations, and offline wallet viewing when disconnected.
+17. **Regression Safety:** All previously working Aqua AI features remain intact and functional.
+
+---
+
+## 17. FINAL DELIVERY REQUIREMENTS
+
+Deliver a complete, verifiable engineering package:
+1. Full production-ready Android source code in the repository.
+2. Phase 1 Inspection Report & Final Updated Architecture Documentation.
+3. API & Secret Infrastructure Setup Guide (Gemini secure proxy / Firebase App Check, Google Cloud OAuth 2.0 SHA-1 & scope setup).
+4. Drive Sync & Conflict Resolution Technical Specification.
+5. Android Permission & Play-Policy Compliance Manifest Guide.
+6. Wallet Cryptographic & Security Architecture Documentation.
+7. Automated Test Suite (Unit tests, Integration tests, UI/Instrumentation tests, Security/Prompt-Injection tests) with passing test reports.
+8. Passing `lint`, `assembleDebug` (Debug APK), and hardened `assembleRelease` (R8/ProGuard release build configuration & deployment instructions).
+
+---
+
+**FINAL VISION:**  
+Aqua AI must stand as a trustworthy, voice-first, supervised autonomous Android companion—combining Gemini intelligence, Google Drive continuity, native device agency, isolated web research, persistent memory, and hardware-secured multichain crypto management—while keeping the user unambiguously in control of every permission, personal record, and financial signature.

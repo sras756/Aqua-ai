@@ -1,19 +1,27 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
--->
+<?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <exclude domain="sharedpref" path="aqua_native_wallet_vault.xml" />
+        <exclude domain="sharedpref" path="aqua_secure_config_prefs.xml" />
+        <exclude domain="sharedpref" path="aqua_db_key_prefs.xml" />
+        <exclude domain="sharedpref" path="aqua_security_policy_prefs.xml" />
+        <exclude domain="database" path="aqua_local_cache.db" />
+        <exclude domain="database" path="aqua_local_cache.db-wal" />
+        <exclude domain="database" path="aqua_local_cache.db-shm" />
+        <exclude domain="database" path="aqua_ssot_encrypted.db" />
+        <exclude domain="database" path="aqua_ssot_encrypted.db-wal" />
+        <exclude domain="database" path="aqua_ssot_encrypted.db-shm" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="sharedpref" path="aqua_native_wallet_vault.xml" />
+        <exclude domain="sharedpref" path="aqua_secure_config_prefs.xml" />
+        <exclude domain="sharedpref" path="aqua_db_key_prefs.xml" />
+        <exclude domain="sharedpref" path="aqua_security_policy_prefs.xml" />
+        <exclude domain="database" path="aqua_local_cache.db" />
+        <exclude domain="database" path="aqua_local_cache.db-wal" />
+        <exclude domain="database" path="aqua_local_cache.db-shm" />
+        <exclude domain="database" path="aqua_ssot_encrypted.db" />
+        <exclude domain="database" path="aqua_ssot_encrypted.db-wal" />
+        <exclude domain="database" path="aqua_ssot_encrypted.db-shm" />
     </device-transfer>
-    -->
 </data-extraction-rules>

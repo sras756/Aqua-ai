@@ -1,6 +1,11 @@
 package com.example.ai
 
 import com.example.browser.AquaBrowserController
+import com.example.core.agent.AgentOrchestrator
+import com.example.core.agent.RiskTier
+import com.example.core.agent.TaskState
+import com.example.core.agent.ToolRiskClassifier
+import com.example.core.drive.AquaDriveSyncCoordinator
 import com.example.data.local.AiFreedomConfig
 import com.example.data.model.AgentStepTrace
 import com.example.data.model.MemoryItem
@@ -16,6 +21,7 @@ import com.example.wallet.ai.AquaAiWalletBridge
 import com.example.wallet.core.TxStatus
 import com.google.firebase.ai.type.FunctionCallPart
 import com.google.firebase.ai.type.Tool
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -37,7 +43,11 @@ class ToolCallingEngine(
     private val onWalletMutated: () -> Unit = {},
     private val freedomConfigProvider: (() -> AiFreedomConfig)? = null,
     private val aiStatusProvider: (() -> String)? = null,
-    private val onSpeakWithElevenLabs: ((String) -> String)? = null
+    private val onSpeakWithElevenLabs: ((String) -> String)? = null,
+    private val agentOrchestrator: AgentOrchestrator? = null,
+    private val activeTaskIdProvider: (() -> String?)? = null,
+    private val driveSyncCoordinator: AquaDriveSyncCoordinator? = null,
+    private val userIdProvider: () -> String = { "default_user" }
 ) {
 
     fun buildToolDeclarations(
@@ -71,6 +81,7 @@ class ToolCallingEngine(
     ): JsonObject {
         val name = call.name
         val args = call.args
+        val currentTaskId = activeTaskIdProvider?.invoke()
 
         fun argStr(key: String): String =
             args[key]?.jsonPrimitive?.contentOrNull.orEmpty()
@@ -81,17 +92,30 @@ class ToolCallingEngine(
         fun argBool(key: String, default: Boolean = false): Boolean =
             args[key]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: default
 
-        return try {
+        val guardResult = agentOrchestrator?.guardToolExecution(
+            taskId = currentTaskId,
+            toolName = name,
+            detailSummary = args.toString().take(180)
+        )
+        if (guardResult != null && guardResult.isFailure) {
+            val denialMsg = guardResult.exceptionOrNull()?.message
+                ?: "Permission domain denied execution of '$name'."
+            onTrace(AgentStepTrace("Permission Denied", name, "denied", denialMsg))
+            return jsonResult(false, denialMsg)
+        }
+
+        val outcomeResult: JsonObject = try {
             when (name) {
                 "check_device_status" -> {
                     val t = deviceController.getTelemetry()
-                    onTrace(AgentStepTrace("Telemetry", name, "completed", "Battery ${t.batteryPercent}%, ${t.connectionType}"))
+                    onTrace(AgentStepTrace("Telemetry", name, "completed", "Battery ${t.batteryPercent}%, ${t.connectionType}, Thermal ${t.thermalStatusLabel}"))
                     jsonResult(
                         true,
                         "Battery: ${t.batteryPercent}% (${if (t.isCharging) "Charging" else "Not charging"}), " +
-                            "Network: ${t.connectionType} (${if (t.isOnline) "Online" else "Offline"}), " +
+                            "Thermal: ${t.thermalStatusLabel}, Network: ${t.connectionType} (${if (t.isOnline) "Online" else "Offline"}), " +
                             "Media Volume: ${t.mediaVolumePercent}%, Flashlight: ${if (t.flashlightEnabled) "ON" else "OFF"}, " +
-                            "Notification Access: ${if (t.notificationAccessGranted) "Granted" else "Not Granted"}"
+                            "Notification Access: ${if (t.notificationAccessGranted) "Granted" else "Not Granted"}, " +
+                            "Accessibility Assist: ${if (t.accessibilityEnabled) "Enabled" else "Off"}"
                     )
                 }
 
@@ -350,9 +374,27 @@ class ToolCallingEngine(
                 }
 
                 "browser_read_current_page" -> {
-                    val text = browserController.extractCurrentPageText().getOrThrow()
-                    onTrace(AgentStepTrace("Read Page", name, "completed", "Extracted ${text.length} chars"))
-                    jsonResult(true, text.take(8000))
+                    val scan = browserController.extractSafelyWrappedPageText().getOrThrow()
+                    if (scan.threatDetected) {
+                        val activeTaskId = activeTaskIdProvider?.invoke().orEmpty()
+                        agentOrchestrator?.recordSecurityEvent(
+                            taskId = activeTaskId,
+                            domain = com.example.core.security.PermissionDomain.READ_ACCESS,
+                            action = "prompt_injection_firewall",
+                            riskTier = com.example.core.agent.RiskTier.TIER_2_CONFIRM,
+                            outcome = "BLOCKED_INJECTION",
+                            detail = "Neutralized webpage prompt-injection patterns: ${scan.blockedThreats.joinToString(", ")}"
+                        )
+                    }
+                    onTrace(
+                        AgentStepTrace(
+                            "Read Page",
+                            name,
+                            "completed",
+                            "Extracted ${scan.sanitizedText.length} chars (firewall threats=${scan.blockedThreats.size})"
+                        )
+                    )
+                    jsonResult(true, scan.wrappedUntrustedPayload.take(9000))
                 }
 
                 "browser_fill_form" -> {
@@ -1226,6 +1268,26 @@ class ToolCallingEngine(
                     jsonResult(true, msg)
                 }
 
+                "drive_sync_now" -> {
+                    val repo = driveHistoryRepo
+                        ?: return jsonResult(false, "Google Drive repository is not initialized.")
+                    val sync = driveSyncCoordinator
+                        ?: return jsonResult(false, "Drive sync coordinator is not initialized.")
+                    val token = repo.tryGetSilentAccessToken()
+                    if (token.isNullOrBlank()) {
+                        val msg = "Google Drive consent required first. Open Hub -> Drive Vault and tap Connect Google Drive."
+                        onTrace(AgentStepTrace("Drive Sync", name, "needs_auth", msg))
+                        return jsonResult(false, msg)
+                    }
+                    val summary = sync.flushQueue(
+                        userId = userIdProvider(),
+                        accessToken = token,
+                        apiKey = repo.resolveEffectiveApiKey()
+                    )
+                    onTrace(AgentStepTrace("Drive Sync", name, "completed", summary.message))
+                    jsonResult(summary.errorCount == 0, summary.message)
+                }
+
                 "get_device_storage_and_memory" -> {
                     val s = deviceController.getStorageAndMemoryStats()
                     val msg = "Storage: ${s.storageFreeMb} MB free of ${s.storageTotalMb} MB | " +
@@ -1301,15 +1363,98 @@ class ToolCallingEngine(
                     jsonResult(true, outcome)
                 }
 
+                "media_playback_control" -> {
+                    val action = argStr("action").ifBlank { "status" }
+                    val msg = if (action.equals("status", ignoreCase = true)) {
+                        val sessions = deviceController.mediaController.queryActiveSessions()
+                        if (sessions.isEmpty()) {
+                            "No active media sessions detected (or Notification Access not granted)."
+                        } else {
+                            sessions.joinToString("\n") { s ->
+                                "${s.packageName}: ${s.title.ifBlank { "Untitled" }} — ${s.artist.ifBlank { "Unknown" }} (${if (s.isPlaying) "Playing" else "Paused"})"
+                            }
+                        }
+                    } else {
+                        deviceController.mediaController.dispatchCommand(action).getOrThrow()
+                    }
+                    onTrace(AgentStepTrace("Media Control", name, "completed", msg.take(100)))
+                    jsonResult(true, msg)
+                }
+
+                "accessibility_perform_action" -> {
+                    val service = com.example.device.AquaAccessibilityService.getActiveInstance()
+                    if (service == null) {
+                        val msg = "Aqua AI Screen Assist AccessibilityService is not enabled. Enable it manually in Settings -> Device Control -> Accessibility Assist after reviewing the disclosure."
+                        onTrace(AgentStepTrace("Screen Assist", name, "needs_auth", msg))
+                        jsonResult(false, msg)
+                    } else {
+                        val action = argStr("action").ifBlank { "read_screen" }
+                        val target = argStr("targetText")
+                        val msg = runWithOptionalGate(
+                            settings = settings,
+                            isSensitive = false,
+                            title = "Accessibility Assist: $action",
+                            type = "Device Control (Accessibility)",
+                            desc = "Confirm executing opt-in Accessibility action '$action'${if (target.isNotBlank()) " on '$target'" else ""}.",
+                            params = listOf("Action" to action, "Target" to target.ifBlank { "Active Window" }),
+                            requestAuthorization = requestAuthorization
+                        ) {
+                            when (action.lowercase()) {
+                                "read_screen" -> {
+                                    val snap = service.captureVisibleScreen()
+                                    if (snap == null) {
+                                        "No active window content captured (or disclosure not yet accepted)."
+                                    } else {
+                                        val preview = snap.elements.take(15).joinToString("\n") {
+                                            "- ${it.text.ifBlank { it.contentDescription }}"
+                                        }
+                                        "Window ${snap.packageName} (${snap.elements.size} elements):\n$preview"
+                                    }
+                                }
+                                "click_text" -> {
+                                    val clicked = service.clickVisibleText(target)
+                                    if (clicked) "Clicked element matching '$target'."
+                                    else "No enabled clickable node matching '$target' found."
+                                }
+                                else -> {
+                                    val ok = service.executeNavigationAction(action)
+                                    if (ok) "Executed accessibility global action '$action'."
+                                    else "Failed to execute accessibility action '$action'."
+                                }
+                            }
+                        }
+                        onTrace(AgentStepTrace("Screen Assist", name, "completed", msg.take(100)))
+                        jsonResult(!msg.contains("declined", ignoreCase = true) && !msg.contains("Failed"), msg)
+                    }
+                }
+
                 else -> {
                     onTrace(AgentStepTrace("Unknown Tool", name, "error", "Unsupported tool"))
                     jsonResult(false, "Tool '$name' is not implemented.")
                 }
             }
+        } catch (ce: CancellationException) {
+            throw ce
         } catch (e: Exception) {
             onTrace(AgentStepTrace("Error Recovery", name, "failed", e.message ?: "Execution failed"))
             jsonResult(false, "Tool '$name' failed: ${e.message ?: "Unknown error"}")
         }
+
+        val succeeded = outcomeResult["success"]?.jsonPrimitive?.contentOrNull == "true"
+        val msgSummary = outcomeResult["message"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        agentOrchestrator?.recordToolOutcome(
+            taskId = currentTaskId,
+            toolName = name,
+            outcome = if (succeeded) "COMPLETED" else "FAILED",
+            detail = msgSummary
+        )
+        if (!currentTaskId.isNullOrBlank()) {
+            agentOrchestrator?.transitionTask(
+                taskId = currentTaskId,
+                nextState = TaskState.EXECUTING
+            )
+        }
+        return outcomeResult
     }
 
     private suspend fun runWithOptionalGate(

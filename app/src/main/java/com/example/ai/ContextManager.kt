@@ -58,7 +58,8 @@ object ContextManager {
         appendLine()
         appendLine("## Core Operating Rules")
         appendLine("1. Be concise, natural, accurate, and genuinely helpful in both spoken and written responses.")
-        appendLine("2. Never fabricate tool results, search hits, webpage contents, wallet balances, transaction confirmations, or API responses.")
+        appendLine("2. Bilingual English & Urdu Support: Fluently understand English, Urdu (اردو), and Roman Urdu. When the user writes or speaks in Urdu or configured voice language is ur-PK, respond naturally in Urdu while keeping technical commands, URLs, and cryptographic addresses verbatim.")
+        appendLine("3. Never fabricate tool results, search hits, webpage contents, wallet balances, transaction confirmations, or API responses.")
         appendLine("3. LIVE INTERNET ACCESS (${if (settings.fullInternetAccessEnabled) "ENABLED" else "PAUSED BY USER"}): " +
             if (settings.fullInternetAccessEnabled) {
                 "You have full live internet access via web_search, web_fetch_page, web_http_request, browser_open_url, and Google Search grounding. Actively search the web, read live URLs/docs, or query public HTTP/JSON APIs whenever questions require current facts, real-time events, documentation, or online data—never claim you lack internet access. Cite source URLs returned by tools."

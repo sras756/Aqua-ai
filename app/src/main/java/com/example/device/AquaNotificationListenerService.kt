@@ -10,19 +10,23 @@ data class CapturedNotification(
     val packageName: String,
     val title: String,
     val text: String,
-    val postTime: Long
+    val postTime: Long,
+    val key: String = "",
+    val isClearable: Boolean = true
 )
 
 class AquaNotificationListenerService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
+        instance = this
         _isConnected.value = true
         refreshNotifications()
     }
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
+        if (instance === this) instance = null
         _isConnected.value = false
     }
 
@@ -45,7 +49,9 @@ class AquaNotificationListenerService : NotificationListenerService() {
                     packageName = sbn.packageName,
                     title = title,
                     text = text,
-                    postTime = sbn.postTime
+                    postTime = sbn.postTime,
+                    key = sbn.key.orEmpty(),
+                    isClearable = sbn.isClearable
                 )
             }
             _notifications.value = list
@@ -54,10 +60,22 @@ class AquaNotificationListenerService : NotificationListenerService() {
     }
 
     companion object {
+        @Volatile
+        private var instance: AquaNotificationListenerService? = null
+
         private val _isConnected = MutableStateFlow(false)
         val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
         private val _notifications = MutableStateFlow<List<CapturedNotification>>(emptyList())
         val notifications: StateFlow<List<CapturedNotification>> = _notifications.asStateFlow()
+
+        fun dismissNotification(key: String): Boolean {
+            val service = instance ?: return false
+            if (key.isBlank()) return false
+            return runCatching {
+                service.cancelNotification(key)
+                true
+            }.getOrDefault(false)
+        }
     }
 }

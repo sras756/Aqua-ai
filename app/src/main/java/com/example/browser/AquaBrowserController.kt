@@ -4,8 +4,12 @@ import android.app.DownloadManager
 import android.content.Context
 import android.net.Uri
 import android.os.Environment
+import android.webkit.CookieManager
 import android.webkit.URLUtil
+import android.webkit.WebStorage
 import android.webkit.WebView
+import com.example.core.browser.PromptInjectionFirewall
+import com.example.core.browser.PromptInjectionScanResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,11 +21,20 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
+import java.util.UUID
 import kotlin.coroutines.resume
 
 data class BrowserLink(
     val text: String,
     val href: String
+)
+
+data class BrowserTabSession(
+    val tabId: String = "tab_${UUID.randomUUID().toString().replace("-", "").take(10)}",
+    val title: String = "New Tab",
+    val url: String = "https://duckduckgo.com",
+    val isIncognito: Boolean = false,
+    val updatedAtMs: Long = System.currentTimeMillis()
 )
 
 data class BrowserPageState(
@@ -31,7 +44,9 @@ data class BrowserPageState(
     val progress: Int = 0,
     val canGoBack: Boolean = false,
     val canGoForward: Boolean = false,
+    val isIncognito: Boolean = false,
     val lastExtractedText: String = "",
+    val lastSecurityWarning: String? = null,
     val lastError: String? = null
 )
 
@@ -41,6 +56,13 @@ class AquaBrowserController(private val context: Context) {
 
     private val _pageState = MutableStateFlow(BrowserPageState())
     val pageState: StateFlow<BrowserPageState> = _pageState.asStateFlow()
+
+    private val defaultTab = BrowserTabSession(tabId = "tab_main", title = "Aqua Start", url = "https://duckduckgo.com")
+    private val _tabSessions = MutableStateFlow(listOf(defaultTab))
+    val tabSessions: StateFlow<List<BrowserTabSession>> = _tabSessions.asStateFlow()
+
+    private val _activeTabId = MutableStateFlow(defaultTab.tabId)
+    val activeTabId: StateFlow<String> = _activeTabId.asStateFlow()
 
     private val _pendingUrl = MutableStateFlow<String?>(null)
     val pendingUrl: StateFlow<String?> = _pendingUrl.asStateFlow()
@@ -63,13 +85,91 @@ class AquaBrowserController(private val context: Context) {
     }
 
     fun updatePageState(transform: (BrowserPageState) -> BrowserPageState) {
-        _pageState.value = transform(_pageState.value)
+        val next = transform(_pageState.value)
+        _pageState.value = next
+        val activeId = _activeTabId.value
+        _tabSessions.value = _tabSessions.value.map { t ->
+            if (t.tabId == activeId) {
+                t.copy(
+                    title = next.currentTitle.ifBlank { t.title },
+                    url = next.currentUrl.ifBlank { t.url },
+                    isIncognito = next.isIncognito,
+                    updatedAtMs = System.currentTimeMillis()
+                )
+            } else {
+                t
+            }
+        }
+    }
+
+    fun isCurrentTabIncognito(): Boolean =
+        _tabSessions.value.firstOrNull { it.tabId == _activeTabId.value }?.isIncognito == true || _pageState.value.isIncognito
+
+    fun openNewTab(urlOrQuery: String = "https://duckduckgo.com", isIncognito: Boolean = false): BrowserTabSession {
+        val resolved = normalizeUrlOrSearch(urlOrQuery)
+        val tab = BrowserTabSession(
+            title = if (isIncognito) "Incognito Tab" else resolved.removePrefix("https://").take(28),
+            url = resolved,
+            isIncognito = isIncognito
+        )
+        _tabSessions.value = _tabSessions.value + tab
+        _activeTabId.value = tab.tabId
+        _pageState.value = _pageState.value.copy(
+            currentUrl = resolved,
+            currentTitle = tab.title,
+            isIncognito = isIncognito,
+            lastError = null
+        )
+        navigateTo(resolved)
+        return tab
+    }
+
+    fun switchTab(tabId: String) {
+        val target = _tabSessions.value.firstOrNull { it.tabId == tabId } ?: return
+        _activeTabId.value = target.tabId
+        _pageState.value = _pageState.value.copy(
+            currentUrl = target.url,
+            currentTitle = target.title,
+            isIncognito = target.isIncognito
+        )
+        navigateTo(target.url)
+    }
+
+    fun closeTab(tabId: String) {
+        val closing = _tabSessions.value.firstOrNull { it.tabId == tabId }
+        val remaining = _tabSessions.value.filterNot { it.tabId == tabId }
+        if (closing?.isIncognito == true) {
+            wipeIncognitoWebStorage()
+        }
+        if (remaining.isEmpty()) {
+            val fresh = BrowserTabSession(tabId = "tab_main", title = "Aqua Start", url = "https://duckduckgo.com")
+            _tabSessions.value = listOf(fresh)
+            _activeTabId.value = fresh.tabId
+            _pageState.value = BrowserPageState()
+            _hasActiveSession.value = false
+        } else {
+            _tabSessions.value = remaining
+            if (_activeTabId.value == tabId) {
+                switchTab(remaining.last().tabId)
+            }
+        }
+    }
+
+    fun wipeIncognitoWebStorage() {
+        runCatching { CookieManager.getInstance().removeSessionCookies(null) }
+        runCatching { CookieManager.getInstance().flush() }
+        runCatching { WebStorage.getInstance().deleteAllData() }
+        runOnWebView { wv -> wv.clearCache(true); wv.clearHistory() }
     }
 
     fun normalizeUrlOrSearch(input: String): String {
         val trimmed = input.trim()
         if (trimmed.isEmpty()) return "https://duckduckgo.com"
-        if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed
+        val lower = trimmed.lowercase()
+        if (lower.startsWith("file://") || lower.startsWith("content://") || lower.startsWith("javascript:")) {
+            return "https://duckduckgo.com"
+        }
+        if (lower.startsWith("http://") || lower.startsWith("https://")) return trimmed
         if (trimmed.contains('.') && !trimmed.contains(' ')) return "https://$trimmed"
         return "https://duckduckgo.com/?q=${Uri.encode(trimmed)}"
     }
@@ -78,10 +178,12 @@ class AquaBrowserController(private val context: Context) {
         val resolved = normalizeUrlOrSearch(urlOrQuery)
         _hasActiveSession.value = true
         _pendingUrl.value = resolved
-        _pageState.value = _pageState.value.copy(
-            currentUrl = resolved,
-            lastError = null
-        )
+        updatePageState {
+            it.copy(
+                currentUrl = resolved,
+                lastError = null
+            )
+        }
         val wv = webViewRef
         if (wv != null && wv.isAttachedToWindow) {
             wv.post {
@@ -149,6 +251,25 @@ class AquaBrowserController(private val context: Context) {
             if (fromWebView.isSuccess) return fromWebView
         }
         return fetchUrlAsReader(_pageState.value.currentUrl).map { it.first }
+    }
+
+    /**
+     * Extracts page text and wraps it in PromptInjectionFirewall untrusted-data boundaries for Gemini.
+     */
+    suspend fun extractSafelyWrappedPageText(): Result<PromptInjectionScanResult> {
+        return extractCurrentPageText().map { raw ->
+            val scan = PromptInjectionFirewall.inspectAndWrapWebContent(
+                url = _pageState.value.currentUrl,
+                title = _pageState.value.currentTitle,
+                rawText = raw
+            )
+            if (scan.threatDetected) {
+                updatePageState {
+                    it.copy(lastSecurityWarning = "Prompt-injection attempt neutralized: ${scan.blockedThreats.joinToString(", ")}")
+                }
+            }
+            scan
+        }
     }
 
     private suspend fun extractTextFromWebView(wv: WebView): Result<String> = suspendCancellableCoroutine { cont ->
@@ -323,9 +444,14 @@ class AquaBrowserController(private val context: Context) {
             }
         }
 
-    fun enqueueDownload(url: String, userAgent: String?, contentDisposition: String?, mimeType: String?): Result<String> =
-        runCatching {
-            val fileName = URLUtil.guessFileName(url, contentDisposition, mimeType)
+    fun enqueueDownload(url: String, userAgent: String?, contentDisposition: String?, mimeType: String?): Result<String> {
+        val risk = PromptInjectionFirewall.evaluateDownloadRisk(url, contentDisposition, mimeType)
+        if (risk.isHighRisk) {
+            updatePageState { it.copy(lastSecurityWarning = risk.warningMessage) }
+            return Result.failure(SecurityException(risk.warningMessage))
+        }
+        return runCatching {
+            val fileName = risk.fileName
             val request = DownloadManager.Request(Uri.parse(url)).apply {
                 setTitle(fileName)
                 setDescription("Downloaded via Aqua Browser")
@@ -337,6 +463,7 @@ class AquaBrowserController(private val context: Context) {
             dm.enqueue(request)
             "Started download for $fileName."
         }
+    }
 
     private fun unquoteJsString(raw: String?): String {
         if (raw == null || raw == "null") return "{}"

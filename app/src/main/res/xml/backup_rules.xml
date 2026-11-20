@@ -1,13 +1,13 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
--->
+<?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <exclude domain="sharedpref" path="aqua_native_wallet_vault.xml" />
+    <exclude domain="sharedpref" path="aqua_secure_config_prefs.xml" />
+    <exclude domain="sharedpref" path="aqua_db_key_prefs.xml" />
+    <exclude domain="sharedpref" path="aqua_security_policy_prefs.xml" />
+    <exclude domain="database" path="aqua_local_cache.db" />
+    <exclude domain="database" path="aqua_local_cache.db-wal" />
+    <exclude domain="database" path="aqua_local_cache.db-shm" />
+    <exclude domain="database" path="aqua_ssot_encrypted.db" />
+    <exclude domain="database" path="aqua_ssot_encrypted.db-wal" />
+    <exclude domain="database" path="aqua_ssot_encrypted.db-shm" />
 </full-backup-content>

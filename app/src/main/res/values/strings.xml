@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Aqua AI</string>
+    <string name="accessibility_service_description">Opt-in Aqua AI assistive service used only when explicitly triggered by you to summarize screen text or assist with navigation actions. Password fields are never accessed.</string>
 </resources>

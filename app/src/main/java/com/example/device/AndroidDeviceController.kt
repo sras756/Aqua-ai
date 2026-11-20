@@ -14,12 +14,16 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.BatteryManager
+import android.os.Build
 import android.os.Environment
+import android.os.PowerManager
 import android.os.StatFs
 import android.provider.AlarmClock
 import android.provider.CalendarContract
 import android.provider.Settings
 import android.content.ComponentName
+import com.example.core.device.AquaSafFileController
+import com.example.core.device.MediaPlaybackController
 
 data class StorageAndMemoryStats(
     val storageFreeMb: Long,
@@ -37,10 +41,15 @@ data class DeviceTelemetry(
     val mediaVolumePercent: Int,
     val flashlightAvailable: Boolean,
     val flashlightEnabled: Boolean,
-    val notificationAccessGranted: Boolean
+    val notificationAccessGranted: Boolean,
+    val thermalStatusLabel: String = "Nominal",
+    val accessibilityEnabled: Boolean = false
 )
 
 class AndroidDeviceController(private val context: Context) {
+
+    val mediaController = MediaPlaybackController(context)
+    val safController = AquaSafFileController(context)
 
     private var torchEnabled = false
 
@@ -80,8 +89,43 @@ class AndroidDeviceController(private val context: Context) {
             mediaVolumePercent = volPct,
             flashlightAvailable = cameraId != null,
             flashlightEnabled = torchEnabled,
-            notificationAccessGranted = isNotificationAccessEnabled()
+            notificationAccessGranted = isNotificationAccessEnabled(),
+            thermalStatusLabel = readThermalStatusLabel(),
+            accessibilityEnabled = isAccessibilityServiceEnabled()
         )
+    }
+
+    fun readThermalStatusLabel(): String {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return "Nominal"
+        val pm = runCatching { context.getSystemService(Context.POWER_SERVICE) as? PowerManager }.getOrNull()
+            ?: return "Nominal"
+        return when (runCatching { pm.currentThermalStatus }.getOrDefault(PowerManager.THERMAL_STATUS_NONE)) {
+            PowerManager.THERMAL_STATUS_NONE -> "Nominal"
+            PowerManager.THERMAL_STATUS_LIGHT -> "Light"
+            PowerManager.THERMAL_STATUS_MODERATE -> "Moderate"
+            PowerManager.THERMAL_STATUS_SEVERE -> "Severe"
+            PowerManager.THERMAL_STATUS_CRITICAL -> "Critical"
+            PowerManager.THERMAL_STATUS_EMERGENCY -> "Emergency"
+            PowerManager.THERMAL_STATUS_SHUTDOWN -> "Shutdown"
+            else -> "Nominal"
+        }
+    }
+
+    fun isAccessibilityServiceEnabled(): Boolean {
+        val enabled = Settings.Secure.getString(
+            context.contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+        val expected = ComponentName(context, AquaAccessibilityService::class.java).flattenToString()
+        return enabled.split(":").any { it.equals(expected, ignoreCase = true) }
+    }
+
+    fun openAccessibilitySettings(): Result<String> = runCatching {
+        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+        "Opened Android Accessibility Settings."
     }
 
     fun isNotificationAccessEnabled(): Boolean {

@@ -52,7 +52,17 @@ internal object AquaToolCatalog {
                 listOf(s("title", "Reminder title."), s("details", "Reminder details or time note."), b("openCalendar", "True to launch Calendar UI."))
             ),
             AquaToolSpec("read_notifications", "Reads recent active Android notifications if permitted."),
-            AquaToolSpec("get_device_storage_and_memory", "Returns real live Android storage free/total space and RAM availability."),
+            AquaToolSpec("get_device_storage_and_memory", "Returns real live Android storage free/total space, thermal status, and RAM availability."),
+            AquaToolSpec(
+                "media_playback_control",
+                "Controls active Android media playback (play_pause, play, pause, next, previous, stop, or status).",
+                listOf(s("action", "One of play_pause, play, pause, next, previous, stop, or status."))
+            ),
+            AquaToolSpec(
+                "accessibility_perform_action",
+                "Executes opt-in Accessibility actions (read_screen, back, home, recents, notifications, click_text) only when Accessibility Assist is explicitly enabled.",
+                listOf(s("action", "read_screen, back, home, recents, notifications, or click_text."), s("targetText", "Target button label when using click_text."))
+            ),
             AquaToolSpec(
                 "save_memory_note",
                 "Stores a user preference, fact, or instruction in persistent Aqua Memory.",
@@ -179,7 +189,8 @@ internal object AquaToolCatalog {
             listOf(
                 AquaToolSpec("backup_history_to_drive", "Backs up conversation history and memories to Google Drive AppData."),
                 AquaToolSpec("drive_list_backups", "Lists saved Aqua AI history backup files in Google Drive AppData and My Drive."),
-                AquaToolSpec("drive_get_storage_quota", "Fetches authenticated Google Drive storage quota, account name, and API key status.")
+                AquaToolSpec("drive_get_storage_quota", "Fetches authenticated Google Drive storage quota, account name, and API key status."),
+                AquaToolSpec("drive_sync_now", "Ensures all 10 Aqua AI/ Google Drive folders exist and flushes offline queued mutations.")
             )
         } else emptyList()
 
