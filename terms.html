@@ -353,16 +353,6 @@
         <button class="icon-btn" type="button" id="ackLegalBtn" style="display:none;border-color:var(--cyan);color:var(--cyan);">✓ Accept Terms &amp; Privacy</button>
         <span class="ack-badge" id="ackStatusBadge" style="display:none;"></span>
         <button class="icon-btn" type="button" id="gsiSignOutBtn" style="display:none;">Sign Out</button>
-        <button class="icon-btn" type="button" id="oauthHelpToggleBtn" style="display:none;font-size:0.76rem;" title="Configure Authorized JavaScript Origin or Custom Client ID">⚙ OAuth Origin</button>
-      </div>
-      <div id="oauthOriginNotice" style="display:none;flex-basis:100%;margin-top:4px;padding:12px 14px;border-radius:14px;background:var(--surface-elevated);border:1px solid rgba(251,191,36,0.45);font-size:0.83rem;color:var(--muted);">
-        <strong style="color:var(--amber);display:block;margin-bottom:4px;">Google OAuth 2.0 JavaScript Origin Setup (Fixes Error 400: origin_mismatch)</strong>
-        <div>In Google Cloud Console → <em>APIs &amp; Services → Credentials</em>, add <code id="oauthOriginValue">https://sras756.github.io</code> under <strong>Authorized JavaScript origins</strong> for OAuth Web Client <code id="oauthClientValue"></code> (exact scheme + host only, without <code>/Aqua-ai/</code>).</div>
-        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px;">
-          <button class="icon-btn" type="button" id="copyOriginBtn">Copy Origin</button>
-          <input id="customClientIdInput" type="text" placeholder="Optional custom Web OAuth Client ID (.apps.googleusercontent.com)" style="flex:1;min-width:220px;padding:6px 10px;border-radius:10px;border:1px solid var(--border);background:var(--code-bg);color:var(--text);font-size:0.78rem;font-family:'JetBrains Mono',monospace;" />
-          <button class="icon-btn" type="button" id="saveCustomClientBtn">Apply Client ID</button>
-        </div>
       </div>
     </section>
 
@@ -526,15 +516,6 @@
       }
 
       const DEFAULT_CLIENT_ID = "299712147014-amb6enesbfid5ko65b0jir9affnkthrk.apps.googleusercontent.com";
-      const CLIENT_OVERRIDE_KEY = "aqua_web_oauth_client_id";
-      const queryClientId = new URLSearchParams(window.location.search).get("client_id");
-      if (queryClientId && queryClientId.endsWith(".apps.googleusercontent.com")) {
-        localStorage.setItem(CLIENT_OVERRIDE_KEY, queryClientId.trim());
-      }
-      function getActiveClientId() {
-        const stored = (localStorage.getItem(CLIENT_OVERRIDE_KEY) || "").trim();
-        return stored.endsWith(".apps.googleusercontent.com") ? stored : DEFAULT_CLIENT_ID;
-      }
       const USER_KEY = "aqua_google_user";
       const ACK_KEY = "aqua_legal_ack";
       const signedOutEl = document.getElementById("gsiSignedOutInfo");
@@ -546,13 +527,6 @@
       const ackBtn = document.getElementById("ackLegalBtn");
       const ackBadge = document.getElementById("ackStatusBadge");
       const signOutBtn = document.getElementById("gsiSignOutBtn");
-      const oauthHelpBtn = document.getElementById("oauthHelpToggleBtn");
-      const oauthNoticeEl = document.getElementById("oauthOriginNotice");
-      const oauthOriginValEl = document.getElementById("oauthOriginValue");
-      const oauthClientValEl = document.getElementById("oauthClientValue");
-      const copyOriginBtn = document.getElementById("copyOriginBtn");
-      const customClientInput = document.getElementById("customClientIdInput");
-      const saveCustomClientBtn = document.getElementById("saveCustomClientBtn");
 
       function decodeGoogleJwt(token) {
         const parts = (token || "").split(".");
@@ -645,47 +619,8 @@
         });
       }
 
-      if (oauthHelpBtn && oauthNoticeEl) {
-        if (oauthOriginValEl && window.location.origin && window.location.origin !== "null") {
-          oauthOriginValEl.textContent = window.location.origin;
-        }
-        if (oauthClientValEl) oauthClientValEl.textContent = getActiveClientId();
-        if (customClientInput) {
-          const override = localStorage.getItem(CLIENT_OVERRIDE_KEY) || "";
-          if (override) customClientInput.value = override;
-        }
-        oauthHelpBtn.addEventListener("click", () => {
-          oauthNoticeEl.style.display = oauthNoticeEl.style.display === "none" ? "block" : "none";
-        });
-      }
-      if (copyOriginBtn && navigator.clipboard) {
-        copyOriginBtn.addEventListener("click", () => {
-          const originText = (window.location.origin && window.location.origin !== "null") ? window.location.origin : "https://sras756.github.io";
-          navigator.clipboard.writeText(originText).then(() => {
-            copyOriginBtn.textContent = "✓ Copied " + originText;
-            setTimeout(() => { copyOriginBtn.textContent = "Copy Origin"; }, 2200);
-          });
-        });
-      }
-      if (saveCustomClientBtn && customClientInput) {
-        saveCustomClientBtn.addEventListener("click", () => {
-          const val = customClientInput.value.trim();
-          if (!val) {
-            localStorage.removeItem(CLIENT_OVERRIDE_KEY);
-          } else if (val.endsWith(".apps.googleusercontent.com")) {
-            localStorage.setItem(CLIENT_OVERRIDE_KEY, val);
-          } else {
-            return;
-          }
-          if (oauthClientValEl) oauthClientValEl.textContent = getActiveClientId();
-          initGsi();
-        });
-      }
-
       function initGsi() {
         if (window.AquaAndroidPortal && typeof window.AquaAndroidPortal.requestNativeGoogleSignIn === "function") {
-          if (oauthHelpBtn) oauthHelpBtn.style.display = "none";
-          if (oauthNoticeEl) oauthNoticeEl.style.display = "none";
           try {
             const raw = window.AquaAndroidPortal.getSignedInUserJson();
             const nativeUser = JSON.parse(raw || "{}");
@@ -704,16 +639,10 @@
           renderAuthState();
           return;
         }
-        if (oauthHelpBtn) oauthHelpBtn.style.display = "inline-flex";
         if (window.google && google.accounts && google.accounts.id) {
-          const activeClientId = getActiveClientId();
-          if (oauthClientValEl) oauthClientValEl.textContent = activeClientId;
           google.accounts.id.initialize({
-            client_id: activeClientId,
+            client_id: DEFAULT_CLIENT_ID,
             ux_mode: "popup",
-            error_callback: () => {
-              if (oauthNoticeEl) oauthNoticeEl.style.display = "block";
-            },
             callback: (response) => {
               try {
                 const payload = decodeGoogleJwt(response.credential);
@@ -723,7 +652,6 @@
                   email: payload.email || "",
                   picture: payload.picture || ""
                 }));
-                if (oauthNoticeEl) oauthNoticeEl.style.display = "none";
                 renderAuthState();
               } catch (e) {
                 console.error("Failed to decode Google credential", e);
