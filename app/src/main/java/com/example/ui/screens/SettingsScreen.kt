@@ -6,14 +6,21 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,6 +36,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.security.PlayComplianceInspector
 import com.example.ui.AquaMainViewModel
 import com.example.ui.auth.signOutUser
+import com.example.ui.components.AquaAdaptiveContainer
 import com.example.ui.components.AquaAnimatedEntrance
 import com.example.ui.components.AquaBackdropBox
 import com.example.ui.screens.settings.AccountSignOutCard
@@ -105,145 +113,268 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
     val currentUser = Firebase.auth.currentUser
 
     AquaBackdropBox(modifier = Modifier.fillMaxSize()) {
-        Column(
+        AquaAdaptiveContainer(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-        ) {
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                Text(
-                    text = "AQUA SETTINGS & AI CORE",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = c.textPrimary
-                )
-                Text(
-                    text = "Profile & age safety, personas, keys, voice, theme, and privacy",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = c.textMuted
-                )
+        ) { spec ->
+            val complianceReport = remember(settings) {
+                PlayComplianceInspector.evaluate(context, settings)
+            }
+            val maxWModifier = if (spec.maxContentWidth != androidx.compose.ui.unit.Dp.Unspecified) {
+                Modifier.fillMaxWidth().widthIn(max = spec.maxContentWidth)
+            } else {
+                Modifier.fillMaxWidth()
             }
 
-            LazyColumn(
+            Column(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                item {
-                    AquaAnimatedEntrance(index = 0) {
-                        AccountSignOutCard(
-                            currentUser = currentUser,
-                            onSignOut = { signOutUser(credentialManager, scope) }
-                        )
-                    }
+                Column(
+                    modifier = maxWModifier.padding(horizontal = spec.horizontalPadding, vertical = 10.dp)
+                ) {
+                    Text(
+                        text = "AQUA SETTINGS & AI CORE",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = c.textPrimary
+                    )
+                    Text(
+                        text = "Profile & age safety, personas, keys, voice, theme, and privacy",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = c.textMuted
+                    )
                 }
 
-                item {
-                    AquaAnimatedEntrance(index = 1) {
-                        ProfileAgeAndGenderCard(
-                            settings = settings,
-                            onSaveProfile = { age, genderId ->
-                                viewModel.updateUserProfile(age, genderId)
+                if (spec.isTwoPane) {
+                    // Balanced two-column tablet settings dashboard
+                    Row(
+                        modifier = maxWModifier
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = spec.horizontalPadding, vertical = 8.dp)
+                            .padding(bottom = 24.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            AquaAnimatedEntrance(index = 0) {
+                                AccountSignOutCard(
+                                    currentUser = currentUser,
+                                    onSignOut = { signOutUser(credentialManager, scope) }
+                                )
                             }
-                        )
+                            AquaAnimatedEntrance(index = 1) {
+                                ProfileAgeAndGenderCard(
+                                    settings = settings,
+                                    onSaveProfile = { age, genderId ->
+                                        viewModel.updateUserProfile(age, genderId)
+                                    }
+                                )
+                            }
+                            AquaAnimatedEntrance(index = 2) {
+                                AiPersonaAndDirectiveCard(
+                                    activePersonaId = activePersonaId,
+                                    savedDirective = savedDirective,
+                                    onSelectPersona = { viewModel.setAiPersona(it) },
+                                    onSaveDirective = { viewModel.updateCustomDirective(it) }
+                                )
+                            }
+                            AquaAnimatedEntrance(index = 3) {
+                                GeminiIntelligenceCard(
+                                    settings = settings,
+                                    onUpdateSettings = { viewModel.updateSettings(it) }
+                                )
+                            }
+                            AquaAnimatedEntrance(index = 4) {
+                                GoogleAiStudioKeyCard(
+                                    viewModel = viewModel,
+                                    settings = settings,
+                                    freedomConfig = freedomConfig,
+                                    verifiedAiModels = verifiedAiModels,
+                                    aiKeyStatus = aiKeyStatus
+                                )
+                            }
+                            AppearanceAndBrightnessCard(
+                                settings = settings,
+                                onUpdateSettings = { viewModel.updateSettings(it) },
+                                onBrightnessChange = { pct -> viewModel.setWindowBrightness(activity, pct) }
+                            )
+                        }
+
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            AquaAnimatedEntrance(index = 0) {
+                                ElevenLabsVoiceStudioCard(
+                                    viewModel = viewModel,
+                                    elevenConfig = elevenConfig,
+                                    elevenVoices = elevenVoices,
+                                    elevenSub = elevenSub,
+                                    elevenStatus = elevenStatus,
+                                    elevenBusy = elevenBusy
+                                )
+                            }
+                            AquaAnimatedEntrance(index = 1) {
+                                AiFreedomLabCard(
+                                    settings = settings,
+                                    freedomConfig = freedomConfig,
+                                    onUpdateFreedom = { viewModel.updateAiFreedomConfig(it) }
+                                )
+                            }
+                            VoiceAndWakeWordCard(
+                                context = context,
+                                settings = settings,
+                                wakeRunning = wakeRunning,
+                                wakePaused = wakePaused,
+                                automationKeepAlive = automationKeepAlive,
+                                onRequestMicAndNotif = { perms -> micAndNotifLauncher.launch(perms) },
+                                viewModel = viewModel
+                            )
+                            PermissionsAndDiagnosticsCard(
+                                context = context,
+                                telemetry = telemetry,
+                                onOpenDriveVault = { viewModel.openTab("drive") },
+                                onRequestMic = { micAndNotifLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) },
+                                onOpenNotificationSettings = { viewModel.deviceController.openAndroidSettings("notifications") },
+                                onRequestLocation = { coarseLocationLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) },
+                                onOpenAppSettings = { viewModel.deviceController.openAndroidSettings("apps") },
+                                onExportDiagnostics = { exportDiagnosticsLauncher.launch("aqua-diagnostics.md") }
+                            )
+                            LegalTrustLinksCard(
+                                complianceReport = complianceReport,
+                                onOpenLegalDoc = { doc -> activeLegalDialog = doc }
+                            )
+                        }
                     }
-                }
+                } else {
+                    LazyColumn(
+                        modifier = maxWModifier.weight(1f),
+                        contentPadding = PaddingValues(
+                            horizontal = spec.horizontalPadding,
+                            vertical = 12.dp
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        item {
+                            AquaAnimatedEntrance(index = 0) {
+                                AccountSignOutCard(
+                                    currentUser = currentUser,
+                                    onSignOut = { signOutUser(credentialManager, scope) }
+                                )
+                            }
+                        }
 
-                item {
-                    AquaAnimatedEntrance(index = 2) {
-                        AiPersonaAndDirectiveCard(
-                            activePersonaId = activePersonaId,
-                            savedDirective = savedDirective,
-                            onSelectPersona = { viewModel.setAiPersona(it) },
-                            onSaveDirective = { viewModel.updateCustomDirective(it) }
-                        )
+                        item {
+                            AquaAnimatedEntrance(index = 1) {
+                                ProfileAgeAndGenderCard(
+                                    settings = settings,
+                                    onSaveProfile = { age, genderId ->
+                                        viewModel.updateUserProfile(age, genderId)
+                                    }
+                                )
+                            }
+                        }
+
+                        item {
+                            AquaAnimatedEntrance(index = 2) {
+                                AiPersonaAndDirectiveCard(
+                                    activePersonaId = activePersonaId,
+                                    savedDirective = savedDirective,
+                                    onSelectPersona = { viewModel.setAiPersona(it) },
+                                    onSaveDirective = { viewModel.updateCustomDirective(it) }
+                                )
+                            }
+                        }
+
+                        item {
+                            AquaAnimatedEntrance(index = 3) {
+                                GeminiIntelligenceCard(
+                                    settings = settings,
+                                    onUpdateSettings = { viewModel.updateSettings(it) }
+                                )
+                            }
+                        }
+
+                        item {
+                            AquaAnimatedEntrance(index = 4) {
+                                GoogleAiStudioKeyCard(
+                                    viewModel = viewModel,
+                                    settings = settings,
+                                    freedomConfig = freedomConfig,
+                                    verifiedAiModels = verifiedAiModels,
+                                    aiKeyStatus = aiKeyStatus
+                                )
+                            }
+                        }
+
+                        item {
+                            AquaAnimatedEntrance(index = 5) {
+                                ElevenLabsVoiceStudioCard(
+                                    viewModel = viewModel,
+                                    elevenConfig = elevenConfig,
+                                    elevenVoices = elevenVoices,
+                                    elevenSub = elevenSub,
+                                    elevenStatus = elevenStatus,
+                                    elevenBusy = elevenBusy
+                                )
+                            }
+                        }
+
+                        item {
+                            AquaAnimatedEntrance(index = 6) {
+                                AiFreedomLabCard(
+                                    settings = settings,
+                                    freedomConfig = freedomConfig,
+                                    onUpdateFreedom = { viewModel.updateAiFreedomConfig(it) }
+                                )
+                            }
+                        }
+
+                        item {
+                            VoiceAndWakeWordCard(
+                                context = context,
+                                settings = settings,
+                                wakeRunning = wakeRunning,
+                                wakePaused = wakePaused,
+                                automationKeepAlive = automationKeepAlive,
+                                onRequestMicAndNotif = { perms -> micAndNotifLauncher.launch(perms) },
+                                viewModel = viewModel
+                            )
+                        }
+
+                        item {
+                            AppearanceAndBrightnessCard(
+                                settings = settings,
+                                onUpdateSettings = { viewModel.updateSettings(it) },
+                                onBrightnessChange = { pct -> viewModel.setWindowBrightness(activity, pct) }
+                            )
+                        }
+
+                        item {
+                            PermissionsAndDiagnosticsCard(
+                                context = context,
+                                telemetry = telemetry,
+                                onOpenDriveVault = { viewModel.openTab("drive") },
+                                onRequestMic = { micAndNotifLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) },
+                                onOpenNotificationSettings = { viewModel.deviceController.openAndroidSettings("notifications") },
+                                onRequestLocation = { coarseLocationLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) },
+                                onOpenAppSettings = { viewModel.deviceController.openAndroidSettings("apps") },
+                                onExportDiagnostics = { exportDiagnosticsLauncher.launch("aqua-diagnostics.md") }
+                            )
+                        }
+
+                        item {
+                            LegalTrustLinksCard(
+                                complianceReport = complianceReport,
+                                onOpenLegalDoc = { doc -> activeLegalDialog = doc }
+                            )
+                        }
                     }
-                }
-
-                item {
-                    AquaAnimatedEntrance(index = 3) {
-                        GeminiIntelligenceCard(
-                            settings = settings,
-                            onUpdateSettings = { viewModel.updateSettings(it) }
-                        )
-                    }
-                }
-
-                item {
-                    AquaAnimatedEntrance(index = 4) {
-                        GoogleAiStudioKeyCard(
-                            viewModel = viewModel,
-                            settings = settings,
-                            freedomConfig = freedomConfig,
-                            verifiedAiModels = verifiedAiModels,
-                            aiKeyStatus = aiKeyStatus
-                        )
-                    }
-                }
-
-                item {
-                    AquaAnimatedEntrance(index = 5) {
-                        ElevenLabsVoiceStudioCard(
-                            viewModel = viewModel,
-                            elevenConfig = elevenConfig,
-                            elevenVoices = elevenVoices,
-                            elevenSub = elevenSub,
-                            elevenStatus = elevenStatus,
-                            elevenBusy = elevenBusy
-                        )
-                    }
-                }
-
-                item {
-                    AquaAnimatedEntrance(index = 6) {
-                        AiFreedomLabCard(
-                            settings = settings,
-                            freedomConfig = freedomConfig,
-                            onUpdateFreedom = { viewModel.updateAiFreedomConfig(it) }
-                        )
-                    }
-                }
-
-                item {
-                    VoiceAndWakeWordCard(
-                        context = context,
-                        settings = settings,
-                        wakeRunning = wakeRunning,
-                        wakePaused = wakePaused,
-                        automationKeepAlive = automationKeepAlive,
-                        onRequestMicAndNotif = { perms -> micAndNotifLauncher.launch(perms) },
-                        viewModel = viewModel
-                    )
-                }
-
-                item {
-                    AppearanceAndBrightnessCard(
-                        settings = settings,
-                        onUpdateSettings = { viewModel.updateSettings(it) },
-                        onBrightnessChange = { pct -> viewModel.setWindowBrightness(activity, pct) }
-                    )
-                }
-
-                item {
-                    PermissionsAndDiagnosticsCard(
-                        context = context,
-                        telemetry = telemetry,
-                        onOpenDriveVault = { viewModel.openTab("drive") },
-                        onRequestMic = { micAndNotifLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) },
-                        onOpenNotificationSettings = { viewModel.deviceController.openAndroidSettings("notifications") },
-                        onRequestLocation = { coarseLocationLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) },
-                        onOpenAppSettings = { viewModel.deviceController.openAndroidSettings("apps") },
-                        onExportDiagnostics = { exportDiagnosticsLauncher.launch("aqua-diagnostics.md") }
-                    )
-                }
-
-                item {
-                    val complianceReport = remember(settings) {
-                        PlayComplianceInspector.evaluate(context, settings)
-                    }
-                    LegalTrustLinksCard(
-                        complianceReport = complianceReport,
-                        onOpenLegalDoc = { doc -> activeLegalDialog = doc }
-                    )
                 }
             }
         }

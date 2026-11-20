@@ -114,112 +114,121 @@ fun CommandPaletteSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        sheetMaxWidth = 720.dp,
         containerColor = c.deepSurface
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Psychology, contentDescription = null, tint = c.accentCyan)
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "Aqua Command Palette",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = c.textPrimary
-                )
-            }
-
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                placeholder = { Text("Jump to modules, routines, or installed apps...") },
-                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = c.accentCyan) },
-                singleLine = true,
-                shape = RoundedCornerShape(16.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = c.accentCyan,
-                    unfocusedBorderColor = c.borderGlow,
-                    focusedTextColor = c.textPrimary,
-                    unfocusedTextColor = c.textPrimary
-                ),
+        AquaAdaptiveContainer(modifier = Modifier.fillMaxWidth()) { spec ->
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("command_palette_search")
-            )
-
-            Text(
-                text = "ACTIVE AI PERSONA",
-                style = MaterialTheme.typography.labelSmall,
-                color = c.textMuted
-            )
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(AquaPersona.entries) { persona ->
-                    val selected = activePersonaId == persona.id
-                    FilterChip(
-                        selected = selected,
-                        onClick = { onSelectPersona(persona.id) },
-                        label = { Text(persona.label) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = c.accentCyan.copy(alpha = 0.22f),
-                            selectedLabelColor = c.accentCyan,
-                            containerColor = c.cardSurface,
-                            labelColor = c.textPrimary
-                        )
+                    .padding(horizontal = if (spec.isTabletOrFoldable) 22.dp else 16.dp)
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Psychology, contentDescription = null, tint = c.accentCyan)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Aqua Command Palette",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = c.textPrimary
                     )
                 }
-            }
 
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 380.dp),
-                contentPadding = PaddingValues(vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (filteredModules.isNotEmpty()) {
-                    item {
-                        Text(
-                            text = "MODULES (${filteredModules.size})",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = c.accentCyan
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = { Text("Jump to modules, routines, or installed apps...") },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = c.accentCyan) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = c.accentCyan,
+                        unfocusedBorderColor = c.borderGlow,
+                        focusedTextColor = c.textPrimary,
+                        unfocusedTextColor = c.textPrimary
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("command_palette_search")
+                )
+
+                Text(
+                    text = "ACTIVE AI PERSONA",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = c.textMuted
+                )
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(AquaPersona.entries) { persona ->
+                        val selected = activePersonaId == persona.id
+                        FilterChip(
+                            selected = selected,
+                            onClick = { onSelectPersona(persona.id) },
+                            label = { Text(persona.label) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = c.accentCyan.copy(alpha = 0.22f),
+                                selectedLabelColor = c.accentCyan,
+                                containerColor = c.cardSurface,
+                                labelColor = c.textPrimary
+                            )
                         )
                     }
-                    items(filteredModules, key = { "mod_${it.route}" }) { mod ->
-                        Surface(
-                            color = c.cardSurface,
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onDismiss()
-                                    onOpenModule(mod.route)
-                                }
-                                .testTag("palette_module_${mod.route}")
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(mod.icon, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(mod.title, style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
-                                    Text(
-                                        mod.subtitle,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = c.textMuted,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                }
+
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = if (spec.isTabletOrFoldable) 460.dp else 380.dp),
+                    contentPadding = PaddingValues(vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (filteredModules.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "MODULES (${filteredModules.size})",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = c.accentCyan
+                            )
+                        }
+                        item {
+                            AquaAdaptiveGridRows(
+                                items = filteredModules,
+                                columns = if (spec.isTabletOrFoldable) 2 else 1,
+                                horizontalSpacing = 8.dp,
+                                verticalSpacing = 8.dp
+                            ) { mod ->
+                                Surface(
+                                    color = c.cardSurface,
+                                    shape = RoundedCornerShape(14.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            onDismiss()
+                                            onOpenModule(mod.route)
+                                        }
+                                        .testTag("palette_module_${mod.route}")
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(mod.icon, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(20.dp))
+                                        Spacer(Modifier.width(12.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(mod.title, style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
+                                            Text(
+                                                mod.subtitle,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = c.textMuted,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
                 if (filteredRoutines.isNotEmpty()) {
                     item {
@@ -296,6 +305,7 @@ fun CommandPaletteSheet(
                     }
                 }
             }
+        }
         }
     }
 }

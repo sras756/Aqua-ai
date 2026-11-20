@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,9 +20,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Launch
 import androidx.compose.material.icons.filled.Add
@@ -71,11 +75,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.MemoryItem
 import com.example.data.repository.DriveBackupMetadata
 import com.example.ui.AquaMainViewModel
+import com.example.ui.components.AquaAdaptiveContainer
 import com.example.ui.components.AquaBackdropBox
 import com.example.ui.components.AquaGlassCard
 import com.example.ui.theme.AquaTheme
@@ -172,385 +178,515 @@ fun MemoryAndHistoryScreen(
                 }
             }
         ) { innerPadding ->
-            Column(
+            AquaAdaptiveContainer(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
                     .statusBarsPadding()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+            ) { spec ->
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.TopCenter
                 ) {
-                    Text(
-                        text = "MEMORY, HISTORY & DEVICE",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = c.textPrimary,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(
-                            onClick = { exportJsonLauncher.launch("aqua-conversation.json") },
-                            modifier = Modifier.testTag("memory_export_json_button")
-                        ) {
-                            Icon(Icons.Filled.DataObject, contentDescription = "Export active chat as JSON", tint = c.accentTeal)
-                        }
-                        IconButton(
-                            onClick = { exportMdLauncher.launch("aqua-conversation.md") },
-                            modifier = Modifier.testTag("memory_export_md_button")
-                        ) {
-                            Icon(Icons.Filled.Description, contentDescription = "Export active chat as Markdown", tint = c.accentCyan)
-                        }
+                    val containerMod = if (spec.maxContentWidth != Dp.Unspecified) {
+                        Modifier
+                            .fillMaxSize()
+                            .widthIn(max = spec.maxContentWidth)
+                    } else {
+                        Modifier.fillMaxSize()
                     }
-                }
-
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text("Search conversations, memories, logs, or apps...") },
-                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = c.accentCyan) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = c.accentCyan,
-                        unfocusedBorderColor = c.borderGlow,
-                        focusedTextColor = c.textPrimary,
-                        unfocusedTextColor = c.textPrimary
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                        .testTag("memory_search_input")
-                )
-
-                TabRow(
-                    selectedTabIndex = selectedTab,
-                    containerColor = c.deepSurface.copy(alpha = 0.85f),
-                    contentColor = c.accentCyan
-                ) {
-                    Tab(
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        text = { Text("History (${conversations.size})") },
-                        icon = { Icon(Icons.Filled.History, contentDescription = null) }
-                    )
-                    Tab(
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        text = { Text("Memory (${memories.size})") },
-                        icon = { Icon(Icons.Filled.Memory, contentDescription = null) }
-                    )
-                    Tab(
-                        selected = selectedTab == 2,
-                        onClick = { selectedTab = 2 },
-                        text = { Text("Device (${logs.size})") },
-                        icon = { Icon(Icons.Filled.Terminal, contentDescription = null) }
-                    )
-                }
-
-                when (selectedTab) {
-                    0 -> {
-                        val filtered = remember(conversations, searchQuery, pinnedConvIds, convAliases) {
-                            val q = searchQuery.trim().lowercase()
-                            conversations
-                                .filter {
-                                    val display = convAliases[it.id].orEmpty().ifBlank { it.title }
-                                    q.isEmpty() ||
-                                        display.lowercase().contains(q) ||
-                                        it.summary.lowercase().contains(q)
-                                }
-                                .sortedByDescending { pinnedConvIds.contains(it.id) }
-                        }
-                        LazyColumn(
-                            contentPadding = PaddingValues(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            if (activeMessages.isNotEmpty()) {
-                                item {
-                                    val stats = remember(activeMessages) {
-                                        com.example.ai.ConversationMarkdownExporter.computeSessionStats(activeMessages)
-                                    }
-                                    AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
-                                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Text("ACTIVE SESSION ANALYTICS", style = MaterialTheme.typography.labelSmall, color = c.accentTeal)
-                                            Text(
-                                                text = "${stats.totalMessages} msgs (${stats.userMessages} you / ${stats.assistantMessages} Aqua) • ${stats.estimatedWords} words • ${stats.codeBlockCount} code blocks • ${stats.toolCallCount} tool runs",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = c.textPrimary
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            item {
-                                GoogleDriveHistoryCard(
-                                    connected = driveConnected,
-                                    busy = driveBusy,
-                                    preferredEmail = preferredDriveEmail,
-                                    statusLabel = driveStatusLabel,
-                                    backups = driveBackups,
-                                    onConnect = { viewModel.connectGoogleDrive(activity) },
-                                    onBackupAppData = { viewModel.backupHistoryToGoogleDrive(activity, exportVisibleCopy = false) },
-                                    onExportVisible = { viewModel.backupHistoryToGoogleDrive(activity, exportVisibleCopy = true) },
-                                    onRefresh = { viewModel.refreshDriveBackups(activity) },
-                                    onRestore = { fileId -> viewModel.restoreHistoryFromGoogleDrive(activity, fileId) }
-                                )
-                            }
-
-                            if (filtered.isEmpty()) {
-                                item {
-                                    AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
-                                        Column(
-                                            modifier = Modifier.padding(24.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally
-                                        ) {
-                                            Icon(Icons.Filled.History, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(40.dp))
-                                            Spacer(Modifier.height(8.dp))
-                                            Text("No Saved Conversations", style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
-                                            Spacer(Modifier.height(4.dp))
-                                            Text(
-                                                "Start a conversation from the Core screen chat bar or restore an existing backup from Google Drive above.",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = c.textMuted
-                                            )
-                                        }
-                                    }
-                                }
-                            } else {
-                                items(filtered, key = { it.id }) { conv ->
-                                    val isPinned = pinnedConvIds.contains(conv.id)
-                                    val displayTitle = convAliases[conv.id].orEmpty().ifBlank { conv.title }
-                                    AquaGlassCard(
-                                        borderColor = if (isPinned) c.accentTeal else c.borderGlow,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                viewModel.selectConversation(conv.id)
-                                                onOpenHomeChat()
-                                            }
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(14.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = displayTitle,
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    color = c.textPrimary,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                                if (conv.summary.isNotBlank()) {
-                                                    Text(
-                                                        text = conv.summary,
-                                                        style = MaterialTheme.typography.bodyMedium,
-                                                        color = c.textMuted,
-                                                        maxLines = 2,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
-                                                }
-                                                Text(
-                                                    text = "${if (isPinned) "Pinned • " else ""}${conv.messageCount} msgs • ${conv.modelUsed}",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = if (isPinned) c.accentTeal else c.accentCyan,
-                                                    modifier = Modifier.padding(top = 4.dp)
-                                                )
-                                            }
-                                            IconButton(onClick = { viewModel.togglePinConversation(conv.id) }) {
-                                                Icon(
-                                                    Icons.Filled.PushPin,
-                                                    contentDescription = if (isPinned) "Unpin conversation" else "Pin conversation",
-                                                    tint = if (isPinned) c.accentTeal else c.textMuted
-                                                )
-                                            }
-                                            IconButton(onClick = {
-                                                renamingConvId = conv.id
-                                                renameInput = displayTitle
-                                            }) {
-                                                Icon(
-                                                    Icons.Filled.Edit,
-                                                    contentDescription = "Rename conversation",
-                                                    tint = c.accentCyan
-                                                )
-                                            }
-                                            IconButton(onClick = { viewModel.deleteConversation(conv.id) }) {
-                                                Icon(
-                                                    Icons.Filled.DeleteOutline,
-                                                    contentDescription = "Delete conversation",
-                                                    tint = c.error
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    1 -> {
-                        val filtered = remember(memories, searchQuery) {
-                            val q = searchQuery.trim().lowercase()
-                            if (q.isEmpty()) memories
-                            else memories.filter {
-                                it.title.lowercase().contains(q) ||
-                                    it.content.lowercase().contains(q) ||
-                                    it.category.lowercase().contains(q)
-                            }
-                        }
-                        if (filtered.isEmpty()) {
-                            EmptyVaultState(
-                                icon = Icons.Filled.Memory,
-                                title = "No Personal Memories",
-                                subtitle = "Add instructions, preferences, or facts so Aqua remembers your personal workflow."
-                            )
-                        } else {
-                            LazyColumn(
-                                contentPadding = PaddingValues(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    Column(modifier = containerMod) {
+                        if (spec.isTwoPane) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = spec.horizontalPadding, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp)
                             ) {
-                                items(filtered, key = { it.id }) { mem ->
-                                    AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
-                                        Column(modifier = Modifier.padding(14.dp)) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Surface(
-                                                    color = c.deepSurface,
-                                                    shape = RoundedCornerShape(8.dp)
-                                                ) {
-                                                    Text(
-                                                        text = mem.category.uppercase(),
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = c.accentTeal,
-                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                Text(
+                                    text = "MEMORY, HISTORY & DEVICE",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    color = c.textPrimary
+                                )
+                                OutlinedTextField(
+                                    value = searchQuery,
+                                    onValueChange = { searchQuery = it },
+                                    placeholder = { Text("Search conversations, memories, logs, or apps...") },
+                                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = c.accentCyan) },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = c.accentCyan,
+                                        unfocusedBorderColor = c.borderGlow,
+                                        focusedTextColor = c.textPrimary,
+                                        unfocusedTextColor = c.textPrimary
+                                    ),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("memory_search_input")
+                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = { exportJsonLauncher.launch("aqua-conversation.json") },
+                                        modifier = Modifier.testTag("memory_export_json_button")
+                                    ) {
+                                        Icon(Icons.Filled.DataObject, contentDescription = "Export active chat as JSON", tint = c.accentTeal)
+                                    }
+                                    IconButton(
+                                        onClick = { exportMdLauncher.launch("aqua-conversation.md") },
+                                        modifier = Modifier.testTag("memory_export_md_button")
+                                    ) {
+                                        Icon(Icons.Filled.Description, contentDescription = "Export active chat as Markdown", tint = c.accentCyan)
+                                    }
+                                }
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = spec.horizontalPadding, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "MEMORY, HISTORY & DEVICE",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    color = c.textPrimary,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = { exportJsonLauncher.launch("aqua-conversation.json") },
+                                        modifier = Modifier.testTag("memory_export_json_button")
+                                    ) {
+                                        Icon(Icons.Filled.DataObject, contentDescription = "Export active chat as JSON", tint = c.accentTeal)
+                                    }
+                                    IconButton(
+                                        onClick = { exportMdLauncher.launch("aqua-conversation.md") },
+                                        modifier = Modifier.testTag("memory_export_md_button")
+                                    ) {
+                                        Icon(Icons.Filled.Description, contentDescription = "Export active chat as Markdown", tint = c.accentCyan)
+                                    }
+                                }
+                            }
+
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = { Text("Search conversations, memories, logs, or apps...") },
+                                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = c.accentCyan) },
+                                singleLine = true,
+                                shape = RoundedCornerShape(16.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = c.accentCyan,
+                                    unfocusedBorderColor = c.borderGlow,
+                                    focusedTextColor = c.textPrimary,
+                                    unfocusedTextColor = c.textPrimary
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = spec.horizontalPadding, vertical = 4.dp)
+                                    .testTag("memory_search_input")
+                            )
+                        }
+
+                        TabRow(
+                            selectedTabIndex = selectedTab,
+                            containerColor = c.deepSurface.copy(alpha = 0.85f),
+                            contentColor = c.accentCyan
+                        ) {
+                            Tab(
+                                selected = selectedTab == 0,
+                                onClick = { selectedTab = 0 },
+                                text = { Text("History (${conversations.size})") },
+                                icon = { Icon(Icons.Filled.History, contentDescription = null) }
+                            )
+                            Tab(
+                                selected = selectedTab == 1,
+                                onClick = { selectedTab = 1 },
+                                text = { Text("Memory (${memories.size})") },
+                                icon = { Icon(Icons.Filled.Memory, contentDescription = null) }
+                            )
+                            Tab(
+                                selected = selectedTab == 2,
+                                onClick = { selectedTab = 2 },
+                                text = { Text("Device (${logs.size})") },
+                                icon = { Icon(Icons.Filled.Terminal, contentDescription = null) }
+                            )
+                        }
+
+                        when (selectedTab) {
+                            0 -> {
+                                val filtered = remember(conversations, searchQuery, pinnedConvIds, convAliases) {
+                                    val q = searchQuery.trim().lowercase()
+                                    conversations
+                                        .filter {
+                                            val display = convAliases[it.id].orEmpty().ifBlank { it.title }
+                                            q.isEmpty() ||
+                                                display.lowercase().contains(q) ||
+                                                it.summary.lowercase().contains(q)
+                                        }
+                                        .sortedByDescending { pinnedConvIds.contains(it.id) }
+                                }
+                                if (spec.isTwoPane) {
+                                    Row(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxWidth()
+                                            .padding(horizontal = spec.horizontalPadding, vertical = 14.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(spec.paneSpacing)
+                                    ) {
+                                        LazyColumn(
+                                            modifier = Modifier
+                                                .weight(0.56f)
+                                                .fillMaxHeight(),
+                                            contentPadding = PaddingValues(bottom = 24.dp),
+                                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            if (filtered.isEmpty()) {
+                                                item {
+                                                    AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
+                                                        Column(
+                                                            modifier = Modifier.padding(24.dp),
+                                                            horizontalAlignment = Alignment.CenterHorizontally
+                                                        ) {
+                                                            Icon(Icons.Filled.History, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(40.dp))
+                                                            Spacer(Modifier.height(8.dp))
+                                                            Text("No Saved Conversations", style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
+                                                            Spacer(Modifier.height(4.dp))
+                                                            Text(
+                                                                "Start a conversation from the Core screen chat bar or restore an existing backup from Google Drive on the right.",
+                                                                style = MaterialTheme.typography.bodyMedium,
+                                                                color = c.textMuted
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            } else {
+                                                items(filtered, key = { it.id }) { conv ->
+                                                    val isPinned = pinnedConvIds.contains(conv.id)
+                                                    val displayTitle = convAliases[conv.id].orEmpty().ifBlank { conv.title }
+                                                    ConversationHistoryCard(
+                                                        conv = conv,
+                                                        displayTitle = displayTitle,
+                                                        isPinned = isPinned,
+                                                        onSelect = {
+                                                            viewModel.selectConversation(conv.id)
+                                                            onOpenHomeChat()
+                                                        },
+                                                        onTogglePin = { viewModel.togglePinConversation(conv.id) },
+                                                        onRename = {
+                                                            renamingConvId = conv.id
+                                                            renameInput = displayTitle
+                                                        },
+                                                        onDelete = { viewModel.deleteConversation(conv.id) }
                                                     )
                                                 }
-                                                Row {
-                                                    IconButton(onClick = { editingMemory = mem }) {
-                                                        Icon(Icons.Filled.Edit, contentDescription = "Edit memory", tint = c.accentCyan)
-                                                    }
-                                                    IconButton(onClick = { viewModel.deleteMemory(mem.id) }) {
-                                                        Icon(Icons.Filled.DeleteOutline, contentDescription = "Delete memory", tint = c.error)
+                                            }
+                                        }
+
+                                        Column(
+                                            modifier = Modifier
+                                                .weight(0.44f)
+                                                .fillMaxHeight()
+                                                .verticalScroll(rememberScrollState())
+                                                .padding(bottom = 24.dp),
+                                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            if (activeMessages.isNotEmpty()) {
+                                                val stats = remember(activeMessages) {
+                                                    com.example.ai.ConversationMarkdownExporter.computeSessionStats(activeMessages)
+                                                }
+                                                AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
+                                                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                        Text("ACTIVE SESSION ANALYTICS", style = MaterialTheme.typography.labelSmall, color = c.accentTeal)
+                                                        Text(
+                                                            text = "${stats.totalMessages} msgs (${stats.userMessages} you / ${stats.assistantMessages} Aqua) • ${stats.estimatedWords} words • ${stats.codeBlockCount} code blocks • ${stats.toolCallCount} tool runs",
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = c.textPrimary
+                                                        )
                                                     }
                                                 }
                                             }
-                                            Text(
-                                                text = mem.title,
-                                                style = MaterialTheme.typography.titleMedium,
-                                                color = c.textPrimary
+
+                                            GoogleDriveHistoryCard(
+                                                connected = driveConnected,
+                                                busy = driveBusy,
+                                                preferredEmail = preferredDriveEmail,
+                                                statusLabel = driveStatusLabel,
+                                                backups = driveBackups,
+                                                onConnect = { viewModel.connectGoogleDrive(activity) },
+                                                onBackupAppData = { viewModel.backupHistoryToGoogleDrive(activity, exportVisibleCopy = false) },
+                                                onExportVisible = { viewModel.backupHistoryToGoogleDrive(activity, exportVisibleCopy = true) },
+                                                onRefresh = { viewModel.refreshDriveBackups(activity) },
+                                                onRestore = { fileId -> viewModel.restoreHistoryFromGoogleDrive(activity, fileId) }
                                             )
-                                            Text(
-                                                text = mem.content,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = c.textMuted,
-                                                modifier = Modifier.padding(top = 4.dp)
+                                        }
+                                    }
+                                } else {
+                                    LazyColumn(
+                                        contentPadding = PaddingValues(horizontal = spec.horizontalPadding, vertical = 16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        if (activeMessages.isNotEmpty()) {
+                                            item {
+                                                val stats = remember(activeMessages) {
+                                                    com.example.ai.ConversationMarkdownExporter.computeSessionStats(activeMessages)
+                                                }
+                                                AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
+                                                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                        Text("ACTIVE SESSION ANALYTICS", style = MaterialTheme.typography.labelSmall, color = c.accentTeal)
+                                                        Text(
+                                                            text = "${stats.totalMessages} msgs (${stats.userMessages} you / ${stats.assistantMessages} Aqua) • ${stats.estimatedWords} words • ${stats.codeBlockCount} code blocks • ${stats.toolCallCount} tool runs",
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = c.textPrimary
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        item {
+                                            GoogleDriveHistoryCard(
+                                                connected = driveConnected,
+                                                busy = driveBusy,
+                                                preferredEmail = preferredDriveEmail,
+                                                statusLabel = driveStatusLabel,
+                                                backups = driveBackups,
+                                                onConnect = { viewModel.connectGoogleDrive(activity) },
+                                                onBackupAppData = { viewModel.backupHistoryToGoogleDrive(activity, exportVisibleCopy = false) },
+                                                onExportVisible = { viewModel.backupHistoryToGoogleDrive(activity, exportVisibleCopy = true) },
+                                                onRefresh = { viewModel.refreshDriveBackups(activity) },
+                                                onRestore = { fileId -> viewModel.restoreHistoryFromGoogleDrive(activity, fileId) }
                                             )
+                                        }
+
+                                        if (filtered.isEmpty()) {
+                                            item {
+                                                AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
+                                                    Column(
+                                                        modifier = Modifier.padding(24.dp),
+                                                        horizontalAlignment = Alignment.CenterHorizontally
+                                                    ) {
+                                                        Icon(Icons.Filled.History, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(40.dp))
+                                                        Spacer(Modifier.height(8.dp))
+                                                        Text("No Saved Conversations", style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
+                                                        Spacer(Modifier.height(4.dp))
+                                                        Text(
+                                                            "Start a conversation from the Core screen chat bar or restore an existing backup from Google Drive above.",
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            color = c.textMuted
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            items(filtered, key = { it.id }) { conv ->
+                                                val isPinned = pinnedConvIds.contains(conv.id)
+                                                val displayTitle = convAliases[conv.id].orEmpty().ifBlank { conv.title }
+                                                ConversationHistoryCard(
+                                                    conv = conv,
+                                                    displayTitle = displayTitle,
+                                                    isPinned = isPinned,
+                                                    onSelect = {
+                                                        viewModel.selectConversation(conv.id)
+                                                        onOpenHomeChat()
+                                                    },
+                                                    onTogglePin = { viewModel.togglePinConversation(conv.id) },
+                                                    onRename = {
+                                                        renamingConvId = conv.id
+                                                        renameInput = displayTitle
+                                                    },
+                                                    onDelete = { viewModel.deleteConversation(conv.id) }
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
-                    }
 
-                    2 -> {
-                        val q = searchQuery.trim().lowercase()
-                        val filteredLogs = remember(logs, q) {
-                            if (q.isEmpty()) logs else logs.filter {
-                                it.toolName.lowercase().contains(q) || it.detail.lowercase().contains(q)
-                            }
-                        }
-                        val filteredApps = remember(installedApps, q) {
-                            if (q.isEmpty()) installedApps else installedApps.filter {
-                                it.first.lowercase().contains(q) || it.second.lowercase().contains(q)
-                            }
-                        }
-                        LazyColumn(
-                            contentPadding = PaddingValues(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            item {
-                                Text(
-                                    text = "AUTONOMOUS DEVICE EXECUTION LOG",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = c.accentCyan
-                                )
-                            }
-                            if (filteredLogs.isEmpty()) {
-                                item {
-                                    Text(
-                                        text = "No tool executions recorded on this device yet.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = c.textMuted
-                                    )
+                            1 -> {
+                                val filtered = remember(memories, searchQuery) {
+                                    val q = searchQuery.trim().lowercase()
+                                    if (q.isEmpty()) memories
+                                    else memories.filter {
+                                        it.title.lowercase().contains(q) ||
+                                            it.content.lowercase().contains(q) ||
+                                            it.category.lowercase().contains(q)
+                                    }
                                 }
-                            } else {
-                                items(filteredLogs, key = { it.id }) { log ->
-                                    AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
-                                        Column(modifier = Modifier.padding(12.dp)) {
+                                if (filtered.isEmpty()) {
+                                    EmptyVaultState(
+                                        icon = Icons.Filled.Memory,
+                                        title = "No Personal Memories",
+                                        subtitle = "Add instructions, preferences, or facts so Aqua remembers your personal workflow."
+                                    )
+                                } else {
+                                    val cols = if (spec.isTabletOrFoldable) 2 else 1
+                                    val rows = remember(filtered, cols) { filtered.chunked(cols) }
+                                    LazyColumn(
+                                        contentPadding = PaddingValues(horizontal = spec.horizontalPadding, vertical = 16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        items(rows, key = { row -> row.joinToString("|") { it.id } }) { rowItems ->
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp)
                                             ) {
+                                                rowItems.forEach { mem ->
+                                                    Box(modifier = Modifier.weight(1f)) {
+                                                        MemoryVaultCard(
+                                                            mem = mem,
+                                                            onEdit = { editingMemory = mem },
+                                                            onDelete = { viewModel.deleteMemory(mem.id) }
+                                                        )
+                                                    }
+                                                }
+                                                repeat(cols - rowItems.size) {
+                                                    Spacer(modifier = Modifier.weight(1f))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            2 -> {
+                                val q = searchQuery.trim().lowercase()
+                                val filteredLogs = remember(logs, q) {
+                                    if (q.isEmpty()) logs else logs.filter {
+                                        it.toolName.lowercase().contains(q) || it.detail.lowercase().contains(q)
+                                    }
+                                }
+                                val filteredApps = remember(installedApps, q) {
+                                    if (q.isEmpty()) installedApps else installedApps.filter {
+                                        it.first.lowercase().contains(q) || it.second.lowercase().contains(q)
+                                    }
+                                }
+                                if (spec.isTwoPane) {
+                                    Row(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxWidth()
+                                            .padding(horizontal = spec.horizontalPadding, vertical = 14.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(spec.paneSpacing)
+                                    ) {
+                                        LazyColumn(
+                                            modifier = Modifier
+                                                .weight(0.52f)
+                                                .fillMaxHeight(),
+                                            contentPadding = PaddingValues(bottom = 24.dp),
+                                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            item {
                                                 Text(
-                                                    text = log.toolName,
+                                                    text = "AUTONOMOUS DEVICE EXECUTION LOG",
                                                     style = MaterialTheme.typography.labelMedium,
-                                                    color = c.accentTeal
+                                                    color = c.accentCyan
                                                 )
+                                            }
+                                            if (filteredLogs.isEmpty()) {
+                                                item {
+                                                    Text(
+                                                        text = "No tool executions recorded on this device yet.",
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        color = c.textMuted
+                                                    )
+                                                }
+                                            } else {
+                                                items(filteredLogs, key = { it.id }) { log ->
+                                                    DeviceExecutionLogCard(log = log)
+                                                }
+                                            }
+                                        }
+
+                                        LazyColumn(
+                                            modifier = Modifier
+                                                .weight(0.48f)
+                                                .fillMaxHeight(),
+                                            contentPadding = PaddingValues(bottom = 24.dp),
+                                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            item {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(Icons.Filled.Apps, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(18.dp))
+                                                    Spacer(Modifier.width(6.dp))
+                                                    Text(
+                                                        text = "LAUNCHABLE ANDROID APPS (${filteredApps.size})",
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        color = c.accentCyan
+                                                    )
+                                                }
+                                            }
+                                            val appCols = if (spec.availableWidth >= 1120.dp) 2 else 1
+                                            val appRows = filteredApps.take(36).chunked(appCols)
+                                            items(appRows, key = { row -> row.joinToString("|") { it.second } }) { rowApps ->
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                                ) {
+                                                    rowApps.forEach { (label, pkg) ->
+                                                        Box(modifier = Modifier.weight(1f)) {
+                                                            LaunchableAppRowCard(
+                                                                label = label,
+                                                                pkg = pkg,
+                                                                onLaunch = { viewModel.deviceController.launchApp(pkg) }
+                                                            )
+                                                        }
+                                                    }
+                                                    repeat(appCols - rowApps.size) {
+                                                        Spacer(modifier = Modifier.weight(1f))
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    LazyColumn(
+                                        contentPadding = PaddingValues(horizontal = spec.horizontalPadding, vertical = 16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        item {
+                                            Text(
+                                                text = "AUTONOMOUS DEVICE EXECUTION LOG",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = c.accentCyan
+                                            )
+                                        }
+                                        if (filteredLogs.isEmpty()) {
+                                            item {
                                                 Text(
-                                                    text = SimpleDateFormat("MMM d HH:mm:ss", Locale.getDefault()).format(Date(log.timestampMs)),
-                                                    style = MaterialTheme.typography.labelSmall,
+                                                    text = "No tool executions recorded on this device yet.",
+                                                    style = MaterialTheme.typography.bodyMedium,
                                                     color = c.textMuted
                                                 )
                                             }
-                                            Text(
-                                                text = "[${log.status}] ${log.detail}",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = c.textPrimary,
-                                                modifier = Modifier.padding(top = 4.dp)
+                                        } else {
+                                            items(filteredLogs, key = { it.id }) { log ->
+                                                DeviceExecutionLogCard(log = log)
+                                            }
+                                        }
+
+                                        item {
+                                            Spacer(Modifier.height(8.dp))
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Filled.Apps, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(18.dp))
+                                                Spacer(Modifier.width(6.dp))
+                                                Text(
+                                                    text = "LAUNCHABLE ANDROID APPS (${filteredApps.size})",
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    color = c.accentCyan
+                                                )
+                                            }
+                                        }
+                                        items(filteredApps.take(30), key = { it.second }) { (label, pkg) ->
+                                            LaunchableAppRowCard(
+                                                label = label,
+                                                pkg = pkg,
+                                                onLaunch = { viewModel.deviceController.launchApp(pkg) }
                                             )
                                         }
-                                    }
-                                }
-                            }
-
-                            item {
-                                Spacer(Modifier.height(8.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.Apps, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(
-                                        text = "LAUNCHABLE ANDROID APPS (${filteredApps.size})",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = c.accentCyan
-                                    )
-                                }
-                            }
-                            items(filteredApps.take(30), key = { it.second }) { (label, pkg) ->
-                                Surface(
-                                    color = c.deepSurface,
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .border(1.dp, c.borderGlow.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                                        .clickable { viewModel.deviceController.launchApp(pkg) }
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(label, style = MaterialTheme.typography.bodyLarge, color = c.textPrimary)
-                                            Text(pkg, style = MaterialTheme.typography.labelSmall, color = c.textMuted)
-                                        }
-                                        Icon(Icons.AutoMirrored.Filled.Launch, contentDescription = "Launch $label", tint = c.success, modifier = Modifier.size(18.dp))
                                     }
                                 }
                             }
@@ -609,6 +745,196 @@ fun MemoryAndHistoryScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun ConversationHistoryCard(
+    conv: com.example.data.model.Conversation,
+    displayTitle: String,
+    isPinned: Boolean,
+    onSelect: () -> Unit,
+    onTogglePin: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val c = AquaTheme.colors
+    AquaGlassCard(
+        borderColor = if (isPinned) c.accentTeal else c.borderGlow,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onSelect() }
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = displayTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = c.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (conv.summary.isNotBlank()) {
+                    Text(
+                        text = conv.summary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = c.textMuted,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Text(
+                    text = "${if (isPinned) "Pinned • " else ""}${conv.messageCount} msgs • ${conv.modelUsed}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isPinned) c.accentTeal else c.accentCyan,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+            IconButton(onClick = onTogglePin) {
+                Icon(
+                    Icons.Filled.PushPin,
+                    contentDescription = if (isPinned) "Unpin conversation" else "Pin conversation",
+                    tint = if (isPinned) c.accentTeal else c.textMuted
+                )
+            }
+            IconButton(onClick = onRename) {
+                Icon(
+                    Icons.Filled.Edit,
+                    contentDescription = "Rename conversation",
+                    tint = c.accentCyan
+                )
+            }
+            IconButton(onClick = onDelete) {
+                Icon(
+                    Icons.Filled.DeleteOutline,
+                    contentDescription = "Delete conversation",
+                    tint = c.error
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MemoryVaultCard(
+    mem: MemoryItem,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val c = AquaTheme.colors
+    AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    color = c.deepSurface,
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = mem.category.uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = c.accentTeal,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+                Row {
+                    IconButton(onClick = onEdit) {
+                        Icon(Icons.Filled.Edit, contentDescription = "Edit memory", tint = c.accentCyan)
+                    }
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Filled.DeleteOutline, contentDescription = "Delete memory", tint = c.error)
+                    }
+                }
+            }
+            Text(
+                text = mem.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = c.textPrimary
+            )
+            Text(
+                text = mem.content,
+                style = MaterialTheme.typography.bodyMedium,
+                color = c.textMuted,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun DeviceExecutionLogCard(log: com.example.data.local.DeviceActionLogEntity) {
+    val c = AquaTheme.colors
+    AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = log.toolName,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = c.accentTeal
+                )
+                Text(
+                    text = SimpleDateFormat("MMM d HH:mm:ss", Locale.getDefault()).format(Date(log.timestampMs)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = c.textMuted
+                )
+            }
+            Text(
+                text = "[${log.status}] ${log.detail}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = c.textPrimary,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun LaunchableAppRowCard(
+    label: String,
+    pkg: String,
+    onLaunch: () -> Unit
+) {
+    val c = AquaTheme.colors
+    Surface(
+        color = c.deepSurface,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, c.borderGlow.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+            .clickable { onLaunch() }
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = c.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = pkg,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = c.textMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Icon(Icons.AutoMirrored.Filled.Launch, contentDescription = "Launch $label", tint = c.success, modifier = Modifier.size(18.dp))
+        }
     }
 }
 

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -44,9 +45,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.AquaMainViewModel
+import com.example.ui.components.AquaAdaptiveContainer
 import com.example.ui.components.AquaBackdropBox
 import com.example.ui.screens.wallet.QrScannerSheet
 import com.example.ui.screens.wallet.WalletAiAssistantSection
@@ -151,15 +154,27 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
             .fillMaxSize()
             .statusBarsPadding()
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Top Native Wallet Bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+        AquaAdaptiveContainer(modifier = Modifier.fillMaxSize()) { spec ->
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.TopCenter
             ) {
+                val containerMod = if (spec.maxContentWidth != Dp.Unspecified) {
+                    Modifier
+                        .fillMaxSize()
+                        .widthIn(max = spec.maxContentWidth)
+                } else {
+                    Modifier.fillMaxSize()
+                }
+                Column(modifier = containerMod) {
+                    // Top Native Wallet Bar
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = spec.horizontalPadding, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
@@ -267,11 +282,37 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
 
             when {
                 activeWallet == null || activeAccount == null -> {
-                    WalletOnboardingView(coordinator = coordinator, busy = busy)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.TopCenter
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .widthIn(max = 560.dp)
+                        ) {
+                            WalletOnboardingView(coordinator = coordinator, busy = busy)
+                        }
+                    }
                 }
 
                 isLocked -> {
-                    WalletLockGateScreen(settings = securitySettings, coordinator = coordinator)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.TopCenter
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .widthIn(max = 560.dp)
+                        ) {
+                            WalletLockGateScreen(settings = securitySettings, coordinator = coordinator)
+                        }
+                    }
                 }
 
                 else -> {
@@ -281,7 +322,7 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
                             .fillMaxWidth()
                             .background(c.deepSurface.copy(alpha = 0.85f))
                             .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                            .padding(horizontal = spec.horizontalPadding, vertical = 6.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         WALLET_SECTIONS.forEachIndexed { idx, label ->
@@ -435,6 +476,8 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
                     }
                 }
             }
+                }
+            }
         }
 
         if (showAddWalletModal) {
@@ -443,12 +486,23 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
                 shape = RoundedCornerShape(0.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                WalletOnboardingView(
-                    coordinator = coordinator,
-                    busy = busy,
-                    showCancel = true,
-                    onDismiss = { showAddWalletModal = false }
-                )
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.TopCenter
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .widthIn(max = 560.dp)
+                    ) {
+                        WalletOnboardingView(
+                            coordinator = coordinator,
+                            busy = busy,
+                            showCancel = true,
+                            onDismiss = { showAddWalletModal = false }
+                        )
+                    }
+                }
             }
         }
 

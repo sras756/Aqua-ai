@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -94,6 +95,9 @@ import com.example.browser.AquaBrowserController
 import com.example.browser.AquaLegalPortalAuthBridge
 import com.example.ui.AquaMainViewModel
 import com.example.ui.auth.onGoogleSignInClicked
+import com.example.ui.components.AquaAdaptiveContainer
+import com.example.ui.components.AquaAdaptiveGridRows
+import com.example.ui.components.AquaAdaptiveSpec
 import com.example.ui.components.AquaBackdropBox
 import com.example.ui.components.AquaGlassCard
 import com.example.ui.theme.AquaTheme
@@ -170,109 +174,207 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
     }
 
     AquaBackdropBox(modifier = Modifier.fillMaxSize()) {
-    Column(
+    AquaAdaptiveContainer(
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding()
-    ) {
-        // Primary Address Bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedTextField(
-                value = addressText,
-                onValueChange = { addressText = it },
-                singleLine = true,
-                placeholder = { Text("Search or enter https://...") },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                keyboardActions = KeyboardActions(onGo = { navigateOrRecover(addressText) }),
-                shape = RoundedCornerShape(16.dp),
-                colors = fieldColors,
-                trailingIcon = {
-                    IconButton(onClick = { navigateOrRecover(addressText) }) {
-                        Icon(Icons.Filled.Search, contentDescription = "Go", tint = c.accentCyan)
-                    }
-                },
+    ) { spec ->
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (spec.isTabletOrFoldable) {
+            // Unified Desktop/Tablet Browser Toolbar
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .testTag("browser_url_input")
-            )
-            Spacer(Modifier.width(4.dp))
-            IconButton(
-                onClick = { viewModel.summarizeActiveWebpage() },
-                modifier = Modifier.testTag("browser_summarize_button")
+                    .fillMaxWidth()
+                    .padding(horizontal = spec.horizontalPadding, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Icon(Icons.Filled.AutoAwesome, contentDescription = "Summarize page with Aqua", tint = c.accentTeal)
-            }
-        }
-
-        // Browser Navigation & Tool Controls
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = { viewModel.browserController.goBack() },
-                enabled = pageState.canGoBack
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = if (pageState.canGoBack) c.accentCyan else c.textMuted
-                )
-            }
-            IconButton(
-                onClick = { viewModel.browserController.goForward() },
-                enabled = pageState.canGoForward
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = "Forward",
-                    tint = if (pageState.canGoForward) c.accentCyan else c.textMuted
-                )
-            }
-            IconButton(
-                onClick = {
-                    if (!hasActiveSession || rendererUnavailable) {
-                        rendererUnavailable = false
-                        viewModel.browserController.activateSession()
-                        webViewGeneration++
-                    } else {
-                        viewModel.browserController.reload()
-                    }
+                IconButton(
+                    onClick = { viewModel.browserController.goBack() },
+                    enabled = pageState.canGoBack
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = if (pageState.canGoBack) c.accentCyan else c.textMuted
+                    )
                 }
-            ) {
-                Icon(Icons.Filled.Refresh, contentDescription = "Reload", tint = c.accentCyan)
-            }
-            IconButton(
-                onClick = {
-                    showFindBar = !showFindBar
-                    if (!showFindBar) {
-                        findQuery = ""
-                        viewModel.browserController.clearFindMatches()
+                IconButton(
+                    onClick = { viewModel.browserController.goForward() },
+                    enabled = pageState.canGoForward
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "Forward",
+                        tint = if (pageState.canGoForward) c.accentCyan else c.textMuted
+                    )
+                }
+                IconButton(
+                    onClick = {
+                        if (!hasActiveSession || rendererUnavailable) {
+                            rendererUnavailable = false
+                            viewModel.browserController.activateSession()
+                            webViewGeneration++
+                        } else {
+                            viewModel.browserController.reload()
+                        }
                     }
-                },
-                modifier = Modifier.testTag("browser_find_toggle")
-            ) {
-                Icon(Icons.Filled.FindInPage, contentDescription = "Find in page", tint = c.accentCyan)
+                ) {
+                    Icon(Icons.Filled.Refresh, contentDescription = "Reload", tint = c.accentCyan)
+                }
+
+                Spacer(Modifier.width(4.dp))
+                OutlinedTextField(
+                    value = addressText,
+                    onValueChange = { addressText = it },
+                    singleLine = true,
+                    placeholder = { Text("Search or enter https://...") },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                    keyboardActions = KeyboardActions(onGo = { navigateOrRecover(addressText) }),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = fieldColors,
+                    trailingIcon = {
+                        IconButton(onClick = { navigateOrRecover(addressText) }) {
+                            Icon(Icons.Filled.Search, contentDescription = "Go", tint = c.accentCyan)
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("browser_url_input")
+                )
+                Spacer(Modifier.width(4.dp))
+
+                IconButton(
+                    onClick = { viewModel.summarizeActiveWebpage() },
+                    modifier = Modifier.testTag("browser_summarize_button")
+                ) {
+                    Icon(Icons.Filled.AutoAwesome, contentDescription = "Summarize page with Aqua", tint = c.accentTeal)
+                }
+                IconButton(
+                    onClick = {
+                        showFindBar = !showFindBar
+                        if (!showFindBar) {
+                            findQuery = ""
+                            viewModel.browserController.clearFindMatches()
+                        }
+                    },
+                    modifier = Modifier.testTag("browser_find_toggle")
+                ) {
+                    Icon(Icons.Filled.FindInPage, contentDescription = "Find in page", tint = c.accentCyan)
+                }
+                IconButton(
+                    onClick = { viewModel.openBrowserReader() },
+                    modifier = Modifier.testTag("browser_reader_button")
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ChromeReaderMode, contentDescription = "Reader & Page Links", tint = c.accentTeal)
+                }
+                IconButton(
+                    onClick = { viewModel.openBrowserUrlExternally(pageState.currentUrl) },
+                    modifier = Modifier.testTag("browser_open_external_button")
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = "Open in external browser", tint = c.textMuted)
+                }
             }
-            IconButton(
-                onClick = { viewModel.openBrowserReader() },
-                modifier = Modifier.testTag("browser_reader_button")
+        } else {
+            // Primary Address Bar (Mobile Compact)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.AutoMirrored.Filled.ChromeReaderMode, contentDescription = "Reader & Page Links", tint = c.accentTeal)
+                OutlinedTextField(
+                    value = addressText,
+                    onValueChange = { addressText = it },
+                    singleLine = true,
+                    placeholder = { Text("Search or enter https://...") },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                    keyboardActions = KeyboardActions(onGo = { navigateOrRecover(addressText) }),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = fieldColors,
+                    trailingIcon = {
+                        IconButton(onClick = { navigateOrRecover(addressText) }) {
+                            Icon(Icons.Filled.Search, contentDescription = "Go", tint = c.accentCyan)
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("browser_url_input")
+                )
+                Spacer(Modifier.width(4.dp))
+                IconButton(
+                    onClick = { viewModel.summarizeActiveWebpage() },
+                    modifier = Modifier.testTag("browser_summarize_button")
+                ) {
+                    Icon(Icons.Filled.AutoAwesome, contentDescription = "Summarize page with Aqua", tint = c.accentTeal)
+                }
             }
-            IconButton(
-                onClick = { viewModel.openBrowserUrlExternally(pageState.currentUrl) },
-                modifier = Modifier.testTag("browser_open_external_button")
+
+            // Browser Navigation & Tool Controls
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = "Open in external browser", tint = c.textMuted)
+                IconButton(
+                    onClick = { viewModel.browserController.goBack() },
+                    enabled = pageState.canGoBack
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = if (pageState.canGoBack) c.accentCyan else c.textMuted
+                    )
+                }
+                IconButton(
+                    onClick = { viewModel.browserController.goForward() },
+                    enabled = pageState.canGoForward
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "Forward",
+                        tint = if (pageState.canGoForward) c.accentCyan else c.textMuted
+                    )
+                }
+                IconButton(
+                    onClick = {
+                        if (!hasActiveSession || rendererUnavailable) {
+                            rendererUnavailable = false
+                            viewModel.browserController.activateSession()
+                            webViewGeneration++
+                        } else {
+                            viewModel.browserController.reload()
+                        }
+                    }
+                ) {
+                    Icon(Icons.Filled.Refresh, contentDescription = "Reload", tint = c.accentCyan)
+                }
+                IconButton(
+                    onClick = {
+                        showFindBar = !showFindBar
+                        if (!showFindBar) {
+                            findQuery = ""
+                            viewModel.browserController.clearFindMatches()
+                        }
+                    },
+                    modifier = Modifier.testTag("browser_find_toggle")
+                ) {
+                    Icon(Icons.Filled.FindInPage, contentDescription = "Find in page", tint = c.accentCyan)
+                }
+                IconButton(
+                    onClick = { viewModel.openBrowserReader() },
+                    modifier = Modifier.testTag("browser_reader_button")
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ChromeReaderMode, contentDescription = "Reader & Page Links", tint = c.accentTeal)
+                }
+                IconButton(
+                    onClick = { viewModel.openBrowserUrlExternally(pageState.currentUrl) },
+                    modifier = Modifier.testTag("browser_open_external_button")
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = "Open in external browser", tint = c.textMuted)
+                }
             }
         }
 
@@ -511,6 +613,7 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
             }
         } else if (!hasActiveSession) {
             BrowserStartHub(
+                spec = spec,
                 currentUrl = addressText,
                 onOpenUrl = { url -> navigateOrRecover(url) },
                 onOpenReader = {
@@ -682,11 +785,13 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
         }
     }
     }
+    }
 
     readerData?.let { (extractedText, extractedLinks) ->
         ModalBottomSheet(
             onDismissRequest = { viewModel.closeBrowserReader() },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            sheetMaxWidth = 720.dp,
             containerColor = c.deepSurface
         ) {
             Column(
@@ -812,6 +917,7 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
 
 @Composable
 private fun BrowserStartHub(
+    spec: AquaAdaptiveSpec,
     currentUrl: String,
     onOpenUrl: (String) -> Unit,
     onOpenReader: () -> Unit,
@@ -829,100 +935,157 @@ private fun BrowserStartHub(
             "Android Docs" to "https://developer.android.com"
         )
     }
+    val siteCols = when {
+        spec.isTwoPane -> 3
+        spec.isTabletOrFoldable -> 2
+        else -> 1
+    }
 
-    LazyColumn(
-        modifier = modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.TopCenter
     ) {
-        item {
-            AquaGlassCard(
-                borderColor = c.accentCyan.copy(alpha = 0.45f),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .widthIn(max = 980.dp)
+                .padding(horizontal = spec.horizontalPadding, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            item {
+                AquaGlassCard(
+                    borderColor = c.accentCyan.copy(alpha = 0.45f),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Filled.Language,
-                            contentDescription = null,
-                            tint = c.accentCyan,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = "Aqua Browser Hub",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = c.textPrimary
-                        )
-                    }
-                    Text(
-                        text = "Enter a URL or search query above, pick a destination below, or extract clean readable text via Aqua Reader without spinning up a full Chromium renderer.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = c.textMuted
-                    )
-                    Button(
-                        onClick = { onOpenUrl(currentUrl) },
-                        colors = ButtonDefaults.buttonColors(containerColor = c.accentCyan, contentColor = c.canvas),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("browser_launch_webview_button")
+                    Column(
+                        modifier = Modifier.padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text("Open Live WebView", fontWeight = FontWeight.Bold)
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = onOpenReader,
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("browser_hub_reader_button")
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.ChromeReaderMode, contentDescription = null, tint = c.accentTeal, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Aqua Reader", color = c.accentTeal)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.Language,
+                                contentDescription = null,
+                                tint = c.accentCyan,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "Aqua Browser Hub",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = c.textPrimary
+                            )
                         }
-                        OutlinedButton(
-                            onClick = onOpenExternal,
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("browser_hub_external_button")
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = c.textPrimary, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("External", color = c.textPrimary)
+                        Text(
+                            text = "Enter a URL or search query above, pick a destination below, or extract clean readable text via Aqua Reader without spinning up a full Chromium renderer.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = c.textMuted
+                        )
+                        if (spec.isTabletOrFoldable) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Button(
+                                    onClick = { onOpenUrl(currentUrl) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = c.accentCyan, contentColor = c.canvas),
+                                    modifier = Modifier
+                                        .weight(1.2f)
+                                        .testTag("browser_launch_webview_button")
+                                ) {
+                                    Text("Open Live WebView", fontWeight = FontWeight.Bold)
+                                }
+                                OutlinedButton(
+                                    onClick = onOpenReader,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("browser_hub_reader_button")
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.ChromeReaderMode, contentDescription = null, tint = c.accentTeal, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Aqua Reader", color = c.accentTeal)
+                                }
+                                OutlinedButton(
+                                    onClick = onOpenExternal,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("browser_hub_external_button")
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = c.textPrimary, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("External", color = c.textPrimary)
+                                }
+                            }
+                        } else {
+                            Button(
+                                onClick = { onOpenUrl(currentUrl) },
+                                colors = ButtonDefaults.buttonColors(containerColor = c.accentCyan, contentColor = c.canvas),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("browser_launch_webview_button")
+                            ) {
+                                Text("Open Live WebView", fontWeight = FontWeight.Bold)
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = onOpenReader,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("browser_hub_reader_button")
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.ChromeReaderMode, contentDescription = null, tint = c.accentTeal, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Aqua Reader", color = c.accentTeal)
+                                }
+                                OutlinedButton(
+                                    onClick = onOpenExternal,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("browser_hub_external_button")
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = c.textPrimary, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("External", color = c.textPrimary)
+                                }
+                            }
                         }
                     }
                 }
             }
-        }
 
-        item {
-            Text(
-                text = "QUICK LAUNCH",
-                style = MaterialTheme.typography.labelMedium,
-                color = c.accentCyan
-            )
-        }
+            item {
+                Text(
+                    text = "QUICK LAUNCH",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = c.accentCyan
+                )
+            }
 
-        items(quickSites) { (label, url) ->
-            AquaGlassCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onOpenUrl(url) }
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Filled.Link, contentDescription = null, tint = c.accentTeal, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(10.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(label, style = MaterialTheme.typography.titleSmall, color = c.textPrimary)
-                        Text(url, style = MaterialTheme.typography.labelSmall, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            item {
+                AquaAdaptiveGridRows(
+                    items = quickSites,
+                    columns = siteCols,
+                    horizontalSpacing = 12.dp,
+                    verticalSpacing = 10.dp
+                ) { (label, url) ->
+                    AquaGlassCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onOpenUrl(url) }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Filled.Link, contentDescription = null, tint = c.accentTeal, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(label, style = MaterialTheme.typography.titleSmall, color = c.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(url, style = MaterialTheme.typography.labelSmall, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
                     }
                 }
             }

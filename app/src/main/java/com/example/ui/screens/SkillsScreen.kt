@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -60,12 +61,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.data.model.AquaSkill
 import com.example.skills.SkillParserAndValidator
 import com.example.ui.AquaMainViewModel
+import com.example.ui.components.AquaAdaptiveContainer
 import com.example.ui.components.AquaBackdropBox
 import com.example.ui.components.AquaGlassCard
 import com.example.ui.theme.AquaTheme
@@ -87,118 +90,192 @@ fun SkillsScreen(viewModel: AquaMainViewModel) {
     }
 
     AquaBackdropBox(modifier = Modifier.fillMaxSize()) {
-        Column(
+        AquaAdaptiveContainer(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .padding(horizontal = 16.dp)
-        ) {
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = "Aqua Skills Engine",
-                style = MaterialTheme.typography.headlineMedium,
-                color = c.textPrimary
-            )
-            Text(
-                text = "Import JSON, YAML, Markdown, or ZIP skill packages. Untrusted inputs are statically inspected and never executed as native code.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = c.textMuted
-            )
-            Spacer(Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) { spec ->
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.TopCenter
             ) {
-                Button(
-                    onClick = { importSkillLauncher.launch(arrayOf("*/*")) },
-                    colors = ButtonDefaults.buttonColors(containerColor = c.accentCyan, contentColor = c.canvas),
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("import_skill_button")
-                ) {
-                    Icon(Icons.Filled.FileOpen, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Import Skill", fontWeight = FontWeight.Bold)
+                val containerMod = if (spec.maxContentWidth != Dp.Unspecified) {
+                    Modifier
+                        .fillMaxSize()
+                        .widthIn(max = spec.maxContentWidth)
+                } else {
+                    Modifier.fillMaxSize()
                 }
-                OutlinedButton(
-                    onClick = { editingSkill = AquaSkill(format = "custom", sourceLabel = "user-created") },
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("create_skill_button")
+                Column(
+                    modifier = containerMod.padding(horizontal = spec.horizontalPadding)
                 ) {
-                    Icon(Icons.Filled.Add, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Create Skill", color = c.textPrimary)
-                }
-            }
-
-            Spacer(Modifier.height(14.dp))
-
-            if (skills.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    AquaGlassCard(
-                        borderColor = c.accentCyan.copy(alpha = 0.45f),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(24.dp)
+                    Spacer(Modifier.height(12.dp))
+                    if (spec.isTabletOrFoldable) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Image(
-                                painter = painterResource(id = R.drawable.img_aqua_vault_emblem),
-                                contentDescription = "Aqua Skills Engine Emblem",
-                                contentScale = ContentScale.Crop,
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Aqua Skills Engine",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    color = c.textPrimary
+                                )
+                                Text(
+                                    text = "Import JSON, YAML, Markdown, or ZIP skill packages. Untrusted inputs are statically inspected and never executed as native code.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = c.textMuted
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.widthIn(min = 280.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Button(
+                                    onClick = { importSkillLauncher.launch(arrayOf("*/*")) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = c.accentCyan, contentColor = c.canvas),
+                                    modifier = Modifier.testTag("import_skill_button")
+                                ) {
+                                    Icon(Icons.Filled.FileOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Import Skill", fontWeight = FontWeight.Bold)
+                                }
+                                OutlinedButton(
+                                    onClick = { editingSkill = AquaSkill(format = "custom", sourceLabel = "user-created") },
+                                    modifier = Modifier.testTag("create_skill_button")
+                                ) {
+                                    Icon(Icons.Filled.Add, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Create Skill", color = c.textPrimary)
+                                }
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "Aqua Skills Engine",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = c.textPrimary
+                        )
+                        Text(
+                            text = "Import JSON, YAML, Markdown, or ZIP skill packages. Untrusted inputs are statically inspected and never executed as native code.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = c.textMuted
+                        )
+                        Spacer(Modifier.height(12.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = { importSkillLauncher.launch(arrayOf("*/*")) },
+                                colors = ButtonDefaults.buttonColors(containerColor = c.accentCyan, contentColor = c.canvas),
                                 modifier = Modifier
-                                    .size(72.dp)
-                                    .clip(RoundedCornerShape(18.dp))
-                                    .border(1.dp, c.accentCyan.copy(alpha = 0.5f), RoundedCornerShape(18.dp))
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Text(
-                                text = "No skills installed yet",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = c.textPrimary
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = "Import a .json, .yaml, .yml, .md, or .zip skill package or create one from scratch.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = c.textMuted,
-                                textAlign = TextAlign.Center
-                            )
+                                    .weight(1f)
+                                    .testTag("import_skill_button")
+                            ) {
+                                Icon(Icons.Filled.FileOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Import Skill", fontWeight = FontWeight.Bold)
+                            }
+                            OutlinedButton(
+                                onClick = { editingSkill = AquaSkill(format = "custom", sourceLabel = "user-created") },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("create_skill_button")
+                            ) {
+                                Icon(Icons.Filled.Add, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Create Skill", color = c.textPrimary)
+                            }
                         }
                     }
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(skills, key = { it.id }) { skill ->
-                        SkillItemCard(
-                            skill = skill,
-                            onToggle = { viewModel.toggleSkillEnabled(skill) },
-                            onEdit = { editingSkill = skill },
-                            onExport = {
-                                val json = SkillParserAndValidator.exportToJson(skill)
-                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "application/json"
-                                    putExtra(Intent.EXTRA_SUBJECT, "${skill.name}.skill.json")
-                                    putExtra(Intent.EXTRA_TEXT, json)
+
+                    Spacer(Modifier.height(14.dp))
+
+                    if (skills.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            AquaGlassCard(
+                                borderColor = c.accentCyan.copy(alpha = 0.45f),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .widthIn(max = 560.dp)
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(24.dp)
+                                ) {
+                                    Image(
+                                        painter = painterResource(id = R.drawable.img_aqua_vault_emblem),
+                                        contentDescription = "Aqua Skills Engine Emblem",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .size(72.dp)
+                                            .clip(RoundedCornerShape(18.dp))
+                                            .border(1.dp, c.accentCyan.copy(alpha = 0.5f), RoundedCornerShape(18.dp))
+                                    )
+                                    Spacer(Modifier.height(12.dp))
+                                    Text(
+                                        text = "No skills installed yet",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = c.textPrimary
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = "Import a .json, .yaml, .yml, .md, or .zip skill package or create one from scratch.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = c.textMuted,
+                                        textAlign = TextAlign.Center
+                                    )
                                 }
-                                context.startActivity(Intent.createChooser(shareIntent, "Export Skill"))
-                            },
-                            onDelete = { viewModel.deleteSkill(skill.id) }
-                        )
+                            }
+                        }
+                    } else {
+                        val cols = if (spec.isTabletOrFoldable) 2 else 1
+                        val rows = remember(skills, cols) { skills.chunked(cols) }
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(bottom = 24.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(rows, key = { row -> row.joinToString("|") { it.id } }) { rowSkills ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    rowSkills.forEach { skill ->
+                                        Box(modifier = Modifier.weight(1f)) {
+                                            SkillItemCard(
+                                                skill = skill,
+                                                onToggle = { viewModel.toggleSkillEnabled(skill) },
+                                                onEdit = { editingSkill = skill },
+                                                onExport = {
+                                                    val json = SkillParserAndValidator.exportToJson(skill)
+                                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                                        type = "application/json"
+                                                        putExtra(Intent.EXTRA_SUBJECT, "${skill.name}.skill.json")
+                                                        putExtra(Intent.EXTRA_TEXT, json)
+                                                    }
+                                                    context.startActivity(Intent.createChooser(shareIntent, "Export Skill"))
+                                                },
+                                                onDelete = { viewModel.deleteSkill(skill.id) }
+                                            )
+                                        }
+                                    }
+                                    repeat(cols - rowSkills.size) {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

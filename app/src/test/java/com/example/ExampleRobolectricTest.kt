@@ -40,11 +40,18 @@ import com.example.security.PlayComplianceHistoryStore
 import com.example.security.PlayComplianceInspector
 import com.example.security.SignatureCheckReport
 import com.example.skills.SkillParserAndValidator
+import com.example.ui.components.AquaHeightClass
+import com.example.ui.components.AquaWidthClass
+import com.example.ui.components.classifyAquaHeight
+import com.example.ui.components.classifyAquaWidth
+import com.example.ui.components.computeAquaAdaptiveSpec
 import com.example.ui.components.computeOrbWaveformAmplitude
 import com.example.voice.AquaWakeWordService
 import com.example.voice.ElevenLabsClient
 import com.example.wallet.FlashWalletConnector
 import com.example.wallet.QrCodeGenerator
+import androidx.compose.ui.unit.dp
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -56,6 +63,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -945,5 +953,75 @@ class ExampleRobolectricTest {
 
         PlayComplianceHistoryStore.clearHistory(context)
         assertTrue(PlayComplianceHistoryStore.loadHistory(context).isEmpty())
+    }
+
+    @Test
+    fun `adaptive tablet spec classifies compact medium expanded and scales grids`() {
+        assertEquals(AquaWidthClass.COMPACT, classifyAquaWidth(390.dp))
+        assertEquals(AquaWidthClass.MEDIUM, classifyAquaWidth(600.dp))
+        assertEquals(AquaWidthClass.MEDIUM, classifyAquaWidth(839.dp))
+        assertEquals(AquaWidthClass.EXPANDED, classifyAquaWidth(840.dp))
+
+        assertEquals(AquaHeightClass.COMPACT, classifyAquaHeight(420.dp))
+        assertEquals(AquaHeightClass.MEDIUM, classifyAquaHeight(800.dp))
+        assertEquals(AquaHeightClass.EXPANDED, classifyAquaHeight(1024.dp))
+
+        val phoneSpec = computeAquaAdaptiveSpec(390.dp, 844.dp)
+        assertFalse(phoneSpec.useNavigationRail)
+        assertFalse(phoneSpec.isTwoPane)
+        assertFalse(phoneSpec.isTabletOrFoldable)
+        assertEquals(2, phoneSpec.bentoColumns)
+        assertEquals(1, phoneSpec.cardColumns)
+
+        val foldableSpec = computeAquaAdaptiveSpec(680.dp, 840.dp)
+        assertTrue(foldableSpec.useNavigationRail)
+        assertFalse(foldableSpec.isTwoPane)
+        assertTrue(foldableSpec.isTabletOrFoldable)
+        assertEquals(3, foldableSpec.bentoColumns)
+        assertEquals(2, foldableSpec.cardColumns)
+
+        val tabletSpec = computeAquaAdaptiveSpec(960.dp, 720.dp)
+        assertTrue(tabletSpec.useNavigationRail)
+        assertTrue(tabletSpec.isTwoPane)
+        assertEquals(4, tabletSpec.bentoColumns)
+        assertEquals(2, tabletSpec.cardColumns)
+
+        val largeTabletSpec = computeAquaAdaptiveSpec(1280.dp, 800.dp)
+        assertTrue(largeTabletSpec.isTwoPane)
+        assertEquals(4, largeTabletSpec.bentoColumns)
+        assertEquals(3, largeTabletSpec.cardColumns)
+    }
+
+    @Test
+    fun `google services config exists for Aqua AI Android applicationId`() {
+        val candidates = listOf(
+            File("app/google-services.json"),
+            File("google-services.json")
+        )
+        val gsFile = candidates.firstOrNull { it.exists() && it.isFile }
+        assertNotNull("Expected google-services.json to be present in app module", gsFile)
+
+        val root = JSONObject(gsFile!!.readText())
+        val projectInfo = root.getJSONObject("project_info")
+        assertEquals("gen-lang-client-0405170912", projectInfo.getString("project_id"))
+        assertEquals("299712147014", projectInfo.getString("project_number"))
+
+        val clients = root.getJSONArray("client")
+        var matchedAquaClient = false
+        for (i in 0 until clients.length()) {
+            val client = clients.getJSONObject(i)
+            val androidInfo = client.getJSONObject("client_info").getJSONObject("android_client_info")
+            if (androidInfo.getString("package_name") == "com.aistudio.aquaai.vqrzmn") {
+                matchedAquaClient = true
+                val oauthClients = client.getJSONArray("oauth_client")
+                val hasMatchingSha1 = (0 until oauthClients.length()).any { j ->
+                    val entry = oauthClients.getJSONObject(j)
+                    entry.optJSONObject("android_info")?.optString("certificate_hash")
+                        .equals("5bfa1d7ebf7d7249b5af839c1be698046545b907", ignoreCase = true)
+                }
+                assertTrue("Expected SHA-1 certificate hash for com.aistudio.aquaai.vqrzmn", hasMatchingSha1)
+            }
+        }
+        assertTrue("Expected com.aistudio.aquaai.vqrzmn client entry in google-services.json", matchedAquaClient)
     }
 }

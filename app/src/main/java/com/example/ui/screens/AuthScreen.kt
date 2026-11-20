@@ -59,6 +59,7 @@ import androidx.credentials.CredentialManager
 import com.example.R
 import com.example.ui.auth.attemptAutoSignIn
 import com.example.ui.auth.onGoogleSignInClicked
+import com.example.ui.components.AquaAdaptiveContainer
 import com.example.ui.components.AquaAnimatedEntrance
 import com.example.ui.components.AquaBackdropBox
 import com.example.ui.components.AquaGlassCard
@@ -95,24 +96,18 @@ fun AuthScreen(
             .systemBarsPadding()
             .padding(24.dp)
     ) {
-        Box(
+        AquaAdaptiveContainer(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 520.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(18.dp)
-            ) {
+                .verticalScroll(rememberScrollState())
+        ) { spec ->
+            val useSplitHero = spec.availableWidth >= 760.dp
+
+            val heroBannerCard: @Composable (Modifier) -> Unit = { bannerModifier ->
                 AquaAnimatedEntrance(index = 0) {
                     Box(
-                        modifier = Modifier
+                        modifier = bannerModifier
                             .fillMaxWidth()
-                            .height(228.dp)
                             .clip(RoundedCornerShape(28.dp))
                             .border(1.dp, c.borderGlow, RoundedCornerShape(28.dp))
                     ) {
@@ -138,7 +133,7 @@ fun AuthScreen(
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
                                 .padding(16.dp)
-                                .size(58.dp)
+                                .size(if (useSplitHero) 72.dp else 58.dp)
                                 .clip(RoundedCornerShape(16.dp))
                                 .border(1.dp, c.accentCyan.copy(alpha = 0.55f), RoundedCornerShape(16.dp))
                         )
@@ -186,117 +181,158 @@ fun AuthScreen(
                         }
                     }
                 }
+            }
 
-                AquaAnimatedEntrance(index = 1) {
-                    AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
-                        Column(
-                            modifier = Modifier.padding(20.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            SecurityFeatureRow(
-                                icon = Icons.Filled.Shield,
-                                title = "Zero-Trust Cloud & Age 13+ Policy",
-                                subtitle = "Conversations, age-tiered guardrails (13–17 Teen Mode / 18+), and skills sync privately to your Google account."
-                            )
-                            SecurityFeatureRow(
-                                icon = Icons.Filled.Memory,
-                                title = "Multi-Persona Gemini & ElevenLabs",
-                                subtitle = "Adaptive personas, Gemini Live voice, optional ElevenLabs Voice ID, & Google AI Studio BYOK."
-                            )
-                            SecurityFeatureRow(
-                                icon = Icons.Filled.Lock,
-                                title = "Self-Custodial & Action Gate",
-                                subtitle = "Android Keystore AES-256-GCM vault; financial & external writes always require modal consent."
-                            )
+            val securityAndSignInColumn: @Composable (Modifier) -> Unit = { colModifier ->
+                Column(
+                    modifier = colModifier,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    AquaAnimatedEntrance(index = 1) {
+                        AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
+                            Column(
+                                modifier = Modifier.padding(20.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                SecurityFeatureRow(
+                                    icon = Icons.Filled.Shield,
+                                    title = "Zero-Trust Cloud & Age 13+ Policy",
+                                    subtitle = "Conversations, age-tiered guardrails (13–17 Teen Mode / 18+), and skills sync privately to your Google account."
+                                )
+                                SecurityFeatureRow(
+                                    icon = Icons.Filled.Memory,
+                                    title = "Multi-Persona Gemini & ElevenLabs",
+                                    subtitle = "Adaptive personas, Gemini Live voice, optional ElevenLabs Voice ID, & Google AI Studio BYOK."
+                                )
+                                SecurityFeatureRow(
+                                    icon = Icons.Filled.Lock,
+                                    title = "Self-Custodial & Action Gate",
+                                    subtitle = "Android Keystore AES-256-GCM vault; financial & external writes always require modal consent."
+                                )
+                            }
                         }
                     }
-                }
 
-                AnimatedVisibility(visible = errorMessage != null, enter = fadeIn()) {
-                    errorMessage?.let { msg ->
-                        Surface(
-                            color = c.error.copy(alpha = 0.14f),
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier.fillMaxWidth()
+                    AnimatedVisibility(visible = errorMessage != null, enter = fadeIn()) {
+                        errorMessage?.let { msg ->
+                            Surface(
+                                color = c.error.copy(alpha = 0.14f),
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = msg,
+                                    color = c.error,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.padding(14.dp),
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    }
+
+                    AquaAnimatedEntrance(index = 2) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
+                            Button(
+                                onClick = {
+                                    errorMessage = null
+                                    isLoading = true
+                                    onGoogleSignInClicked(
+                                        context = context,
+                                        credentialManager = credentialManager,
+                                        onAuthSuccess = {
+                                            isLoading = false
+                                            onAuthSuccess()
+                                        },
+                                        onAuthError = { msg ->
+                                            isLoading = false
+                                            errorMessage = msg
+                                        },
+                                        scope = scope,
+                                        onAuthCancelled = {
+                                            isLoading = false
+                                        }
+                                    )
+                                },
+                                enabled = !isLoading,
+                                interactionSource = signInInteraction,
+                                shape = RoundedCornerShape(18.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = c.accentCyan,
+                                    contentColor = c.onAccent
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp)
+                                    .aquaPressScale(signInInteraction)
+                                    .testTag("google_sign_in_button")
+                            ) {
+                                if (isLoading) {
+                                    CircularProgressIndicator(
+                                        color = c.onAccent,
+                                        strokeWidth = 2.5.dp,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Filled.AccountCircle,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(
+                                        text = "Sign in with Google",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
                             Text(
-                                text = msg,
-                                color = c.error,
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(14.dp),
+                                text = "Eligible for ages 13+ • Protected by Google Play & Zero-Trust Firestore rules",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = c.textMuted,
                                 textAlign = TextAlign.Center
                             )
                         }
                     }
                 }
+            }
 
-                AquaAnimatedEntrance(index = 2) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                if (useSplitHero) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .widthIn(max = 1040.dp),
+                        horizontalArrangement = Arrangement.spacedBy(24.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Button(
-                            onClick = {
-                                errorMessage = null
-                                isLoading = true
-                                onGoogleSignInClicked(
-                                    context = context,
-                                    credentialManager = credentialManager,
-                                    onAuthSuccess = {
-                                        isLoading = false
-                                        onAuthSuccess()
-                                    },
-                                    onAuthError = { msg ->
-                                        isLoading = false
-                                        errorMessage = msg
-                                    },
-                                    scope = scope,
-                                    onAuthCancelled = {
-                                        isLoading = false
-                                    }
-                                )
-                            },
-                            enabled = !isLoading,
-                            interactionSource = signInInteraction,
-                            shape = RoundedCornerShape(18.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = c.accentCyan,
-                                contentColor = c.onAccent
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp)
-                                .aquaPressScale(signInInteraction)
-                                .testTag("google_sign_in_button")
-                        ) {
-                            if (isLoading) {
-                                CircularProgressIndicator(
-                                    color = c.onAccent,
-                                    strokeWidth = 2.5.dp,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Filled.AccountCircle,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                Spacer(Modifier.width(10.dp))
-                                Text(
-                                    text = "Sign in with Google",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-
-                        Text(
-                            text = "Eligible for ages 13+ • Protected by Google Play & Zero-Trust Firestore rules",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = c.textMuted,
-                            textAlign = TextAlign.Center
+                        heroBannerCard(
+                            Modifier
+                                .weight(1.05f)
+                                .height(360.dp)
                         )
+                        securityAndSignInColumn(Modifier.weight(0.95f))
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .widthIn(max = 540.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(18.dp)
+                    ) {
+                        heroBannerCard(Modifier.height(228.dp))
+                        securityAndSignInColumn(Modifier.fillMaxWidth())
                     }
                 }
             }

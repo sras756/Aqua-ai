@@ -11,17 +11,20 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.PieChart
@@ -49,7 +52,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.ui.components.AquaAdaptiveContainer
 import com.example.ui.theme.AquaAbyss
 import com.example.ui.theme.AquaAmber
 import com.example.ui.theme.AquaAzure
@@ -99,46 +104,50 @@ fun WalletDashboardAndAnalyticsSection(
     onOpenScanner: () -> Unit,
     onOpenBackupSecurity: () -> Unit
 ) {
-    LazyColumn(
+    val chainTotals = portfolio?.chainTotalsUsd?.entries
+        ?.filter { it.value > 0.0 }
+        ?.sortedByDescending { it.value }
+        .orEmpty()
+    val assets = portfolio?.assets.orEmpty()
+
+    AquaAdaptiveContainer(
         modifier = Modifier
             .fillMaxSize()
-            .background(AquaAbyss),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        if (!walletMeta.backupVerified && !walletMeta.isWatchOnly) {
-            item {
-                Surface(
-                    color = AquaAmber.copy(alpha = 0.14f),
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, AquaAmber, RoundedCornerShape(14.dp))
-                        .clickable { onOpenBackupSecurity() }
-                        .padding(12.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Warning, contentDescription = null, tint = AquaAmber)
-                        Spacer(Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Backup Verification Pending",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = AquaAmber
-                            )
-                            Text(
-                                "Tap to verify your ${walletMeta.wordCount}-word recovery phrase in Security Center.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = AquaIceText
-                            )
-                        }
+            .background(AquaAbyss)
+    ) { spec ->
+        val showBackupBanner = !walletMeta.backupVerified && !walletMeta.isWatchOnly
+        val warnings = portfolio?.warnings.orEmpty()
+
+        val backupBanner: @Composable () -> Unit = {
+            Surface(
+                color = AquaAmber.copy(alpha = 0.14f),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, AquaAmber, RoundedCornerShape(14.dp))
+                    .clickable { onOpenBackupSecurity() }
+                    .padding(12.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Warning, contentDescription = null, tint = AquaAmber)
+                    Spacer(Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Backup Verification Pending",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = AquaAmber
+                        )
+                        Text(
+                            "Tap to verify your ${walletMeta.wordCount}-word recovery phrase in Security Center.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AquaIceText
+                        )
                     }
                 }
             }
         }
 
-        // Hero Portfolio Valuation Card
-        item {
+        val heroPortfolioCard: @Composable () -> Unit = {
             Card(
                 colors = CardDefaults.cardColors(containerColor = AquaCardSurface),
                 shape = RoundedCornerShape(22.dp),
@@ -187,7 +196,9 @@ fun WalletDashboardAndAnalyticsSection(
                     )
 
                     Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         DisplayFiatCurrency.entries.forEach { curr ->
@@ -281,145 +292,244 @@ fun WalletDashboardAndAnalyticsSection(
             }
         }
 
-        // Portfolio Analytics Card (Chain Breakdown Canvas Chart)
-        val chainTotals = portfolio?.chainTotalsUsd?.entries?.filter { it.value > 0.0 }?.sortedByDescending { it.value }.orEmpty()
-        if (chainTotals.isNotEmpty()) {
-            item {
-                val grandTotal = chainTotals.sumOf { it.value }.coerceAtLeast(1e-9)
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = AquaDeepSurface),
-                    shape = RoundedCornerShape(18.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, AquaBorderGlow, RoundedCornerShape(18.dp))
+        val chainAllocationCard: @Composable () -> Unit = {
+            val grandTotal = chainTotals.sumOf { it.value }.coerceAtLeast(1e-9)
+            Card(
+                colors = CardDefaults.cardColors(containerColor = AquaDeepSurface),
+                shape = RoundedCornerShape(18.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, AquaBorderGlow, RoundedCornerShape(18.dp))
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.PieChart, contentDescription = null, tint = AquaTeal)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Chain Allocation Analytics", style = MaterialTheme.typography.titleMedium, color = AquaIceText)
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.PieChart, contentDescription = null, tint = AquaTeal)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Chain Allocation Analytics", style = MaterialTheme.typography.titleMedium, color = AquaIceText)
+                        Canvas(modifier = Modifier.size(110.dp)) {
+                            val strokeWidth = 22.dp.toPx()
+                            var startAngle = -90f
+                            chainTotals.forEachIndexed { idx, entry ->
+                                val sweep = ((entry.value / grandTotal) * 360.0).toFloat()
+                                drawArc(
+                                    color = CHART_PALETTE[idx % CHART_PALETTE.size],
+                                    startAngle = startAngle,
+                                    sweepAngle = (sweep - 2f).coerceAtLeast(1f),
+                                    useCenter = false,
+                                    style = Stroke(width = strokeWidth, cap = StrokeCap.Butt)
+                                )
+                                startAngle += sweep
+                            }
                         }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Canvas(modifier = Modifier.size(110.dp)) {
-                                val strokeWidth = 22.dp.toPx()
-                                var startAngle = -90f
-                                chainTotals.forEachIndexed { idx, entry ->
-                                    val sweep = ((entry.value / grandTotal) * 360.0).toFloat()
-                                    drawArc(
-                                        color = CHART_PALETTE[idx % CHART_PALETTE.size],
-                                        startAngle = startAngle,
-                                        sweepAngle = (sweep - 2f).coerceAtLeast(1f),
-                                        useCenter = false,
-                                        style = Stroke(width = strokeWidth, cap = StrokeCap.Butt)
+                            chainTotals.forEachIndexed { idx, (chain, usd) ->
+                                val pct = (usd / grandTotal) * 100.0
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(10.dp)
+                                            .background(CHART_PALETTE[idx % CHART_PALETTE.size], CircleShape)
                                     )
-                                    startAngle += sweep
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = "$chain: ${"%.1f".format(Locale.US, pct)}% (${displayCurrency.symbol}${"%,.2f".format(Locale.US, usd * fiatRateFromUsd)})",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = AquaIceText
+                                    )
                                 }
                             }
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                        }
+                    }
+                }
+            }
+        }
+
+        val warningsCard: @Composable () -> Unit = {
+            Surface(
+                color = AquaCardSurface,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, AquaAmber.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+            ) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Live RPC Warnings", style = MaterialTheme.typography.labelLarge, color = AquaAmber)
+                    warnings.forEach { w ->
+                        Text("• $w", style = MaterialTheme.typography.bodySmall, color = AquaMutedText)
+                    }
+                }
+            }
+        }
+
+        val emptyAssetsCard: @Composable () -> Unit = {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = AquaCardSurface),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = if (busy) "Querying live blockchain RPC endpoints..." else "No balance snapshot fetched yet.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AquaIceText
+                    )
+                    Text(
+                        text = "Tap Refresh above to fetch real-time balances across Ethereum, BNB Smart Chain, Polygon, Base, Arbitrum, Solana, and Bitcoin.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AquaMutedText
+                    )
+                }
+            }
+        }
+
+        if (spec.isTwoPane) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = spec.horizontalPadding, vertical = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(spec.paneSpacing)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(0.47f)
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState())
+                        .padding(bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    if (showBackupBanner) backupBanner()
+                    heroPortfolioCard()
+                    if (chainTotals.isNotEmpty()) chainAllocationCard()
+                    WalletMarketSparklineCard(
+                        chartData = marketChart,
+                        busy = marketBusy,
+                        errorText = marketError,
+                        displayCurrency = displayCurrency,
+                        fiatRateFromUsd = fiatRateFromUsd,
+                        onLoadChart = onLoadMarketChart
+                    )
+                    if (warnings.isNotEmpty()) warningsCard()
+                }
+
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(0.53f)
+                        .fillMaxHeight(),
+                    contentPadding = PaddingValues(bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item {
+                        Text(
+                            text = "MY MULTI-CHAIN ASSETS (${assets.size})",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = AquaCyan
+                        )
+                    }
+                    if (assets.isEmpty()) {
+                        item { emptyAssetsCard() }
+                    } else if (spec.availableWidth >= 1160.dp) {
+                        val rows = assets.chunked(2)
+                        items(rows, key = { row -> row.joinToString("|") { it.token.id } }) { rowAssets ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                chainTotals.forEachIndexed { idx, (chain, usd) ->
-                                    val pct = (usd / grandTotal) * 100.0
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(10.dp)
-                                                .background(CHART_PALETTE[idx % CHART_PALETTE.size], CircleShape)
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(
-                                            text = "$chain: ${"%.1f".format(Locale.US, pct)}% (${displayCurrency.symbol}${"%,.2f".format(Locale.US, usd * fiatRateFromUsd)})",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = AquaIceText
+                                rowAssets.forEach { asset ->
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        AssetRowCard(
+                                            asset = asset,
+                                            displayCurrency = displayCurrency,
+                                            fiatRateFromUsd = fiatRateFromUsd,
+                                            onClick = { onNavigateToSend(asset.token.networkId, asset.token.id) }
                                         )
                                     }
                                 }
+                                if (rowAssets.size == 1) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
                             }
                         }
-                    }
-                }
-            }
-        }
-
-        // Live CoinGecko Market Watchlist & Sparkline Card
-        item {
-            WalletMarketSparklineCard(
-                chartData = marketChart,
-                busy = marketBusy,
-                errorText = marketError,
-                displayCurrency = displayCurrency,
-                fiatRateFromUsd = fiatRateFromUsd,
-                onLoadChart = onLoadMarketChart
-            )
-        }
-
-        // Warnings for unreachable RPC nodes
-        if (!portfolio?.warnings.isNullOrEmpty()) {
-            item {
-                Surface(
-                    color = AquaCardSurface,
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, AquaAmber.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
-                ) {
-                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Live RPC Warnings", style = MaterialTheme.typography.labelLarge, color = AquaAmber)
-                        portfolio!!.warnings.forEach { w ->
-                            Text("• $w", style = MaterialTheme.typography.bodySmall, color = AquaMutedText)
+                    } else {
+                        items(assets, key = { it.token.id }) { asset ->
+                            AssetRowCard(
+                                asset = asset,
+                                displayCurrency = displayCurrency,
+                                fiatRateFromUsd = fiatRateFromUsd,
+                                onClick = { onNavigateToSend(asset.token.networkId, asset.token.id) }
+                            )
                         }
-                    }
-                }
-            }
-        }
-
-        // My Assets Section
-        item {
-            Text(
-                text = "MY MULTI-CHAIN ASSETS",
-                style = MaterialTheme.typography.labelMedium,
-                color = AquaCyan
-            )
-        }
-
-        val assets = portfolio?.assets.orEmpty()
-        if (assets.isEmpty()) {
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = AquaCardSurface),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = if (busy) "Querying live blockchain RPC endpoints..." else "No balance snapshot fetched yet.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = AquaIceText
-                        )
-                        Text(
-                            text = "Tap Refresh above to fetch real-time balances across Ethereum, BNB Smart Chain, Polygon, Base, Arbitrum, Solana, and Bitcoin.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = AquaMutedText
-                        )
                     }
                 }
             }
         } else {
-            items(assets, key = { it.token.id }) { asset ->
-                AssetRowCard(
-                    asset = asset,
-                    displayCurrency = displayCurrency,
-                    fiatRateFromUsd = fiatRateFromUsd,
-                    onClick = { onNavigateToSend(asset.token.networkId, asset.token.id) }
-                )
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                val listModifier = if (spec.maxContentWidth != Dp.Unspecified) {
+                    Modifier
+                        .fillMaxSize()
+                        .widthIn(max = spec.maxContentWidth)
+                } else {
+                    Modifier.fillMaxSize()
+                }
+                LazyColumn(
+                    modifier = listModifier,
+                    contentPadding = PaddingValues(horizontal = spec.horizontalPadding, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    if (showBackupBanner) {
+                        item { backupBanner() }
+                    }
+                    item { heroPortfolioCard() }
+                    if (chainTotals.isNotEmpty()) {
+                        item { chainAllocationCard() }
+                    }
+                    item {
+                        WalletMarketSparklineCard(
+                            chartData = marketChart,
+                            busy = marketBusy,
+                            errorText = marketError,
+                            displayCurrency = displayCurrency,
+                            fiatRateFromUsd = fiatRateFromUsd,
+                            onLoadChart = onLoadMarketChart
+                        )
+                    }
+                    if (warnings.isNotEmpty()) {
+                        item { warningsCard() }
+                    }
+                    item {
+                        Text(
+                            text = "MY MULTI-CHAIN ASSETS",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = AquaCyan
+                        )
+                    }
+                    if (assets.isEmpty()) {
+                        item { emptyAssetsCard() }
+                    } else {
+                        items(assets, key = { it.token.id }) { asset ->
+                            AssetRowCard(
+                                asset = asset,
+                                displayCurrency = displayCurrency,
+                                fiatRateFromUsd = fiatRateFromUsd,
+                                onClick = { onNavigateToSend(asset.token.networkId, asset.token.id) }
+                            )
+                        }
+                    }
+                }
             }
         }
     }

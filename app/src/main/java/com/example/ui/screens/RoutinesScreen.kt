@@ -8,10 +8,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,10 +21,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoMode
@@ -65,11 +70,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.AquaRoutine
 import com.example.ui.AquaMainViewModel
+import com.example.ui.components.AquaAdaptiveContainer
 import com.example.ui.components.AquaBackdropBox
 import com.example.ui.components.AquaGlassCard
 import com.example.ui.components.TelemetrySparklineCard
@@ -157,208 +164,206 @@ fun RoutinesScreen(viewModel: AquaMainViewModel) {
     } else 0f
 
     AquaBackdropBox(modifier = Modifier.fillMaxSize()) {
-        Column(
+        AquaAdaptiveContainer(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .padding(horizontal = 16.dp)
-        ) {
-            Spacer(Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+        ) { spec ->
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.TopCenter
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Autonomous Routines",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = c.textPrimary
-                    )
-                    Text(
-                        text = "Pin workflows to Home & inspect real-time device health.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = c.textMuted
-                    )
+                val containerMod = if (spec.maxContentWidth != Dp.Unspecified) {
+                    Modifier
+                        .fillMaxSize()
+                        .widthIn(max = spec.maxContentWidth)
+                } else {
+                    Modifier.fillMaxSize()
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    IconButton(
-                        onClick = { viewModel.refreshTelemetry() },
-                        modifier = Modifier
-                            .minimumInteractiveComponentSize()
-                            .testTag("routines_refresh_telemetry")
+                Column(
+                    modifier = containerMod.padding(horizontal = spec.horizontalPadding)
+                ) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh telemetry", tint = c.accentCyan)
-                    }
-                    Button(
-                        onClick = { showCreateDialog = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = c.accentCyan, contentColor = c.onAccent),
-                        modifier = Modifier.testTag("create_routine_button")
-                    ) {
-                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("New", fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                item {
-                    val isPrioritized = fgsRunning || automationKeepAlive || settings.backgroundAutomationEnabled
-                    AquaGlassCard(
-                        containerColor = if (isPrioritized) c.accentTeal.copy(alpha = 0.14f) else c.cardSurface,
-                        borderColor = if (isPrioritized) c.accentTeal else c.borderGlow,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("routines_foreground_service_card")
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Notifications,
-                                contentDescription = "Persistent Foreground Service",
-                                tint = if (isPrioritized) c.accentTeal else c.accentCyan
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Autonomous Routines",
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = c.textPrimary
                             )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = when {
-                                        activeTasks.isNotEmpty() -> "OS Priority Active (${activeTasks.size} Running)"
-                                        isPrioritized -> "Foreground Priority Notification Active"
-                                        else -> "Keep Automation & Voice Prioritized"
-                                    },
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = c.textPrimary
-                                )
-                                Text(
-                                    text = when {
-                                        fgSummary.isNotBlank() -> fgSummary
-                                        isPrioritized -> "Android keeps background routines & voice active."
-                                        else -> "Runs a persistent notification so OS won't pause routines."
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = c.textMuted,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            Switch(
-                                checked = isPrioritized,
-                                onCheckedChange = { toggleAutomationForegroundService(it) },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = c.onAccent,
-                                    checkedTrackColor = c.accentTeal
-                                ),
-                                modifier = Modifier.testTag("routines_foreground_switch")
+                            Text(
+                                text = "Pin workflows to Home & inspect real-time device health.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = c.textMuted
                             )
                         }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            IconButton(
+                                onClick = { viewModel.refreshTelemetry() },
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("routines_refresh_telemetry")
+                            ) {
+                                Icon(Icons.Filled.Refresh, contentDescription = "Refresh telemetry", tint = c.accentCyan)
+                            }
+                            Button(
+                                onClick = { showCreateDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = c.accentCyan, contentColor = c.onAccent),
+                                modifier = Modifier.testTag("create_routine_button")
+                            ) {
+                                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("New", fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
-                }
 
-                item {
-                    TelemetrySparklineCard(
-                        telemetry = telemetry,
-                        stats = sysStats,
-                        samples = telemetrySamples,
-                        onOpenSettingsSection = { section -> viewModel.deviceController.openAndroidSettings(section) }
-                    )
-                }
+                    Spacer(Modifier.height(12.dp))
 
-                item {
-                    AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                    val isPrioritized = fgsRunning || automationKeepAlive || settings.backgroundAutomationEnabled
+                    val foregroundPriorityCard: @Composable () -> Unit = {
+                        AquaGlassCard(
+                            containerColor = if (isPrioritized) c.accentTeal.copy(alpha = 0.14f) else c.cardSurface,
+                            borderColor = if (isPrioritized) c.accentTeal else c.borderGlow,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("routines_foreground_service_card")
                         ) {
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                modifier = Modifier.padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Text(
-                                    text = "MEMORY & STORAGE DETAILS",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = c.accentCyan
+                                Icon(
+                                    imageVector = Icons.Filled.Notifications,
+                                    contentDescription = "Persistent Foreground Service",
+                                    tint = if (isPrioritized) c.accentTeal else c.accentCyan
                                 )
-                                Text(
-                                    text = if (telemetry.isOnline) "${telemetry.connectionType} • ${telemetry.batteryPercent}%" else "Offline • ${telemetry.batteryPercent}%",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (telemetry.isOnline) c.success else c.error
-                                )
-                            }
-
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Filled.Memory, contentDescription = null, tint = c.accentTeal, modifier = Modifier.size(16.dp))
-                                        Spacer(Modifier.width(6.dp))
-                                        Text("System RAM", style = MaterialTheme.typography.labelMedium, color = c.textPrimary)
-                                    }
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "${sysStats.ramAvailableMb} MB free / ${sysStats.ramTotalMb} MB",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = c.textMuted
+                                        text = when {
+                                            activeTasks.isNotEmpty() -> "OS Priority Active (${activeTasks.size} Running)"
+                                            isPrioritized -> "Foreground Priority Notification Active"
+                                            else -> "Keep Automation & Voice Prioritized"
+                                        },
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = c.textPrimary
+                                    )
+                                    Text(
+                                        text = when {
+                                            fgSummary.isNotBlank() -> fgSummary
+                                            isPrioritized -> "Android keeps background routines & voice active."
+                                            else -> "Runs a persistent notification so OS won't pause routines."
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = c.textMuted,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
-                                LinearProgressIndicator(
-                                    progress = { ramProgress },
-                                    color = if (sysStats.lowMemory) c.error else c.accentTeal,
-                                    trackColor = c.deepSurface,
-                                    modifier = Modifier.fillMaxWidth()
+                                Switch(
+                                    checked = isPrioritized,
+                                    onCheckedChange = { toggleAutomationForegroundService(it) },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = c.onAccent,
+                                        checkedTrackColor = c.accentTeal
+                                    ),
+                                    modifier = Modifier.testTag("routines_foreground_switch")
                                 )
-                            }
-
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Filled.Storage, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(16.dp))
-                                        Spacer(Modifier.width(6.dp))
-                                        Text("Internal Storage", style = MaterialTheme.typography.labelMedium, color = c.textPrimary)
-                                    }
-                                    Text(
-                                        text = "${formatMbToGb(sysStats.storageFreeMb)} free / ${formatMbToGb(sysStats.storageTotalMb)}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = c.textMuted
-                                    )
-                                }
-                                LinearProgressIndicator(
-                                    progress = { storageProgress },
-                                    color = c.accentCyan,
-                                    trackColor = c.deepSurface,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-
-                            OutlinedButton(
-                                onClick = { viewModel.askAquaWithClipboard() },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("clipboard_analyze_button")
-                            ) {
-                                Icon(Icons.Filled.ContentPasteGo, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("Analyze Current Clipboard with Aqua", color = c.accentCyan)
                             }
                         }
                     }
-                }
 
-                if (routines.isEmpty()) {
-                    item {
+                    val memoryAndStorageCard: @Composable () -> Unit = {
+                        AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "MEMORY & STORAGE DETAILS",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = c.accentCyan
+                                    )
+                                    Text(
+                                        text = if (telemetry.isOnline) "${telemetry.connectionType} • ${telemetry.batteryPercent}%" else "Offline • ${telemetry.batteryPercent}%",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (telemetry.isOnline) c.success else c.error
+                                    )
+                                }
+
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Filled.Memory, contentDescription = null, tint = c.accentTeal, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("System RAM", style = MaterialTheme.typography.labelMedium, color = c.textPrimary)
+                                        }
+                                        Text(
+                                            text = "${sysStats.ramAvailableMb} MB free / ${sysStats.ramTotalMb} MB",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = c.textMuted
+                                        )
+                                    }
+                                    LinearProgressIndicator(
+                                        progress = { ramProgress },
+                                        color = if (sysStats.lowMemory) c.error else c.accentTeal,
+                                        trackColor = c.deepSurface,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Filled.Storage, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Internal Storage", style = MaterialTheme.typography.labelMedium, color = c.textPrimary)
+                                        }
+                                        Text(
+                                            text = "${formatMbToGb(sysStats.storageFreeMb)} free / ${formatMbToGb(sysStats.storageTotalMb)}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = c.textMuted
+                                        )
+                                    }
+                                    LinearProgressIndicator(
+                                        progress = { storageProgress },
+                                        color = c.accentCyan,
+                                        trackColor = c.deepSurface,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+
+                                OutlinedButton(
+                                    onClick = { viewModel.askAquaWithClipboard() },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("clipboard_analyze_button")
+                                ) {
+                                    Icon(Icons.Filled.ContentPasteGo, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Analyze Current Clipboard with Aqua", color = c.accentCyan)
+                                }
+                            }
+                        }
+                    }
+
+                    val emptyRoutinesCard: @Composable () -> Unit = {
                         AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
                             Column(
                                 modifier = Modifier.padding(24.dp),
@@ -390,15 +395,115 @@ fun RoutinesScreen(viewModel: AquaMainViewModel) {
                             }
                         }
                     }
-                } else {
-                    items(routines, key = { it.id }) { routine ->
-                        RoutineCard(
-                            routine = routine,
-                            isPinned = pinnedIds.contains(routine.id),
-                            onTogglePin = { viewModel.togglePinRoutine(routine.id) },
-                            onRun = { viewModel.executeRoutine(routine) },
-                            onDelete = { viewModel.deleteRoutine(routine.id) }
-                        )
+
+                    if (spec.isTwoPane) {
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(spec.paneSpacing)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .weight(0.42f)
+                                    .fillMaxHeight()
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(bottom = 24.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                foregroundPriorityCard()
+                                TelemetrySparklineCard(
+                                    telemetry = telemetry,
+                                    stats = sysStats,
+                                    samples = telemetrySamples,
+                                    onOpenSettingsSection = { section -> viewModel.deviceController.openAndroidSettings(section) }
+                                )
+                                memoryAndStorageCard()
+                            }
+
+                            LazyColumn(
+                                modifier = Modifier
+                                    .weight(0.58f)
+                                    .fillMaxHeight(),
+                                contentPadding = PaddingValues(bottom = 24.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                item {
+                                    Text(
+                                        text = "SAVED WORKFLOWS (${routines.size})",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = c.accentCyan
+                                    )
+                                }
+                                if (routines.isEmpty()) {
+                                    item { emptyRoutinesCard() }
+                                } else if (spec.availableWidth >= 1120.dp) {
+                                    val chunked = routines.chunked(2)
+                                    items(chunked, key = { row -> row.joinToString("|") { it.id } }) { rowItems ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            rowItems.forEach { routine ->
+                                                Box(modifier = Modifier.weight(1f)) {
+                                                    RoutineCard(
+                                                        routine = routine,
+                                                        isPinned = pinnedIds.contains(routine.id),
+                                                        onTogglePin = { viewModel.togglePinRoutine(routine.id) },
+                                                        onRun = { viewModel.executeRoutine(routine) },
+                                                        onDelete = { viewModel.deleteRoutine(routine.id) }
+                                                    )
+                                                }
+                                            }
+                                            if (rowItems.size == 1) {
+                                                Spacer(modifier = Modifier.weight(1f))
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    items(routines, key = { it.id }) { routine ->
+                                        RoutineCard(
+                                            routine = routine,
+                                            isPinned = pinnedIds.contains(routine.id),
+                                            onTogglePin = { viewModel.togglePinRoutine(routine.id) },
+                                            onRun = { viewModel.executeRoutine(routine) },
+                                            onDelete = { viewModel.deleteRoutine(routine.id) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(bottom = 24.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            item { foregroundPriorityCard() }
+                            item {
+                                TelemetrySparklineCard(
+                                    telemetry = telemetry,
+                                    stats = sysStats,
+                                    samples = telemetrySamples,
+                                    onOpenSettingsSection = { section -> viewModel.deviceController.openAndroidSettings(section) }
+                                )
+                            }
+                            item { memoryAndStorageCard() }
+
+                            if (routines.isEmpty()) {
+                                item { emptyRoutinesCard() }
+                            } else {
+                                items(routines, key = { it.id }) { routine ->
+                                    RoutineCard(
+                                        routine = routine,
+                                        isPinned = pinnedIds.contains(routine.id),
+                                        onTogglePin = { viewModel.togglePinRoutine(routine.id) },
+                                        onRun = { viewModel.executeRoutine(routine) },
+                                        onDelete = { viewModel.deleteRoutine(routine.id) }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

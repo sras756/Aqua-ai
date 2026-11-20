@@ -8,12 +8,28 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutoutPadding
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.AutoMode
@@ -23,8 +39,10 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -35,7 +53,10 @@ import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,9 +68,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -68,6 +93,7 @@ import com.example.data.repository.GoogleDriveHistoryRepository
 import com.example.device.AndroidDeviceController
 import com.example.ui.AquaMainViewModel
 import com.example.ui.components.AiSetupSheet
+import com.example.ui.components.AquaAdaptiveContainer
 import com.example.ui.components.AuthorizationModal
 import com.example.ui.components.CommandPaletteSheet
 import com.example.ui.screens.AuthScreen
@@ -292,11 +318,12 @@ private fun AuthenticatedAquaShell(
     AquaAiTheme(darkThemeMode = settings.darkThemeMode) {
         val c = AquaTheme.colors
 
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val useRail = maxWidth >= 700.dp
+        AquaAdaptiveContainer(modifier = Modifier.fillMaxSize()) { spec ->
+            val useRail = spec.useNavigationRail
 
             Scaffold(
                 containerColor = c.canvas,
+                contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 bottomBar = {
                     if (!useRail) {
@@ -340,27 +367,108 @@ private fun AuthenticatedAquaShell(
                         .padding(bottom = innerPadding.calculateBottomPadding())
                 ) {
                     if (useRail) {
-                        NavigationRail(containerColor = c.deepSurface) {
-                            AQUA_RAIL_TABS.forEach { tab ->
-                                NavigationRailItem(
-                                    selected = currentTab == tab.route,
-                                    onClick = { currentTab = tab.route },
-                                    icon = { Icon(tab.icon, contentDescription = tab.label) },
-                                    label = { Text(tab.label, maxLines = 1) },
-                                    colors = NavigationRailItemDefaults.colors(
-                                        selectedIconColor = c.accentCyan,
-                                        selectedTextColor = c.accentCyan,
-                                        indicatorColor = c.accentCyan.copy(alpha = 0.16f),
-                                        unselectedIconColor = c.textMuted,
-                                        unselectedTextColor = c.textMuted
-                                    ),
-                                    modifier = Modifier.testTag("rail_tab_${tab.route}")
-                                )
+                        NavigationRail(
+                            containerColor = c.deepSurface,
+                            windowInsets = WindowInsets(0, 0, 0, 0),
+                            header = {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier
+                                        .statusBarsPadding()
+                                        .padding(top = 8.dp, bottom = 6.dp)
+                                ) {
+                                    Surface(
+                                        color = c.cardSurface,
+                                        shape = RoundedCornerShape(14.dp),
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .border(1.dp, c.accentCyan.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+                                    ) {
+                                        Image(
+                                            painter = painterResource(id = R.drawable.img_aqua_vault_emblem),
+                                            contentDescription = "Aqua AI Tablet Navigation",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .clip(RoundedCornerShape(14.dp))
+                                        )
+                                    }
+                                    Text(
+                                        text = "AQUA",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = c.accentCyan,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    IconButton(
+                                        onClick = { showCommandPalette = true },
+                                        modifier = Modifier
+                                            .minimumInteractiveComponentSize()
+                                            .clip(CircleShape)
+                                            .background(c.accentCyan.copy(alpha = 0.16f))
+                                            .border(1.dp, c.accentCyan.copy(alpha = 0.45f), CircleShape)
+                                            .testTag("rail_command_palette_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Search,
+                                            contentDescription = "Open Command Palette",
+                                            tint = c.accentCyan
+                                        )
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .displayCutoutPadding()
+                                .navigationBarsPadding()
+                                .width(84.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(vertical = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                AQUA_RAIL_TABS.forEach { tab ->
+                                    NavigationRailItem(
+                                        selected = currentTab == tab.route,
+                                        onClick = { currentTab = tab.route },
+                                        icon = { Icon(tab.icon, contentDescription = tab.label) },
+                                        label = {
+                                            Text(
+                                                text = tab.label,
+                                                maxLines = 1,
+                                                softWrap = false,
+                                                overflow = TextOverflow.Ellipsis,
+                                                fontSize = 11.sp
+                                            )
+                                        },
+                                        colors = NavigationRailItemDefaults.colors(
+                                            selectedIconColor = c.accentCyan,
+                                            selectedTextColor = c.accentCyan,
+                                            indicatorColor = c.accentCyan.copy(alpha = 0.16f),
+                                            unselectedIconColor = c.textMuted,
+                                            unselectedTextColor = c.textMuted
+                                        ),
+                                        modifier = Modifier.testTag("rail_tab_${tab.route}")
+                                    )
+                                }
                             }
                         }
+                        VerticalDivider(
+                            thickness = 1.dp,
+                            color = c.borderGlow.copy(alpha = 0.45f)
+                        )
                     }
 
-                    Box(modifier = Modifier.weight(1f).fillMaxSize()) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxSize()
+                            .let { if (useRail) it.navigationBarsPadding() else it }
+                    ) {
                         AnimatedContent(
                             targetState = currentTab,
                             transitionSpec = {

@@ -14,12 +14,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -58,8 +60,10 @@ import com.example.data.model.AquaCoreState
 import com.example.domain.UserGender
 import com.example.domain.UserProfilePolicy
 import com.example.ui.AquaMainViewModel
+import com.example.ui.components.AquaAdaptiveContainer
 import com.example.ui.components.AquaAnimatedEntrance
 import com.example.ui.components.AquaBackdropBox
+import com.example.ui.components.AquaConstrainedColumn
 import com.example.ui.components.AquaCoreOrb
 import com.example.ui.components.AquaGlassCard
 import com.example.ui.components.PersistentChatBar
@@ -238,395 +242,467 @@ fun HomeScreen(
             else -> c.accentCyan
         }
     ) {
-        Column(
+        AquaAdaptiveContainer(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-        ) {
-            HomeTelemetryHeaderRow(
-                telemetry = telemetry,
-                currentDateTimeLabel = currentDateTimeLabel,
-                onOpenCommandPalette = onOpenCommandPalette,
-                onOpenTab = onOpenTab
-            )
-
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-            ) {
-                if (!conversationExpanded && messages.isEmpty() && streamingReply.isBlank()) {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        item {
-                            AquaAnimatedEntrance(index = 0) {
-                                AquaCoreOrb(
-                                    coreState = coreState,
-                                    waveformBars = waveformBars,
-                                    personaBadge = activePersona.badge,
-                                    isLiveSessionActive = isLiveActive,
-                                    onTapOrb = {
-                                        if (isLiveActive) {
-                                            viewModel.toggleLiveVoiceSession()
-                                        } else if (isSpeaking) {
-                                            viewModel.stopSpeaking()
-                                        } else if (isListening) {
-                                            viewModel.stopVoiceCapture()
-                                        } else {
-                                            withMicPermission { viewModel.startVoiceCapture(autoSendAndSpeak = true) }
-                                        }
+        ) { spec ->
+            val dashboardContent: @Composable (PaddingValues) -> Unit = { listPadding ->
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = listPadding,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    item {
+                        AquaAnimatedEntrance(index = 0) {
+                            AquaCoreOrb(
+                                coreState = coreState,
+                                waveformBars = waveformBars,
+                                personaBadge = activePersona.badge,
+                                isLiveSessionActive = isLiveActive,
+                                onTapOrb = {
+                                    if (isLiveActive) {
+                                        viewModel.toggleLiveVoiceSession()
+                                    } else if (isSpeaking) {
+                                        viewModel.stopSpeaking()
+                                    } else if (isListening) {
+                                        viewModel.stopVoiceCapture()
+                                    } else {
+                                        withMicPermission { viewModel.startVoiceCapture(autoSendAndSpeak = true) }
                                     }
+                                }
+                            )
+                        }
+                    }
+
+                    item {
+                        AquaAnimatedEntrance(index = 1) {
+                            HomeProfileAndEngineStrip(
+                                ageTier = ageTier,
+                                gender = userGender,
+                                usingPersonalKey = usingPersonalKey,
+                                elevenLabsReady = elevenLabsReady,
+                                elevenVoiceName = elevenConfig.voiceName,
+                                useGeminiTts = settings.useGeminiTts,
+                                freedomConfig = freedomConfig,
+                                onOpenSetupWizard = { viewModel.openAiSetupWizard() },
+                                onOpenProfileSettings = { onOpenTab("settings") }
+                            )
+                        }
+                    }
+
+                    item {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(AquaPersona.entries) { persona ->
+                                val selected = persona.id == personaId
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = { viewModel.setAiPersona(persona.id) },
+                                    label = { Text(persona.label) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = c.accentCyan.copy(alpha = 0.22f),
+                                        selectedLabelColor = c.accentCyan,
+                                        containerColor = c.cardSurface,
+                                        labelColor = c.textMuted
+                                    ),
+                                    modifier = Modifier.testTag("persona_chip_${persona.id}")
                                 )
                             }
                         }
+                    }
 
+                    if (partialTranscript.isNotBlank()) {
                         item {
-                            AquaAnimatedEntrance(index = 1) {
-                                HomeProfileAndEngineStrip(
-                                    ageTier = ageTier,
-                                    gender = userGender,
-                                    usingPersonalKey = usingPersonalKey,
-                                    elevenLabsReady = elevenLabsReady,
-                                    elevenVoiceName = elevenConfig.voiceName,
-                                    useGeminiTts = settings.useGeminiTts,
-                                    freedomConfig = freedomConfig,
-                                    onOpenSetupWizard = { viewModel.openAiSetupWizard() },
-                                    onOpenProfileSettings = { onOpenTab("settings") }
-                                )
-                            }
-                        }
-
-                        item {
-                            LazyRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                items(AquaPersona.entries) { persona ->
-                                    val selected = persona.id == personaId
-                                    FilterChip(
-                                        selected = selected,
-                                        onClick = { viewModel.setAiPersona(persona.id) },
-                                        label = { Text(persona.label) },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = c.accentCyan.copy(alpha = 0.22f),
-                                            selectedLabelColor = c.accentCyan,
-                                            containerColor = c.cardSurface,
-                                            labelColor = c.textMuted
-                                        ),
-                                        modifier = Modifier.testTag("persona_chip_${persona.id}")
-                                    )
-                                }
-                            }
-                        }
-
-                        if (partialTranscript.isNotBlank()) {
-                            item {
-                                AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
-                                    Text(
-                                        text = "\"$partialTranscript\"",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = c.accentTeal,
-                                        modifier = Modifier.padding(14.dp)
-                                    )
-                                }
-                            }
-                        }
-
-                        item {
-                            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            AquaGlassCard(modifier = Modifier.fillMaxWidth()) {
                                 Text(
-                                    text = if (pinnedRoutines.isNotEmpty()) "PINNED ROUTINES, STUDIO & QUICK PROMPTS" else "PROMPT STUDIO & QUICK STARTERS",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = c.textMuted
+                                    text = "\"$partialTranscript\"",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = c.accentTeal,
+                                    modifier = Modifier.padding(14.dp)
                                 )
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    item(key = "open_prompt_studio") {
-                                        AssistChip(
-                                            onClick = { showPromptStudio = true },
-                                            label = { Text("Prompt Studio") },
-                                            leadingIcon = {
-                                                Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
-                                            },
-                                            colors = AssistChipDefaults.assistChipColors(
-                                                containerColor = c.accentCyan.copy(alpha = 0.20f),
-                                                labelColor = c.accentCyan,
-                                                leadingIconContentColor = c.accentCyan
-                                            ),
-                                            modifier = Modifier.testTag("home_prompt_studio_button")
-                                        )
-                                    }
-                                    item(key = "inspect_clipboard") {
-                                        AssistChip(
-                                            onClick = {
-                                                val clip = viewModel.readClipboardPreview().trim()
-                                                clipboardPreview = clip.ifBlank { null }
-                                                if (clip.isBlank()) {
-                                                    viewModel.copyToClipboard("Aqua", "Clipboard is currently empty.")
-                                                }
-                                            },
-                                            label = { Text("Inspect Clipboard") },
-                                            leadingIcon = {
-                                                Icon(Icons.Filled.ContentPasteGo, contentDescription = null, modifier = Modifier.size(16.dp))
-                                            },
-                                            colors = AssistChipDefaults.assistChipColors(
-                                                containerColor = c.cardSurface,
-                                                labelColor = c.textPrimary,
-                                                leadingIconContentColor = c.accentTeal
-                                            ),
-                                            modifier = Modifier.testTag("home_clipboard_inspect_button")
-                                        )
-                                    }
-                                    items(pinnedRoutines, key = { "pinned_${it.id}" }) { routine ->
-                                        AssistChip(
-                                            onClick = { viewModel.executeRoutine(routine) },
-                                            label = { Text(routine.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                            leadingIcon = {
-                                                Icon(Icons.Filled.PushPin, contentDescription = null, modifier = Modifier.size(16.dp))
-                                            },
-                                            colors = AssistChipDefaults.assistChipColors(
-                                                containerColor = c.accentTeal.copy(alpha = 0.16f),
-                                                labelColor = c.textPrimary,
-                                                leadingIconContentColor = c.accentTeal
-                                            ),
-                                            modifier = Modifier.testTag("home_pinned_routine_${routine.id}")
-                                        )
-                                    }
-                                    items(QUICK_PROMPT_STARTERS) { (label, prompt) ->
-                                        AssistChip(
-                                            onClick = {
-                                                chatInput = prompt
-                                                conversationExpanded = true
-                                                viewModel.sendMessage(prompt, speakReply = false)
-                                            },
-                                            label = { Text(label) },
-                                            leadingIcon = {
-                                                Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(15.dp))
-                                            },
-                                            colors = AssistChipDefaults.assistChipColors(
-                                                containerColor = c.cardSurface,
-                                                labelColor = c.textPrimary,
-                                                leadingIconContentColor = c.accentCyan
-                                            )
-                                        )
-                                    }
-                                }
+                            }
+                        }
+                    }
 
-                                AnimatedVisibility(visible = !clipboardPreview.isNullOrBlank()) {
-                                    val clip = clipboardPreview.orEmpty()
-                                    AquaGlassCard(
-                                        borderColor = c.accentTeal.copy(alpha = 0.5f),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .testTag("home_clipboard_preview_card")
+                    item {
+                        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = if (pinnedRoutines.isNotEmpty()) "PINNED ROUTINES, STUDIO & QUICK PROMPTS" else "PROMPT STUDIO & QUICK STARTERS",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = c.textMuted
+                            )
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                item(key = "open_prompt_studio") {
+                                    AssistChip(
+                                        onClick = { showPromptStudio = true },
+                                        label = { Text("Prompt Studio") },
+                                        leadingIcon = {
+                                            Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        },
+                                        colors = AssistChipDefaults.assistChipColors(
+                                            containerColor = c.accentCyan.copy(alpha = 0.20f),
+                                            labelColor = c.accentCyan,
+                                            leadingIconContentColor = c.accentCyan
+                                        ),
+                                        modifier = Modifier.testTag("home_prompt_studio_button")
+                                    )
+                                }
+                                item(key = "inspect_clipboard") {
+                                    AssistChip(
+                                        onClick = {
+                                            val clip = viewModel.readClipboardPreview().trim()
+                                            clipboardPreview = clip.ifBlank { null }
+                                            if (clip.isBlank()) {
+                                                viewModel.copyToClipboard("Aqua", "Clipboard is currently empty.")
+                                            }
+                                        },
+                                        label = { Text("Inspect Clipboard") },
+                                        leadingIcon = {
+                                            Icon(Icons.Filled.ContentPasteGo, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        },
+                                        colors = AssistChipDefaults.assistChipColors(
+                                            containerColor = c.cardSurface,
+                                            labelColor = c.textPrimary,
+                                            leadingIconContentColor = c.accentTeal
+                                        ),
+                                        modifier = Modifier.testTag("home_clipboard_inspect_button")
+                                    )
+                                }
+                                items(pinnedRoutines, key = { "pinned_${it.id}" }) { routine ->
+                                    AssistChip(
+                                        onClick = { viewModel.executeRoutine(routine) },
+                                        label = { Text(routine.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                        leadingIcon = {
+                                            Icon(Icons.Filled.PushPin, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        },
+                                        colors = AssistChipDefaults.assistChipColors(
+                                            containerColor = c.accentTeal.copy(alpha = 0.16f),
+                                            labelColor = c.textPrimary,
+                                            leadingIconContentColor = c.accentTeal
+                                        ),
+                                        modifier = Modifier.testTag("home_pinned_routine_${routine.id}")
+                                    )
+                                }
+                                items(QUICK_PROMPT_STARTERS) { (label, prompt) ->
+                                    AssistChip(
+                                        onClick = {
+                                            chatInput = prompt
+                                            conversationExpanded = true
+                                            viewModel.sendMessage(prompt, speakReply = false)
+                                        },
+                                        label = { Text(label) },
+                                        leadingIcon = {
+                                            Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(15.dp))
+                                        },
+                                        colors = AssistChipDefaults.assistChipColors(
+                                            containerColor = c.cardSurface,
+                                            labelColor = c.textPrimary,
+                                            leadingIconContentColor = c.accentCyan
+                                        )
+                                    )
+                                }
+                            }
+
+                            AnimatedVisibility(visible = !clipboardPreview.isNullOrBlank()) {
+                                val clip = clipboardPreview.orEmpty()
+                                AquaGlassCard(
+                                    borderColor = c.accentTeal.copy(alpha = 0.5f),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("home_clipboard_preview_card")
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        Column(
-                                            modifier = Modifier.padding(14.dp),
-                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Text(
-                                                    text = "CLIPBOARD PREVIEW (${clip.length} chars)",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = c.accentTeal
-                                                )
-                                                Text(
-                                                    text = "Dismiss",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = c.textMuted,
-                                                    modifier = Modifier.clickable { clipboardPreview = null }
+                                            Text(
+                                                text = "CLIPBOARD PREVIEW (${clip.length} chars)",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = c.accentTeal
+                                            )
+                                            Text(
+                                                text = "Dismiss",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = c.textMuted,
+                                                modifier = Modifier.clickable { clipboardPreview = null }
+                                            )
+                                        }
+                                        Text(
+                                            text = clip.take(220) + if (clip.length > 220) "..." else "",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = c.textPrimary,
+                                            maxLines = 3,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            item {
+                                                AssistChip(
+                                                    onClick = {
+                                                        clipboardPreview = null
+                                                        conversationExpanded = true
+                                                        viewModel.sendMessage("Summarize and highlight key action items from this clipboard text:\n\n$clip")
+                                                    },
+                                                    label = { Text("Summarize") }
                                                 )
                                             }
-                                            Text(
-                                                text = clip.take(220) + if (clip.length > 220) "..." else "",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = c.textPrimary,
-                                                maxLines = 3,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                item {
-                                                    AssistChip(
-                                                        onClick = {
-                                                            clipboardPreview = null
-                                                            conversationExpanded = true
-                                                            viewModel.sendMessage("Summarize and highlight key action items from this clipboard text:\n\n$clip")
-                                                        },
-                                                        label = { Text("Summarize") }
-                                                    )
-                                                }
-                                                item {
-                                                    AssistChip(
-                                                        onClick = {
-                                                            clipboardPreview = null
-                                                            conversationExpanded = true
-                                                            viewModel.sendMessage("Explain and verify any technical, URL, or crypto details in this clipboard text:\n\n$clip")
-                                                        },
-                                                        label = { Text("Analyze") }
-                                                    )
-                                                }
-                                                item {
-                                                    AssistChip(
-                                                        onClick = {
-                                                            clipboardPreview = null
-                                                            conversationExpanded = true
-                                                            viewModel.sendMessage("Translate this text into natural English:\n\n$clip")
-                                                        },
-                                                        label = { Text("Translate") }
-                                                    )
-                                                }
-                                                item {
-                                                    AssistChip(
-                                                        onClick = {
-                                                            chatInput = clip
-                                                            clipboardPreview = null
-                                                        },
-                                                        label = { Text("Paste to Input") }
-                                                    )
-                                                }
+                                            item {
+                                                AssistChip(
+                                                    onClick = {
+                                                        clipboardPreview = null
+                                                        conversationExpanded = true
+                                                        viewModel.sendMessage("Explain and verify any technical, URL, or crypto details in this clipboard text:\n\n$clip")
+                                                    },
+                                                    label = { Text("Analyze") }
+                                                )
+                                            }
+                                            item {
+                                                AssistChip(
+                                                    onClick = {
+                                                        clipboardPreview = null
+                                                        conversationExpanded = true
+                                                        viewModel.sendMessage("Translate this text into natural English:\n\n$clip")
+                                                    },
+                                                    label = { Text("Translate") }
+                                                )
+                                            }
+                                            item {
+                                                AssistChip(
+                                                    onClick = {
+                                                        chatInput = clip
+                                                        clipboardPreview = null
+                                                    },
+                                                    label = { Text("Paste to Input") }
+                                                )
                                             }
                                         }
                                     }
                                 }
                             }
                         }
+                    }
 
-                        item {
-                            AquaAnimatedEntrance(index = 2) {
-                                HomeLiveAndForegroundSection(
-                                    isLiveActive = isLiveActive,
-                                    liveStatus = liveStatus,
-                                    wakeWordRunning = wakeWordRunning,
-                                    wakeWordEnabled = settings.wakeWordEnabled,
-                                    wakeWordPaused = wakeWordPaused,
-                                    wakeWordPhrase = settings.wakeWordPhrase,
-                                    automationKeepAliveActive = automationKeepAliveActive,
-                                    backgroundAutomationEnabled = settings.backgroundAutomationEnabled,
-                                    activeAutomationTasks = activeAutomationTasks,
-                                    onToggleLiveSession = { withMicPermission { viewModel.toggleLiveVoiceSession() } },
-                                    onToggleBackgroundMicPaused = { viewModel.toggleBackgroundMicPaused() },
-                                    onToggleBackgroundService = { enable -> toggleBackgroundAppAndMic(enable) }
+                    item {
+                        AquaAnimatedEntrance(index = 2) {
+                            HomeLiveAndForegroundSection(
+                                isLiveActive = isLiveActive,
+                                liveStatus = liveStatus,
+                                wakeWordRunning = wakeWordRunning,
+                                wakeWordEnabled = settings.wakeWordEnabled,
+                                wakeWordPaused = wakeWordPaused,
+                                wakeWordPhrase = settings.wakeWordPhrase,
+                                automationKeepAliveActive = automationKeepAliveActive,
+                                backgroundAutomationEnabled = settings.backgroundAutomationEnabled,
+                                activeAutomationTasks = activeAutomationTasks,
+                                onToggleLiveSession = { withMicPermission { viewModel.toggleLiveVoiceSession() } },
+                                onToggleBackgroundMicPaused = { viewModel.toggleBackgroundMicPaused() },
+                                onToggleBackgroundService = { enable -> toggleBackgroundAppAndMic(enable) }
+                            )
+                        }
+                    }
+
+                    item {
+                        AquaAnimatedEntrance(index = 3) {
+                            HomeQuickModulesStrip(onOpenTab = onOpenTab)
+                        }
+                    }
+
+                    item {
+                        HomeQuickDeviceControlsRow(
+                            telemetry = telemetry,
+                            onToggleFlashlight = {
+                                viewModel.deviceController.toggleFlashlight()
+                                viewModel.refreshTelemetry()
+                            },
+                            onAskClipboard = { viewModel.askAquaWithClipboard() },
+                            onOpenWifiSettings = { viewModel.deviceController.openAndroidSettings("wifi") },
+                            onNewChat = {
+                                viewModel.startNewConversation()
+                                conversationExpanded = true
+                            }
+                        )
+                    }
+
+                    item {
+                        TelemetrySparklineCard(
+                            telemetry = telemetry,
+                            stats = stats,
+                            samples = telemetrySamples,
+                            onOpenSettingsSection = { section -> viewModel.deviceController.openAndroidSettings(section) }
+                        )
+                    }
+
+                    item {
+                        Surface(
+                            color = c.cardSurface.copy(alpha = 0.72f),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Filled.Bookmark, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = "Model: ${settings.preferredModel} • Thinking: ${if (settings.thinkingEnabled) "HIGH" else "OFF"} • Persona: ${activePersona.label}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = c.textMuted,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
+                    }
+                }
+            }
 
-                        item {
-                            AquaAnimatedEntrance(index = 3) {
-                                HomeQuickModulesStrip(onOpenTab = onOpenTab)
-                            }
+            val conversationPanelContent: @Composable () -> Unit = {
+                HomeConversationPanel(
+                    coreState = coreState,
+                    preferredModel = settings.preferredModel,
+                    activePersona = activePersona,
+                    messages = messages,
+                    streamingReply = streamingReply,
+                    agentTraces = agentTraces,
+                    isSpeaking = isSpeaking,
+                    listState = listState,
+                    onExportMarkdown = {
+                        val safeName = viewModel.activeConversationTitle()
+                            .replace(Regex("[^a-zA-Z0-9_-]"), "_")
+                            .take(36)
+                            .ifBlank { "aqua_session" }
+                        exportMarkdownLauncher.launch("$safeName.md")
+                    },
+                    onNewConversation = { viewModel.startNewConversation() },
+                    onCollapseToOrb = { conversationExpanded = false },
+                    onSpeakMessage = { viewModel.speakMessage(it) },
+                    onStopSpeaking = { viewModel.stopSpeaking() },
+                    onCopyMessage = { viewModel.copyToClipboard("Aqua AI Reply", it) },
+                    onShareMessage = { viewModel.shareText("Aqua AI Response", it) },
+                    onSaveMemory = { viewModel.saveAssistantReplyToMemory(it) }
+                )
+            }
+
+            val chatComposerBar: @Composable (Modifier) -> Unit = { barModifier ->
+                PersistentChatBar(
+                    inputText = chatInput,
+                    onInputTextChange = { chatInput = it },
+                    isListening = isListening,
+                    isExpanded = conversationExpanded,
+                    pendingAttachment = pendingAttachment,
+                    onClearAttachment = { viewModel.clearPendingAttachment() },
+                    onToggleExpand = { conversationExpanded = !conversationExpanded },
+                    onMicClick = {
+                        if (isListening) {
+                            viewModel.stopVoiceCapture()
+                        } else {
+                            withMicPermission { viewModel.startVoiceCapture(autoSendAndSpeak = true) }
+                        }
+                    },
+                    onPickDocumentClick = { documentPickerLauncher.launch(arrayOf("*/*")) },
+                    onPickMediaClick = {
+                        photoVideoPickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+                        )
+                    },
+                    onSendClick = {
+                        val toSend = chatInput
+                        chatInput = ""
+                        conversationExpanded = true
+                        viewModel.sendMessage(toSend, speakReply = false)
+                    },
+                    modifier = barModifier
+                )
+            }
+
+            Column(modifier = Modifier.fillMaxSize()) {
+                HomeTelemetryHeaderRow(
+                    telemetry = telemetry,
+                    currentDateTimeLabel = currentDateTimeLabel,
+                    onOpenCommandPalette = onOpenCommandPalette,
+                    onOpenTab = onOpenTab
+                )
+
+                if (spec.isTwoPane) {
+                    // Canonical Supporting-Pane Tablet AI Workstation: Core Controls (left) + Persistent Live Chat (right)
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(horizontal = spec.horizontalPadding, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(spec.paneSpacing)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(0.45f)
+                                .fillMaxHeight()
+                        ) {
+                            dashboardContent(PaddingValues(bottom = 16.dp))
                         }
 
-                        item {
-                            HomeQuickDeviceControlsRow(
-                                telemetry = telemetry,
-                                onToggleFlashlight = {
-                                    viewModel.deviceController.toggleFlashlight()
-                                    viewModel.refreshTelemetry()
-                                },
-                                onAskClipboard = { viewModel.askAquaWithClipboard() },
-                                onOpenWifiSettings = { viewModel.deviceController.openAndroidSettings("wifi") },
-                                onNewChat = {
-                                    viewModel.startNewConversation()
-                                    conversationExpanded = true
-                                }
-                            )
-                        }
-
-                        item {
-                            TelemetrySparklineCard(
-                                telemetry = telemetry,
-                                stats = stats,
-                                samples = telemetrySamples,
-                                onOpenSettingsSection = { section -> viewModel.deviceController.openAndroidSettings(section) }
-                            )
-                        }
-
-                        item {
-                            Surface(
-                                color = c.cardSurface.copy(alpha = 0.72f),
-                                shape = RoundedCornerShape(14.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                        AquaGlassCard(
+                            borderColor = c.borderGlow.copy(alpha = 0.85f),
+                            modifier = Modifier
+                                .weight(0.55f)
+                                .fillMaxHeight()
+                        ) {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth()
+                                        .padding(top = 8.dp)
                                 ) {
-                                    Icon(Icons.Filled.Bookmark, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        text = "Model: ${settings.preferredModel} • Thinking: ${if (settings.thinkingEnabled) "HIGH" else "OFF"} • Persona: ${activePersona.label}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = c.textMuted,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                                    conversationPanelContent()
                                 }
+                                chatComposerBar(Modifier.fillMaxWidth())
                             }
                         }
                     }
                 } else {
-                    HomeConversationPanel(
-                        coreState = coreState,
-                        preferredModel = settings.preferredModel,
-                        activePersona = activePersona,
-                        messages = messages,
-                        streamingReply = streamingReply,
-                        agentTraces = agentTraces,
-                        isSpeaking = isSpeaking,
-                        listState = listState,
-                        onExportMarkdown = {
-                            val safeName = viewModel.activeConversationTitle()
-                                .replace(Regex("[^a-zA-Z0-9_-]"), "_")
-                                .take(36)
-                                .ifBlank { "aqua_session" }
-                            exportMarkdownLauncher.launch("$safeName.md")
-                        },
-                        onNewConversation = { viewModel.startNewConversation() },
-                        onCollapseToOrb = { conversationExpanded = false },
-                        onSpeakMessage = { viewModel.speakMessage(it) },
-                        onStopSpeaking = { viewModel.stopSpeaking() },
-                        onCopyMessage = { viewModel.copyToClipboard("Aqua AI Reply", it) },
-                        onShareMessage = { viewModel.shareText("Aqua AI Response", it) },
-                        onSaveMemory = { viewModel.saveAssistantReplyToMemory(it) }
-                    )
+                    AquaConstrainedColumn(
+                        maxWidth = spec.maxContentWidth,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                        ) {
+                            if (!conversationExpanded && messages.isEmpty() && streamingReply.isBlank()) {
+                                dashboardContent(
+                                    PaddingValues(horizontal = spec.horizontalPadding, vertical = 8.dp)
+                                )
+                            } else {
+                                conversationPanelContent()
+                            }
+                        }
+
+                        chatComposerBar(
+                            Modifier
+                                .fillMaxWidth()
+                                .let {
+                                    if (spec.maxContentWidth != androidx.compose.ui.unit.Dp.Unspecified) {
+                                        it.widthIn(max = spec.maxContentWidth)
+                                    } else {
+                                        it
+                                    }
+                                }
+                        )
+                    }
                 }
             }
-
-            PersistentChatBar(
-                inputText = chatInput,
-                onInputTextChange = { chatInput = it },
-                isListening = isListening,
-                isExpanded = conversationExpanded,
-                pendingAttachment = pendingAttachment,
-                onClearAttachment = { viewModel.clearPendingAttachment() },
-                onToggleExpand = { conversationExpanded = !conversationExpanded },
-                onMicClick = {
-                    if (isListening) {
-                        viewModel.stopVoiceCapture()
-                    } else {
-                        withMicPermission { viewModel.startVoiceCapture(autoSendAndSpeak = true) }
-                    }
-                },
-                onPickDocumentClick = { documentPickerLauncher.launch(arrayOf("*/*")) },
-                onPickMediaClick = {
-                    photoVideoPickerLauncher.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
-                    )
-                },
-                onSendClick = {
-                    val toSend = chatInput
-                    chatInput = ""
-                    conversationExpanded = true
-                    viewModel.sendMessage(toSend, speakReply = false)
-                }
-            )
         }
 
         if (showPromptStudio) {
