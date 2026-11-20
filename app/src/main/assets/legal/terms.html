@@ -144,7 +144,7 @@
 
     <div class="search-box">
       <span style="color:var(--cyan);font-weight:700;">⌕</span>
-      <input id="clauseSearch" type="search" placeholder="Filter terms clauses (e.g. signature, Drive, SDK, wallet)..." />
+      <input id="clauseSearch" type="search" placeholder="Filter terms clauses (e.g. Drive, compliance, wallet)..." />
       <span id="searchCount" style="font-size:0.78rem;color:var(--cyan);">8 / 8</span>
     </div>
 
@@ -162,8 +162,8 @@
     </article>
 
     <article class="card clause">
-      <h2>3. Android SDK Alignment, Signature Check &amp; Foreground Service</h2>
-      <p>Aqua AI compiles against Android 16 (API 36.1, targetSdk 36, minSdk 24), provides an in-app Android SDK &amp; Google Signature Check verifier for OAuth certificate readiness, and uses an optional foreground service displaying a persistent notification.</p>
+      <h2>3. Platform Alignment, OAuth Readiness &amp; Foreground Service</h2>
+      <p>Aqua AI targets Android 16 (targetSdk 36, minSdk 24), validates Google Play policy compliance locally, and uses an optional foreground service displaying a persistent notification.</p>
     </article>
 
     <article class="card clause">
@@ -222,7 +222,7 @@
         });
       }
 
-      const CLIENT_ID = "299712147014-tr9jkmpjf6nj5h66ekissl1arb2es3rp.apps.googleusercontent.com";
+      const CLIENT_ID = "299712147014-amb6enesbfid5ko65b0jir9affnkthrk.apps.googleusercontent.com";
       const USER_KEY = "aqua_google_user";
       const ACK_KEY = "aqua_legal_ack";
       const signedOutEl = document.getElementById("gsiSignedOutInfo");

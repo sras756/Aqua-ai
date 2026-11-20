@@ -1,6 +1,6 @@
 # Aqua AI
 
-**Aqua AI** (`com.aistudio.aquaai.vqrzmn`) is a native Android personal AI assistant, Gemini Live voice companion, Google Drive Vault backup client, Android SDK & Google Signature verifier, and non-custodial multi-chain crypto wallet built with Kotlin and Jetpack Compose.
+**Aqua AI** (`com.aistudio.aquaai.vqrzmn`) is a native Android personal AI assistant, Gemini Live voice companion, Google Drive Vault backup client, and non-custodial multi-chain crypto wallet built with Kotlin and Jetpack Compose.
 
 ---
 
@@ -9,28 +9,22 @@
 Aqua AI follows a clean **MVVM + Coordinator** architecture with adaptive Material Design 3 surfaces:
 
 - **Dedicated State Coordinators**:
-  - `AquaSystemAndDriveCoordinator` — Manages Google Drive Vault OAuth, storage quota checks, `GOOGLE_DRIVE_API_KEY` key verification/storage, and live Android SDK + APK Signature telemetry.
+  - `AquaSystemAndDriveCoordinator` — Manages Google Drive Vault OAuth, storage quota checks, and `GOOGLE_DRIVE_API_KEY` key verification/storage.
   - `AquaWalletCoordinator` — Isolates BIP-39 key derivation, Android Keystore AES-256-GCM encryption, multi-chain RPC balance polling, and transaction signing boundaries.
 - **Design System & Motion**:
   - Custom tokens in `AquaAtmosphere.kt` (`AquaBackdropBox`, `AquaGlassCard`, `AquaSectionHeader`, `AquaStatusPill`) and `AquaMotion.kt` (`AquaAnimatedEntrance`, spring-physics press feedback).
   - Adaptive navigation switching seamlessly between a **5-tab NavigationBar** (`Core`, `Routines`, `Browser`, `Wallet`, `Hub`) on phones and a **NavigationRail** on tablets/foldables.
-  - Sub-routes inside Hub: `Drive Vault` (`"drive"`), `SDK & Signature` (`"sdk"`), `Skills Engine`, `Memory & Logs`, and `Settings & Age Profile`.
+  - Sub-routes inside Hub: `Drive Vault` (`"drive"`), `Skills Engine`, `Memory & Logs`, and `Settings & Age Profile`.
 
 ---
 
 ## Key Capabilities
 
-- **Google Signature Check (`GoogleSignatureVerifier`)**:
-  - Inspects live APK signing certificates (`SHA-1` & `SHA-256` via `PackageManager.GET_SIGNING_CERTIFICATES` / legacy `GET_SIGNATURES`).
-  - Compares against registered Firebase OAuth `SHA-1` (`5B:FA:1D:7E:BF:7D:72:49:B5:AF:83:9C:1B:E6:98:04:65:45:B9:07`), verifies `default_web_client_id`, checks `GoogleApiAvailability` Play Services health, and confirms `google.com` Firebase linkage.
-  - Surfaced directly on `AuthScreen`, `SdkAndSignatureScreen`, `SettingsScreen`, and the `inspect_android_sdk_and_signature` AI tool.
 - **Google Drive Vault + Approved API Key (`DriveVaultScreen`)**:
   - Google Workspace (Gmail, Calendar, Contacts, Sheets, Forms, Chat) has been completely removed for least-privilege scope hygiene.
   - Dedicated Drive API v3 client using Credential Manager `AuthorizationClient` (`drive.appdata` + `drive.file`) and optional approved **`GOOGLE_DRIVE_API_KEY`** project attribution (via AI Studio Secrets / `BuildConfig` or per-device Keystore AES-256-GCM override).
   - Features Drive `/about` storage quota progress bar, one-tap AppData/My Drive JSON snapshot backup, restore into Firestore, and approval-gated backup deletion.
   - AI tools: `backup_history_to_drive`, `drive_list_backups`, and `drive_get_storage_quota`.
-- **Android SDK Inspector (`AndroidSdkInspector` & `SdkAndSignatureScreen`)**:
-  - Displays live `Build.VERSION.SDK_INT`, `RELEASE`, `CODENAME`, `SECURITY_PATCH`, Compile/Target/Min SDK alignment, supported ABIs, CPU cores, JVM heap, and a real `PackageManager.hasSystemFeature(...)` hardware matrix (StrongBox Keystore, Biometrics, Camera, Mic, BLE, NFC, Wi-Fi), with one-tap Markdown copy/export.
 - **Gemini AI, BYOK Setup Studio, Age 13+ & ElevenLabs Voice**:
   - Streaming chat, Deep Thinking traces, Gemini Live duplex voice, AI Personas, Prompt Studio, and AI Dependency & Freedom Lab sliders.
   - Optional personal **Google AI Studio API Key** and optional (non-compulsory) **ElevenLabs API Key & Voice ID**.
@@ -87,7 +81,7 @@ Once pushed to a **Public** GitHub repository:
 1. Open the **Actions** tab to run **Build & Publish Aqua AI Android Package** (`.github/workflows/android-release.yml`) to build debug/release APKs & AABs (`KEYSTORE_BASE64`, `STORE_PASSWORD`, `KEY_PASSWORD`).
 2. Publish the interactive legal portal (`index.html`, `privacy.html`, `terms.html`) via **Settings → Pages → Source: GitHub Actions** (`https://sras756.github.io/Aqua-ai/`). Both Privacy Policy and Terms & Conditions include live **Sign in with Google** (Google Identity Services) client-side verification and local policy acknowledgement badges.
 3. **External Web Browser OAuth Origin Setup (Fixes `Error 400: origin_mismatch`)**:
-   - In [Google Cloud Console → APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials?project=gen-lang-client-0405170912), open OAuth 2.0 Web Client `299712147014-tr9jkmpjf6nj5h66ekissl1arb2es3rp.apps.googleusercontent.com`.
+   - In [Google Cloud Console → APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials?project=gen-lang-client-0405170912), open OAuth 2.0 Web Client `299712147014-amb6enesbfid5ko65b0jir9affnkthrk.apps.googleusercontent.com`.
    - Under **Authorized JavaScript origins**, add the exact origin (scheme + host only, no trailing slash or `/Aqua-ai/` path):
      - `https://sras756.github.io`
    - Inside the Aqua AI Android app (Legal Portal modal and Aqua Browser), Google Sign-In automatically uses native Android Credential Manager (`AquaLegalPortalAuthBridge`) and works immediately.

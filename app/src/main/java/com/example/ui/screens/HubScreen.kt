@@ -24,7 +24,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Extension
@@ -34,7 +33,6 @@ import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -57,7 +55,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
-import com.example.ai.ImagePluginModel
 import com.example.data.local.AquaPersona
 import com.example.domain.AgeTier
 import com.example.domain.UserGender
@@ -239,11 +236,10 @@ fun HubScreen(
                     }
                 }
 
-                // Bento Grid Row 2: Drive Vault & SDK / Signature
+                // Bento Grid Row 2: Drive Vault & Settings & Age
                 item {
                     AquaAnimatedEntrance(index = 2) {
                         val driveBackups by viewModel.driveBackups.collectAsStateWithLifecycle()
-                        val sigReport by viewModel.signatureReport.collectAsStateWithLifecycle()
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -258,12 +254,16 @@ fun HubScreen(
                                 modifier = Modifier.weight(1f)
                             )
                             HubBentoTile(
-                                icon = Icons.Filled.VerifiedUser,
-                                title = "SDK & Signature",
-                                subtitle = if (sigReport.isTrustedForGoogleSignIn) "API ${android.os.Build.VERSION.SDK_INT} • Verified" else "Inspect SHA-1 & SDK",
-                                accent = c.accentCyan,
-                                tag = "hub_card_sdk",
-                                onClick = { onOpenTab("sdk") },
+                                icon = if (ageTier == AgeTier.UNSET || ageTier == AgeTier.UNDER_13_BLOCKED) {
+                                    Icons.Filled.Person
+                                } else {
+                                    Icons.Filled.Settings
+                                },
+                                title = "Settings & Age",
+                                subtitle = "${ageTier.shortBadge} • ${gender.label}",
+                                accent = c.amber,
+                                tag = "hub_card_settings",
+                                onClick = { onOpenTab("settings") },
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -328,48 +328,9 @@ fun HubScreen(
                     }
                 }
 
-                // Bento Grid Row 5: Image Studio Plugin & Settings, Age & Profile
-                item {
-                    val imgConfig by viewModel.imagePluginConfig.collectAsStateWithLifecycle()
-                    val imgGallery by viewModel.generatedImageGallery.collectAsStateWithLifecycle()
-                    AquaAnimatedEntrance(index = 5) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            HubBentoTile(
-                                icon = Icons.Filled.AutoAwesome,
-                                title = "Image Studio",
-                                subtitle = if (imgConfig.enabled) {
-                                    "${ImagePluginModel.fromId(imgConfig.modelId).label} • ${imgGallery.size} art"
-                                } else {
-                                    "Plugin Paused"
-                                },
-                                accent = c.accentCyan,
-                                tag = "hub_card_image_plugin",
-                                onClick = { onOpenTab("image_plugin") },
-                                modifier = Modifier.weight(1f)
-                            )
-                            HubBentoTile(
-                                icon = if (ageTier == AgeTier.UNSET || ageTier == AgeTier.UNDER_13_BLOCKED) {
-                                    Icons.Filled.Person
-                                } else {
-                                    Icons.Filled.Settings
-                                },
-                                title = "Settings & Age",
-                                subtitle = "${ageTier.shortBadge} • ${gender.label}",
-                                accent = c.amber,
-                                tag = "hub_card_settings",
-                                onClick = { onOpenTab("settings") },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                }
-
                 // Live Session Device Telemetry Sparkline
                 item {
-                    AquaAnimatedEntrance(index = 6) {
+                    AquaAnimatedEntrance(index = 5) {
                         TelemetrySparklineCard(
                             telemetry = telemetry,
                             stats = stats,

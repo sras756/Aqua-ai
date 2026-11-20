@@ -30,8 +30,7 @@ internal object AquaToolCatalog {
     fun selectActiveSpecs(
         settings: UserSettings?,
         promptHint: String = "",
-        unlockAllTools: Boolean = false,
-        imagePluginEnabled: Boolean = true
+        unlockAllTools: Boolean = false
     ): List<AquaToolSpec> {
         val includeAll = unlockAllTools || settings == null || promptHint.isBlank()
         val lower = promptHint.lowercase()
@@ -172,38 +171,15 @@ internal object AquaToolCatalog {
             readTools + writeTools
         } else emptyList()
 
-        val driveAndSdkNeeded = includeAll || listOf(
-            "drive", "backup", "quota", "storage", "restore", "export",
-            "sdk", "api level", "signature", "sha-1", "sha1", "sha-256", "sha256",
-            "play services", "android", "abi", "device"
+        val driveNeeded = includeAll || listOf(
+            "drive", "backup", "quota", "storage", "restore", "export"
         ).any { lower.contains(it) }
 
-        val driveAndSdkTools = if (driveAndSdkNeeded) {
+        val driveTools = if (driveNeeded) {
             listOf(
                 AquaToolSpec("backup_history_to_drive", "Backs up conversation history and memories to Google Drive AppData."),
                 AquaToolSpec("drive_list_backups", "Lists saved Aqua AI history backup files in Google Drive AppData and My Drive."),
-                AquaToolSpec("drive_get_storage_quota", "Fetches authenticated Google Drive storage quota, account name, and API key status."),
-                AquaToolSpec("inspect_android_sdk_and_signature", "Returns live Android SDK level, ABI targets, hardware features, and Google APK signing SHA-1/SHA-256 verification status.")
-            )
-        } else emptyList()
-
-        val imagePluginNeeded = includeAll || listOf(
-            "image", "draw", "picture", "illustration", "poster", "logo", "icon",
-            "render", "artwork", "art", "photo", "wallpaper", "visual", "sketch",
-            "avatar", "concept art", "diagram", "paint", "generate_image"
-        ).any { lower.contains(it) }
-
-        val imagePluginTools = if (imagePluginEnabled && imagePluginNeeded) {
-            listOf(
-                AquaToolSpec(
-                    "generate_image",
-                    "Generates a real high-resolution image via Aqua's Image Studio Plugin (Firebase AI Logic) and displays it in Image Studio.",
-                    listOf(
-                        s("prompt", "Detailed visual description of the image to synthesize."),
-                        s("aspectRatio", "Optional aspect ratio: 1:1, 16:9, 9:16, 4:3, or 3:4."),
-                        s("model", "Optional model: gemini-nano-banana-2.1, gemini-3-pro-image, or gemini-3.1-flash-lite-image.")
-                    )
-                )
+                AquaToolSpec("drive_get_storage_quota", "Fetches authenticated Google Drive storage quota, account name, and API key status.")
             )
         } else emptyList()
 
@@ -211,17 +187,15 @@ internal object AquaToolCatalog {
             coreWebTools +
             extendedWebAndCommsTools +
             walletTools +
-            driveAndSdkTools +
-            imagePluginTools
+            driveTools
     }
 
     fun buildFirebaseTool(
         settings: UserSettings?,
         promptHint: String = "",
-        unlockAllTools: Boolean = false,
-        imagePluginEnabled: Boolean = true
+        unlockAllTools: Boolean = false
     ): Tool {
-        val specs = selectActiveSpecs(settings, promptHint, unlockAllTools, imagePluginEnabled)
+        val specs = selectActiveSpecs(settings, promptHint, unlockAllTools)
         return Tool.functionDeclarations(
             specs.map { spec ->
                 FunctionDeclaration(
@@ -243,10 +217,9 @@ internal object AquaToolCatalog {
     fun buildRestFunctionDeclarationsJson(
         settings: UserSettings?,
         promptHint: String = "",
-        unlockAllTools: Boolean = false,
-        imagePluginEnabled: Boolean = true
+        unlockAllTools: Boolean = false
     ): JSONArray {
-        val specs = selectActiveSpecs(settings, promptHint, unlockAllTools, imagePluginEnabled)
+        val specs = selectActiveSpecs(settings, promptHint, unlockAllTools)
         val arr = JSONArray()
         specs.forEach { spec ->
             val obj = JSONObject().apply {

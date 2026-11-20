@@ -1,10 +1,6 @@
 package com.example.data.local
 
 import android.content.Context
-import com.example.ai.ImagePluginConfig
-import com.example.ai.ImagePluginModel
-import com.example.ai.ImagePluginAspectRatio
-import com.example.ai.ImagePluginSize
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -149,9 +145,6 @@ class AquaLocalPreferences(
     private val _hasCompletedAiSetup = MutableStateFlow(loadHasCompletedAiSetup())
     val hasCompletedAiSetup: StateFlow<Boolean> = _hasCompletedAiSetup.asStateFlow()
 
-    private val _imagePluginConfig = MutableStateFlow(loadImagePluginConfig())
-    val imagePluginConfig: StateFlow<ImagePluginConfig> = _imagePluginConfig.asStateFlow()
-
     private fun key(suffix: String): String = "${userId.ifBlank { "default" }}_$suffix"
 
     private fun loadPersonaId(): String =
@@ -221,20 +214,6 @@ class AquaLocalPreferences(
     private fun loadHasCompletedAiSetup(): Boolean =
         prefs.getBoolean(key(KEY_AI_SETUP_DONE), false)
 
-    private fun loadImagePluginConfig(): ImagePluginConfig {
-        val raw = prefs.getString(key(KEY_IMAGE_PLUGIN_CONFIG), "").orEmpty()
-        if (raw.isBlank()) return ImagePluginConfig()
-        return runCatching {
-            val obj = org.json.JSONObject(raw)
-            ImagePluginConfig(
-                enabled = obj.optBoolean("enabled", true),
-                modelId = ImagePluginModel.fromId(obj.optString("modelId", ImagePluginModel.NANO_BANANA.id)).id,
-                aspectRatioId = ImagePluginAspectRatio.fromId(obj.optString("aspectRatioId", ImagePluginAspectRatio.SQUARE_1_1.id)).id,
-                imageSizeId = ImagePluginSize.fromId(obj.optString("imageSizeId", ImagePluginSize.SIZE_1K.id)).id
-            )
-        }.getOrDefault(ImagePluginConfig())
-    }
-
     fun setPersonaId(id: String) {
         val resolved = AquaPersona.fromId(id).id
         prefs.edit().putString(key(KEY_PERSONA), resolved).apply()
@@ -292,18 +271,6 @@ class AquaLocalPreferences(
         _hasCompletedAiSetup.value = completed
     }
 
-    fun setImagePluginConfig(config: ImagePluginConfig) {
-        val normalized = config.normalized()
-        val obj = org.json.JSONObject().apply {
-            put("enabled", normalized.enabled)
-            put("modelId", normalized.modelId)
-            put("aspectRatioId", normalized.aspectRatioId)
-            put("imageSizeId", normalized.imageSizeId)
-        }
-        prefs.edit().putString(key(KEY_IMAGE_PLUGIN_CONFIG), obj.toString()).apply()
-        _imagePluginConfig.value = normalized
-    }
-
     fun togglePinnedRoutine(routineId: String): Boolean {
         if (routineId.isBlank()) return false
         val next = _pinnedRoutineIds.value.toMutableSet()
@@ -359,6 +326,5 @@ class AquaLocalPreferences(
         const val KEY_AI_FREEDOM = "ai_freedom_config_json"
         const val KEY_ELEVENLABS_CONFIG = "elevenlabs_config_json"
         const val KEY_AI_SETUP_DONE = "ai_setup_completed"
-        const val KEY_IMAGE_PLUGIN_CONFIG = "image_plugin_config_json"
     }
 }

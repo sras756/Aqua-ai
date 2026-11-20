@@ -676,7 +676,7 @@ class GoogleDriveHistoryRepository(
                     CommonStatusCodes.SIGN_IN_REQUIRED ->
                         "Sign in to a Google account on this device first to connect Drive."
                     CommonStatusCodes.DEVELOPER_ERROR ->
-                        "Google OAuth configuration check needed: verify your APK SHA-1 in SDK & Signature and Google Cloud Console."
+                        "Google OAuth configuration check needed: verify your APK SHA-1 and OAuth client in Google Cloud Console."
                     CommonStatusCodes.NETWORK_ERROR ->
                         "Network unavailable while contacting Google Drive. Check internet and retry."
                     CommonStatusCodes.INTERNAL_ERROR, CommonStatusCodes.TIMEOUT ->

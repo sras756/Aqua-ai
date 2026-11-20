@@ -10,10 +10,6 @@ import com.example.data.repository.DriveAboutInfo
 import com.example.data.repository.DriveAuthOutcome
 import com.example.data.repository.DriveBackupMetadata
 import com.example.data.repository.GoogleDriveHistoryRepository
-import com.example.device.AndroidSdkInspector
-import com.example.device.AndroidSdkReport
-import com.example.security.GoogleSignatureVerifier
-import com.example.security.SignatureCheckReport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,10 +17,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Clean modular coordinator handling:
- * 1. Google Drive Vault OAuth authorization, approved Drive API key management, quota telemetry, and history backups.
- * 2. Live Google Signature Check (APK SHA-1 / SHA-256, OAuth Web Client ID, Play Services, Auth linkage).
- * 3. Android SDK Inspector (API levels, security patch, ABIs, hardware features, JVM heap).
+ * Clean modular coordinator handling Google Drive Vault OAuth authorization,
+ * approved Drive API key management, quota telemetry, and history backups.
  */
 class AquaSystemAndDriveCoordinator(
     private val appContext: Context,
@@ -67,12 +61,6 @@ class AquaSystemAndDriveCoordinator(
 
     private var pendingDriveAction: (suspend (String) -> Unit)? = null
 
-    private val _sdkReport = MutableStateFlow(AndroidSdkInspector.inspect(appContext))
-    val sdkReport: StateFlow<AndroidSdkReport> = _sdkReport.asStateFlow()
-
-    private val _signatureReport = MutableStateFlow(_sdkReport.value.signatureReport)
-    val signatureReport: StateFlow<SignatureCheckReport> = _signatureReport.asStateFlow()
-
     fun bootstrap() {
         refreshSystemDiagnostics()
         probeSilentDriveSession()
@@ -100,18 +88,10 @@ class AquaSystemAndDriveCoordinator(
     }
 
     fun refreshSystemDiagnostics() {
-        val report = AndroidSdkInspector.inspect(appContext)
-        _sdkReport.value = report
-        _signatureReport.value = report.signatureReport
         _preferredDriveEmail.value = driveHistoryRepo.getCurrentSignedInGoogleEmail()
         _driveApiKeyStatus.value = driveHistoryRepo.getApiKeyStatusSummary()
         _driveApiKeyMasked.value = secureConfigStore.getMaskedGoogleDriveApiKey()
         _hasCustomDriveApiKey.value = secureConfigStore.hasGoogleDriveApiKey()
-    }
-
-    fun buildSdkAndSignatureMarkdown(): String {
-        refreshSystemDiagnostics()
-        return AndroidSdkInspector.formatMarkdownReport(_sdkReport.value)
     }
 
     fun saveGoogleDriveApiKey(rawKey: String) {

@@ -44,7 +44,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Icon
@@ -465,7 +464,6 @@ fun HomeQuickModulesStrip(onOpenTab: (String) -> Unit) {
         ) {
             item { QuickShortcutTile(Icons.Filled.AutoMode, "Routines", c.accentCyan, "shortcut_routines") { onOpenTab("routines") } }
             item { QuickShortcutTile(Icons.Filled.CloudSync, "Drive Vault", c.success, "shortcut_drive") { onOpenTab("drive") } }
-            item { QuickShortcutTile(Icons.Filled.VerifiedUser, "SDK & Sig", c.accentTeal, "shortcut_sdk") { onOpenTab("sdk") } }
             item { QuickShortcutTile(Icons.Filled.Extension, "Skills", c.accentTeal, "shortcut_skills") { onOpenTab("skills") } }
             item { QuickShortcutTile(Icons.Filled.Language, "Browser", c.accentAzure, "shortcut_browser") { onOpenTab("browser") } }
             item { QuickShortcutTile(Icons.Filled.AccountBalanceWallet, "Wallet", c.amber, "shortcut_wallet") { onOpenTab("wallet") } }

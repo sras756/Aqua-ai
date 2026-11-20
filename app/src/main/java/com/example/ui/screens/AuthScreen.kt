@@ -57,13 +57,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.credentials.CredentialManager
 import com.example.R
-import com.example.security.GoogleSignatureVerifier
 import com.example.ui.auth.attemptAutoSignIn
 import com.example.ui.auth.onGoogleSignInClicked
 import com.example.ui.components.AquaAnimatedEntrance
 import com.example.ui.components.AquaBackdropBox
 import com.example.ui.components.AquaGlassCard
-import com.example.ui.components.AquaStatusPill
 import com.example.ui.components.AquaStatusPulseDot
 import com.example.ui.components.aquaPressScale
 import com.example.ui.theme.AquaTheme
@@ -76,7 +74,6 @@ fun AuthScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val credentialManager = remember { CredentialManager.create(context) }
-    val signatureReport = remember { GoogleSignatureVerifier.verifyAppSignature(context) }
 
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -182,7 +179,7 @@ fun AuthScreen(
                                 color = Color(0xFFEAF6FF)
                             )
                             Text(
-                                text = "Voice Core, Routines, Drive Vault, Android SDK & Multi-Chain Wallet",
+                                text = "Voice Core, Routines, Drive Vault & Multi-Chain Wallet",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Color(0xFFB4D0E8)
                             )
@@ -208,25 +205,9 @@ fun AuthScreen(
                             )
                             SecurityFeatureRow(
                                 icon = Icons.Filled.Lock,
-                                title = "Google Signature & Action Gate",
-                                subtitle = "Verified APK signing (${signatureReport.overallStatusLabel}); financial & external writes require modal consent."
+                                title = "Self-Custodial & Action Gate",
+                                subtitle = "Android Keystore AES-256-GCM vault; financial & external writes always require modal consent."
                             )
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "SDK API ${android.os.Build.VERSION.SDK_INT} • Play Services: ${signatureReport.playServicesStatusLabel}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = c.textMuted,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                AquaStatusPill(
-                                    label = if (signatureReport.isTrustedForGoogleSignIn) "SIGNATURE OK" else "CHECK SIG",
-                                    accent = if (signatureReport.isTrustedForGoogleSignIn) c.success else c.amber
-                                )
-                            }
                         }
                     }
                 }

@@ -101,7 +101,6 @@ fun DriveVaultScreen(viewModel: AquaMainViewModel) {
     val hasCustomDriveApiKey by viewModel.hasCustomDriveApiKey.collectAsStateWithLifecycle()
     val driveAuthPendingIntent by viewModel.driveAuthPendingIntent.collectAsStateWithLifecycle()
     val preferredDriveEmail by viewModel.preferredDriveEmail.collectAsStateWithLifecycle()
-    val signatureReport by viewModel.signatureReport.collectAsStateWithLifecycle()
 
     var apiKeyInput by remember { mutableStateOf("") }
 
@@ -246,9 +245,9 @@ fun DriveVaultScreen(viewModel: AquaMainViewModel) {
                                                 )
                                             }
                                             Text(
-                                                text = "• Signature Check: ${signatureReport.overallStatusLabel}",
+                                                text = "• Auth Mode: Google Credential Manager OAuth 2.0",
                                                 style = MaterialTheme.typography.labelSmall,
-                                                color = if (signatureReport.isTrustedForGoogleSignIn) c.success else c.amber
+                                                color = c.accentTeal
                                             )
                                             Text(
                                                 text = "• Drive Access: Private AppData & exported Aqua JSON files only",

@@ -30,7 +30,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -68,9 +67,7 @@ private data class CommandModuleEntry(
 private val MODULE_ENTRIES = listOf(
     CommandModuleEntry("home", "Aqua Core", "AI orb, Gemini Live voice & conversation", Icons.Filled.GraphicEq),
     CommandModuleEntry("routines", "Routines & Pulse", "Saved multi-step workflows & telemetry", Icons.Filled.AutoMode),
-    CommandModuleEntry("image_plugin", "Image Studio Plugin", "Generate & transform images via Firebase AI Logic", Icons.Filled.AutoAwesome),
     CommandModuleEntry("drive", "Google Drive Vault", "AppData sync, JSON exports, quota & approved API key", Icons.Filled.CloudSync),
-    CommandModuleEntry("sdk", "Android SDK & Signature", "Live APK SHA-1/SHA-256 verification & SDK capabilities", Icons.Filled.VerifiedUser),
     CommandModuleEntry("skills", "Skills Engine", "Import & manage verified declarative skills", Icons.Filled.Extension),
     CommandModuleEntry("browser", "Aqua Browser", "Live web viewer & AI page summarizer", Icons.Filled.Language),
     CommandModuleEntry("wallet", "Crypto Wallet", "Multi-chain vaults, swaps, telemetry & AI tools", Icons.Filled.AccountBalanceWallet),

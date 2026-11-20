@@ -10,7 +10,6 @@ import com.example.data.model.WalletConfig
 import com.example.data.repository.AquaFirestoreRepository
 import com.example.data.repository.GoogleDriveHistoryRepository
 import com.example.device.AndroidDeviceController
-import com.example.device.AndroidSdkInspector
 import com.example.network.AquaWebClient
 import com.example.wallet.FlashWalletConnector
 import com.example.wallet.ai.AquaAiWalletBridge
@@ -38,10 +37,7 @@ class ToolCallingEngine(
     private val onWalletMutated: () -> Unit = {},
     private val freedomConfigProvider: (() -> AiFreedomConfig)? = null,
     private val aiStatusProvider: (() -> String)? = null,
-    private val onSpeakWithElevenLabs: ((String) -> String)? = null,
-    private val sdkReportProvider: (() -> String)? = null,
-    private val imagePluginEnabledProvider: (() -> Boolean)? = null,
-    private val onGenerateImageTool: (suspend (prompt: String, aspectRatio: String?, model: String?) -> Result<String>)? = null
+    private val onSpeakWithElevenLabs: ((String) -> String)? = null
 ) {
 
     fun buildToolDeclarations(
@@ -51,8 +47,7 @@ class ToolCallingEngine(
     ): Tool = AquaToolCatalog.buildFirebaseTool(
         settings = settings,
         promptHint = promptHint,
-        unlockAllTools = unlockAllTools,
-        imagePluginEnabled = imagePluginEnabledProvider?.invoke() ?: true
+        unlockAllTools = unlockAllTools
     )
 
     fun buildRestToolDeclarations(
@@ -62,8 +57,7 @@ class ToolCallingEngine(
     ): JSONArray = AquaToolCatalog.buildRestFunctionDeclarationsJson(
         settings = settings,
         promptHint = promptHint,
-        unlockAllTools = unlockAllTools,
-        imagePluginEnabled = imagePluginEnabledProvider?.invoke() ?: true
+        unlockAllTools = unlockAllTools
     )
     // Unified declarations provided via AquaToolCatalog above.
 
@@ -1232,13 +1226,6 @@ class ToolCallingEngine(
                     jsonResult(true, msg)
                 }
 
-                "inspect_android_sdk_and_signature" -> {
-                    val summary = sdkReportProvider?.invoke()
-                        ?: "Android SDK API ${android.os.Build.VERSION.SDK_INT} (Target ${AndroidSdkInspector.BUILD_TARGET_SDK}, Min ${AndroidSdkInspector.BUILD_MIN_SDK}, Compile ${AndroidSdkInspector.COMPILE_SDK_LABEL}). Open Hub -> SDK & Signature for full SHA-1/SHA-256 report."
-                    onTrace(AgentStepTrace("SDK & Signature", name, "completed", "Inspected SDK API ${android.os.Build.VERSION.SDK_INT}"))
-                    jsonResult(true, summary)
-                }
-
                 "get_device_storage_and_memory" -> {
                     val s = deviceController.getStorageAndMemoryStats()
                     val msg = "Storage: ${s.storageFreeMb} MB free of ${s.storageTotalMb} MB | " +
@@ -1312,34 +1299,6 @@ class ToolCallingEngine(
                         ?: "Voice synthesis callback is unavailable in headless mode."
                     onTrace(AgentStepTrace("Voice Synthesis", name, "completed", outcome.take(100)))
                     jsonResult(true, outcome)
-                }
-
-                "generate_image" -> {
-                    val enabled = imagePluginEnabledProvider?.invoke() ?: true
-                    if (!enabled) {
-                        onTrace(AgentStepTrace("Image Plugin", name, "paused", "Image Studio Plugin is paused"))
-                        return jsonResult(false, "Image Studio Plugin is currently paused. Ask the user to enable it in Hub -> Image Studio.")
-                    }
-                    val prompt = argStr("prompt")
-                    if (prompt.isBlank()) {
-                        return jsonResult(false, "Provide a non-empty visual prompt for image generation.")
-                    }
-                    val ratio = argStr("aspectRatio").ifBlank { null }
-                    val model = argStr("model").ifBlank { null }
-                    val handler = onGenerateImageTool
-                        ?: return jsonResult(false, "Image generation callback is unavailable in headless mode.")
-                    val result = handler(prompt, ratio, model)
-                    result.fold(
-                        onSuccess = { summary ->
-                            onTrace(AgentStepTrace("Image Plugin", name, "completed", summary.take(120)))
-                            jsonResult(true, summary)
-                        },
-                        onFailure = { err ->
-                            val msg = err.localizedMessage ?: "Image generation failed."
-                            onTrace(AgentStepTrace("Image Plugin", name, "failed", msg.take(120)))
-                            jsonResult(false, msg)
-                        }
-                    )
                 }
 
                 else -> {

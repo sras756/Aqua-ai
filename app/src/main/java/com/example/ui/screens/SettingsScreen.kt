@@ -70,7 +70,6 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
     val elevenSub by viewModel.elevenLabsSubscription.collectAsStateWithLifecycle()
     val elevenStatus by viewModel.elevenLabsStatus.collectAsStateWithLifecycle()
     val elevenBusy by viewModel.elevenLabsBusy.collectAsStateWithLifecycle()
-    val signatureReport by viewModel.signatureReport.collectAsStateWithLifecycle()
 
     var activeLegalDialog by remember { mutableStateOf<String?>(null) }
 
@@ -228,8 +227,6 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                     PermissionsAndDiagnosticsCard(
                         context = context,
                         telemetry = telemetry,
-                        signatureReport = signatureReport,
-                        onOpenSdkAndSignature = { viewModel.openTab("sdk") },
                         onOpenDriveVault = { viewModel.openTab("drive") },
                         onRequestMic = { micAndNotifLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) },
                         onOpenNotificationSettings = { viewModel.deviceController.openAndroidSettings("notifications") },
@@ -240,8 +237,8 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                 }
 
                 item {
-                    val complianceReport = remember(settings, signatureReport) {
-                        PlayComplianceInspector.evaluate(context, settings, signatureReport)
+                    val complianceReport = remember(settings) {
+                        PlayComplianceInspector.evaluate(context, settings)
                     }
                     LegalTrustLinksCard(
                         complianceReport = complianceReport,
@@ -256,7 +253,6 @@ fun SettingsScreen(viewModel: AquaMainViewModel) {
                 context = context,
                 activeDoc = activeLegalDialog ?: "privacy",
                 settings = settings,
-                signatureReport = signatureReport,
                 onChangeDoc = { activeLegalDialog = it },
                 onOpenInAppBrowser = { url ->
                     activeLegalDialog = null

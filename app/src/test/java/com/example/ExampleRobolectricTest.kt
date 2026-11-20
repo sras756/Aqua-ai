@@ -9,11 +9,6 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.ai.AquaToolCatalog
 import com.example.ai.ContextManager
 import com.example.ai.ConversationMarkdownExporter
-import com.example.ai.ImagePluginAspectRatio
-import com.example.ai.ImagePluginConfig
-import com.example.ai.ImagePluginEngine
-import com.example.ai.ImagePluginModel
-import com.example.ai.ImagePluginSize
 import com.example.ai.MessageSegment
 import com.example.browser.AquaBrowserController
 import com.example.browser.AquaLegalPortalAuthBridge
@@ -34,7 +29,6 @@ import com.example.data.local.SecureConfigStore
 import com.example.data.model.WalletConfig
 import com.example.data.repository.GoogleDriveHistoryRepository
 import com.example.device.AndroidDeviceController
-import com.example.device.AndroidSdkInspector
 import com.example.device.DeviceTelemetry
 import com.example.domain.AgeTier
 import com.example.domain.UserGender
@@ -227,22 +221,6 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `android sdk inspector reports real sdk versions hardware features and markdown`() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val report = AndroidSdkInspector.inspect(context)
-        assertEquals(36, report.sdkInt)
-        assertEquals(24, report.minSdkVersion)
-        assertTrue(report.supportedAbis.isNotEmpty())
-        assertTrue(report.cpuCores >= 1)
-        assertTrue(report.features.any { it.featureKey == PackageManager.FEATURE_WIFI })
-
-        val md = AndroidSdkInspector.formatMarkdownReport(report)
-        assertTrue(md.contains("Compile Android 16 (API 36.1)"))
-        assertTrue(md.contains("## Google Signature Check"))
-        assertTrue(md.contains("## Device Feature Matrix"))
-    }
-
-    @Test
     fun `google drive repository parses about quota appends api key and resolves keystore override`() {
         val aboutJson = """
             {
@@ -313,7 +291,7 @@ class ExampleRobolectricTest {
     fun `aqua routine and browser link models validate defaults cleanly`() {
         val routine = AquaRoutine(
             title = "Morning Check",
-            prompt = "Check battery and SDK signature status",
+            prompt = "Check battery and device diagnostics status",
             category = "productivity",
             speakResult = true
         )
@@ -695,7 +673,6 @@ class ExampleRobolectricTest {
         assertTrue(declNames.contains("backup_history_to_drive"))
         assertTrue(declNames.contains("drive_list_backups"))
         assertTrue(declNames.contains("drive_get_storage_quota"))
-        assertTrue(declNames.contains("inspect_android_sdk_and_signature"))
         assertFalse(declNames.any { it.startsWith("workspace_") })
 
         val prompt = ContextManager.buildSystemInstruction(
@@ -775,61 +752,6 @@ class ExampleRobolectricTest {
         assertTrue(teenPrompt.contains("TEEN GUARDRAILS ACTIVE"))
         assertTrue(teenPrompt.contains("Female"))
         assertTrue(teenPrompt.contains("she/her"))
-    }
-
-    @Test
-    fun `image plugin normalizes deprecated models persists config and toggles generate_image tool`() {
-        // Deprecated or legacy models must normalize to Nano Banana 2.1
-        assertEquals(ImagePluginModel.NANO_BANANA, ImagePluginModel.fromId("gemini-3.1-flash-image"))
-        assertEquals(ImagePluginModel.NANO_BANANA, ImagePluginModel.fromId("gemini-2.5-flash-image"))
-        assertEquals(ImagePluginModel.PRO_IMAGE, ImagePluginModel.fromId("gemini-3-pro-image"))
-        assertEquals(ImagePluginModel.FLASH_LITE_IMAGE, ImagePluginModel.fromId("gemini-3.1-flash-lite-image"))
-
-        val normalized = ImagePluginConfig(
-            enabled = true,
-            modelId = "gemini-3.1-flash-image",
-            aspectRatioId = "16:9",
-            imageSizeId = "2K"
-        ).normalized()
-        assertEquals(ImagePluginModel.NANO_BANANA.id, normalized.modelId)
-        assertEquals(ImagePluginAspectRatio.LANDSCAPE_16_9.id, normalized.aspectRatioId)
-        assertEquals(ImagePluginSize.SIZE_2K.id, normalized.imageSizeId)
-
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val prefs = AquaLocalPreferences(context, "image_plugin_user")
-        assertTrue(prefs.imagePluginConfig.value.enabled)
-        prefs.setImagePluginConfig(
-            ImagePluginConfig(
-                enabled = false,
-                modelId = ImagePluginModel.PRO_IMAGE.id,
-                aspectRatioId = ImagePluginAspectRatio.PORTRAIT_9_16.id,
-                imageSizeId = ImagePluginSize.SIZE_2K.id
-            )
-        )
-        val reloaded = AquaLocalPreferences(context, "image_plugin_user").imagePluginConfig.value
-        assertFalse(reloaded.enabled)
-        assertEquals(ImagePluginModel.PRO_IMAGE.id, reloaded.modelId)
-        assertEquals(ImagePluginAspectRatio.PORTRAIT_9_16.id, reloaded.aspectRatioId)
-        assertEquals(ImagePluginSize.SIZE_2K.id, reloaded.imageSizeId)
-
-        val enabledTools = AquaToolCatalog.selectActiveSpecs(
-            settings = UserSettings(),
-            promptHint = "draw an oceanic cyberpunk skyline",
-            unlockAllTools = false,
-            imagePluginEnabled = true
-        ).map { it.name }.toSet()
-        assertTrue(enabledTools.contains("generate_image"))
-
-        val disabledTools = AquaToolCatalog.selectActiveSpecs(
-            settings = UserSettings(),
-            promptHint = "draw an oceanic cyberpunk skyline",
-            unlockAllTools = true,
-            imagePluginEnabled = false
-        ).map { it.name }.toSet()
-        assertFalse(disabledTools.contains("generate_image"))
-
-        // Verify 60s realistic timeout constant
-        assertTrue(ImagePluginEngine.GENERATION_TIMEOUT_MS >= 60_000L)
     }
 
     @Test

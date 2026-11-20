@@ -86,7 +86,6 @@ import com.example.security.ComplianceState
 import com.example.security.PlayComplianceHistoryStore
 import com.example.security.PlayComplianceInspector
 import com.example.security.PlayComplianceReport
-import com.example.security.SignatureCheckReport
 import com.example.ui.auth.onGoogleSignInClicked
 import com.example.ui.components.AquaGlassCard
 import com.example.ui.components.AquaStatusPill
@@ -162,8 +161,6 @@ fun AppearanceAndBrightnessCard(
 fun PermissionsAndDiagnosticsCard(
     context: Context,
     telemetry: DeviceTelemetry,
-    signatureReport: SignatureCheckReport,
-    onOpenSdkAndSignature: () -> Unit,
     onOpenDriveVault: () -> Unit,
     onRequestMic: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
@@ -180,52 +177,26 @@ fun PermissionsAndDiagnosticsCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Security, contentDescription = null, tint = c.success)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Permissions, SDK & Signature", style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
-                }
-                AquaStatusPill(
-                    label = if (signatureReport.isTrustedForGoogleSignIn) "SIG VERIFIED" else "CHECK SIG",
-                    accent = if (signatureReport.isTrustedForGoogleSignIn) c.success else c.amber
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Security, contentDescription = null, tint = c.success)
+                Spacer(Modifier.width(8.dp))
+                Text("Permissions & Diagnostics", style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
             }
             Text(
-                text = "${signatureReport.overallStatusLabel} • Android API ${android.os.Build.VERSION.SDK_INT} (Target 36 / Min 24)",
+                text = "Runtime device permissions, Google Drive Vault & live Markdown diagnostics.",
                 style = MaterialTheme.typography.bodySmall,
                 color = c.textMuted
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            OutlinedButton(
+                onClick = onOpenDriveVault,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag("settings_open_drive_vault_button")
             ) {
-                OutlinedButton(
-                    onClick = onOpenSdkAndSignature,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                        .testTag("settings_open_sdk_signature_button")
-                ) {
-                    Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = c.accentCyan, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("SDK & Signature", color = c.accentCyan)
-                }
-                OutlinedButton(
-                    onClick = onOpenDriveVault,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                        .testTag("settings_open_drive_vault_button")
-                ) {
-                    Icon(Icons.Filled.CloudSync, contentDescription = null, tint = c.accentTeal, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Drive Vault", color = c.accentTeal)
-                }
+                Icon(Icons.Filled.CloudSync, contentDescription = null, tint = c.accentTeal, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Open Google Drive Vault", color = c.accentTeal)
             }
             PermissionRow(
                 label = "Microphone (Voice & Wake Word)",
@@ -349,7 +320,6 @@ fun LegalReaderFullScreenModal(
     context: Context,
     activeDoc: String,
     settings: UserSettings,
-    signatureReport: SignatureCheckReport,
     onChangeDoc: (String) -> Unit,
     onOpenInAppBrowser: (String) -> Unit,
     onClose: () -> Unit
@@ -358,8 +328,8 @@ fun LegalReaderFullScreenModal(
 
     val c = AquaTheme.colors
     var refreshTick by remember { mutableIntStateOf(0) }
-    val complianceReport = remember(settings, signatureReport, refreshTick, activeDoc) {
-        PlayComplianceInspector.evaluate(context, settings, signatureReport)
+    val complianceReport = remember(settings, refreshTick, activeDoc) {
+        PlayComplianceInspector.evaluate(context, settings)
     }
     var complianceHistory by remember {
         mutableStateOf(PlayComplianceHistoryStore.loadHistory(context))
@@ -397,11 +367,9 @@ fun LegalReaderFullScreenModal(
         when (activeDoc) {
             "index" -> listOf(
                 "Aqua AI — Package: com.aistudio.aquaai.vqrzmn" to
-                    "Trust & Legal Portal (Effective Nov 18, 2026) • Clean Modular Android AI Assistant with Coordinator Architecture, Google Signature Check, Google Drive Vault + Approved API Key, Android SDK Inspector, Age 13+ Safety, Optional BYOK AI Studio & ElevenLabs Voice, and Self-Custodial Multi-Chain Wallet.",
+                    "Trust & Legal Portal (Effective Nov 18, 2026) • Clean Modular Android AI Assistant with Coordinator Architecture, Google Drive Vault + Approved API Key, Age 13+ Safety, Optional BYOK AI Studio & ElevenLabs Voice, and Self-Custodial Multi-Chain Wallet.",
                 "New & Redesigned Features" to
                     "• Clean Modular Coordinator Architecture & Professional UI: State separated into AquaSystemAndDriveCoordinator & AquaWalletCoordinator, refined AquaGlassCard elevations, AquaSectionHeader & AquaStatusPill tokens.\n" +
-                    "• Google Signature Check: Live APK SHA-1/SHA-256 certificate inspection against Firebase OAuth fingerprints, default_web_client_id validation, and Google Play Services verification.\n" +
-                    "• Android SDK Inspector (API 36.1): Real Build.VERSION, Compile/Target/Min SDK alignment, ABI matrix, PackageManager hardware features, and JVM heap telemetry.\n" +
                     "• Google Drive Vault + Approved API Key: Focused Drive-only integration (all Gmail/Calendar/Contacts/Sheets/Forms/Chat scopes removed) pairing Credential Manager OAuth with GOOGLE_DRIVE_API_KEY attribution.\n" +
                     "• Website Sign in with Google: Official Google Identity Services authentication right inside the Privacy Policy, Terms & Conditions, and Overview web portal.",
                 "Core Platform Capabilities" to
@@ -409,7 +377,7 @@ fun LegalReaderFullScreenModal(
                     "• Age 13+ System & Optional Gender: COPPA under-13 lock, Teen 13–17 Balanced guardrails & optional pronoun personalization.\n" +
                     "• Self-Custodial Multi-Chain Wallet: BIP-39 EVM/Solana/Bitcoin vault in Android Keystore AES-256-GCM, ENS, ERC-20 revokes & CoinGecko charts.",
                 "Data Safety Summary" to
-                    "• Google Account Profile: Used strictly for Firebase Authentication, Signature Check verification & per-user Firestore isolation (or local Google Identity Services acknowledgment on the web portal).\n" +
+                    "• Google Account Profile: Used strictly for Firebase Authentication & per-user Firestore isolation (or local Google Identity Services acknowledgment on the web portal).\n" +
                     "• Google Drive Vault: Accessed solely with drive.appdata & drive.file scopes plus optional GOOGLE_DRIVE_API_KEY — never Workspace mail/contacts/calendar.\n" +
                     "• API Keys & Wallet Vault: AI Studio, ElevenLabs & Drive API key overrides plus wallet keys/PINs stay encrypted strictly in Android Keystore.",
                 "Permissions Audit (Least-Privilege Google Drive Scopes)" to
@@ -428,8 +396,8 @@ fun LegalReaderFullScreenModal(
                     "• Aqua AI uses Gemini models (managed Firebase AI or your optional personal Google AI Studio key), custom directives, live web search, and connected tools.\n" +
                     "• Adults (18+) may select Advisory, Balanced, or Unrestricted Tools modes inside the AI Freedom Lab; users 13–17 are automatically capped at Balanced autonomy.\n" +
                     "• High-impact actions (outbound HTTP writes, wallet contact edits, Drive deletes, or blockchain signing) always require explicit modal confirmation.",
-                "3. Android SDK, Google Signature Integrity & Foreground Service" to
-                    "Aqua AI targets Android 16 (API 36, minSdk 24), exposes an in-app Android SDK & Google Signature Check verifier for build transparency, and offers an optional foreground service displaying a persistent Android notification with pause/stop controls.",
+                "3. Platform Alignment & Foreground Service" to
+                    "Aqua AI targets Android 16 (API 36, minSdk 24) and offers an optional foreground service displaying a persistent Android notification with pause/stop controls.",
                 "4. Self-Custodial Wallet & Financial Disclaimers" to
                     "• Non-Custodial Software: Aqua Wallet is purely self-custodial software. You alone control recovery phrases, private keys, PINs, and device security.\n" +
                     "• Irreversible Transactions: Digital asset transfers and smart-contract approvals/revocations are irreversible once broadcast.\n" +
@@ -447,10 +415,10 @@ fun LegalReaderFullScreenModal(
                 "Effective Date: November 18, 2026" to
                     "App Package: com.aistudio.aquaai.vqrzmn | Developer Contact: srasmarkhor7289@gmail.com",
                 "1. Information We Access & Process" to
-                    "• Account Information & Google Signature Check: Google Sign-In via Firebase Authentication provides UID, display name, email, and avatar for user-scoped isolation. An on-device Signature Check inspects APK SHA-1/SHA-256 and Play Services readiness without exporting private device certificates.\n" +
+                    "• Account Information: Google Sign-In via Firebase Authentication provides UID, display name, email, and avatar for user-scoped isolation.\n" +
                     "• Website Google Sign-In: When you sign in with Google on our Privacy Policy or Terms website, Google Identity Services returns a signed JWT profile (name, email, avatar) decoded locally in your browser to record your timestamped policy acknowledgement in localStorage.\n" +
                     "• Age Tier & Optional Gender Preference: Age in years (validated strictly for 13+ eligibility and 13–17 Teen Guardrails) and optional gender identity preference are saved solely inside your private Firestore preferences.\n" +
-                    "• User Prompts, Attachments & Android SDK Telemetry: Prompts and selected files are processed via Gemini on submit; Android SDK & RAM/battery telemetry stay strictly on-device.",
+                    "• User Prompts, Attachments & Telemetry: Prompts and selected files are processed via Gemini on submit; RAM/battery telemetry stay strictly on-device.",
                 "2. AI Personas, Custom Keys, ElevenLabs Voice & Freedom Controls" to
                     "Personal Google AI Studio API keys, optional Google Drive API key overrides, and optional ElevenLabs API keys & Voice IDs remain encrypted locally in Android Keystore AES-256-GCM. Personas and directives stay local per user.",
                 "3. Permissions & Foreground Service (Zero Broad Storage / No Workspace Scopes)" to
@@ -544,7 +512,7 @@ fun LegalReaderFullScreenModal(
                 OutlinedTextField(
                     value = clauseFilter,
                     onValueChange = { clauseFilter = it },
-                    placeholder = { Text("Filter clauses (e.g. signature, SDK, Drive, age, wallet)...") },
+                    placeholder = { Text("Filter clauses (e.g. compliance, Drive, age, wallet)...") },
                     leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = c.accentCyan) },
                     singleLine = true,
                     shape = RoundedCornerShape(14.dp),

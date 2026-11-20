@@ -146,14 +146,14 @@
 
     <div class="search-box">
       <span style="color:var(--cyan);font-weight:700;">⌕</span>
-      <input id="clauseSearch" type="search" placeholder="Filter privacy clauses (e.g. signature, Drive, SDK, wallet)..." />
+      <input id="clauseSearch" type="search" placeholder="Filter privacy clauses (e.g. Drive, compliance, wallet)..." />
       <span id="searchCount" style="font-size:0.78rem;color:var(--cyan);">8 / 8</span>
     </div>
 
     <article class="card clause">
-      <h2>1. Information, Signature Check &amp; Portal Google Sign-In</h2>
+      <h2>1. Information &amp; Portal Google Sign-In</h2>
       <ul>
-        <li><strong>App Account &amp; Google Signature Check:</strong> Google Sign-In via Firebase Authentication provides your UID, display name, email, and avatar solely to scope your account. On-device <code>GoogleSignatureVerifier</code> inspects APK SHA-1/SHA-256 and Play Services locally.</li>
+        <li><strong>App Account Authentication:</strong> Google Sign-In via Firebase Authentication provides your UID, display name, email, and avatar solely to scope your account.</li>
         <li><strong>Website Google Sign-In:</strong> On the web portal, Google Identity Services decodes your JWT profile client-side to save a local acknowledgement receipt.</li>
         <li><strong>Age Tier &amp; Optional Gender Profile:</strong> Optional age (13+) and gender preference stored inside user-scoped Firestore settings enforce Teen Mode guardrails and pronoun tone.</li>
       </ul>
@@ -165,10 +165,10 @@
     </article>
 
     <article class="card clause">
-      <h2>3. Permissions, Android SDK Inspector &amp; Foreground Service</h2>
+      <h2>3. Permissions &amp; Foreground Service</h2>
       <ul>
         <li><strong>Runtime Permissions:</strong> Opt-in <code>RECORD_AUDIO</code>, <code>CAMERA</code>, <code>USE_BIOMETRIC</code>, <code>ACCESS_COARSE_LOCATION</code>, and alarms. Contact/calendar permissions (<code>READ_CONTACTS</code>, <code>READ_CALENDAR</code>) were permanently removed.</li>
-        <li><strong>On-Device SDK Telemetry:</strong> <code>AndroidSdkInspector</code> reads API 36.1, ABIs, and hardware capabilities strictly locally.</li>
+        <li><strong>On-Device Battery &amp; Memory Diagnostics:</strong> Battery and heap telemetry stay strictly on-device for live sparklines.</li>
         <li><strong>Zero Broad Storage Scans &amp; Persistent Service:</strong> Uses Android Photo Picker / SAF and displays a visible notification whenever background mic/automation priority is active.</li>
       </ul>
     </article>
@@ -233,7 +233,7 @@
         });
       }
 
-      const CLIENT_ID = "299712147014-tr9jkmpjf6nj5h66ekissl1arb2es3rp.apps.googleusercontent.com";
+      const CLIENT_ID = "299712147014-amb6enesbfid5ko65b0jir9affnkthrk.apps.googleusercontent.com";
       const USER_KEY = "aqua_google_user";
       const ACK_KEY = "aqua_legal_ack";
       const signedOutEl = document.getElementById("gsiSignedOutInfo");

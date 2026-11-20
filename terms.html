@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Terms &amp; Conditions — Aqua AI</title>
-  <meta name="description" content="Terms and Conditions governing use of Aqua AI, Sign in with Google portal acceptance, Google Signature Check, Android SDK runtime, Google Drive Vault, Age 13+ safety rules, and the non-custodial wallet." />
+  <meta name="description" content="Terms and Conditions governing use of Aqua AI, Sign in with Google portal acceptance, Google Play compliance checks, Google Drive Vault, Age 13+ safety rules, and the non-custodial wallet." />
   <link rel="canonical" href="https://sras756.github.io/Aqua-ai/terms.html" />
   <meta property="og:url" content="https://sras756.github.io/Aqua-ai/terms.html" />
   <link rel="icon" type="image/png" href="public/branding/aqua-ai-logo-512.png" />
@@ -323,7 +323,7 @@
       <h1>Terms &amp; Conditions for Aqua AI</h1>
       <p style="margin:0;color:var(--muted);">
         Please read these Terms &amp; Conditions carefully before using Aqua AI, AI tools, age-gated personalization features,
-        Google Signature &amp; Android SDK diagnostics, Google Drive Vault backups, or the non-custodial multi-chain cryptocurrency wallet.
+        Google Drive Vault backups, or the non-custodial multi-chain cryptocurrency wallet.
       </p>
       <div class="meta-chips">
         <span class="meta-chip"><strong>Effective Date:</strong> November 18, 2026</span>
@@ -380,8 +380,8 @@
         <p>Market charts, token balances, and AI commentary are purely informational and not financial, tax, or legal advice.</p>
       </div>
       <div class="summary-card">
-        <div class="label">SIGNATURE &amp; SDK</div>
-        <p>Built on Android SDK 36.1 with real APK SHA-1/SHA-256 verification and declarative Skill safety checks.</p>
+        <div class="label">PLAY COMPLIANCE</div>
+        <p>Built for Android 16 (targetSdk 36) with live Google Play policy checks and declarative Skill safety checks.</p>
       </div>
     </section>
 
@@ -390,7 +390,7 @@
         <p class="toc-title">On This Page</p>
         <a href="#t-1">1. Acceptance &amp; 13+ Eligibility</a>
         <a href="#t-2">2. AI Assistant, Teen Mode &amp; Autonomy</a>
-        <a href="#t-3">3. Android SDK, Signature &amp; Service</a>
+        <a href="#t-3">3. Platform Architecture &amp; Service</a>
         <a href="#t-4">4. Self-Custodial Wallet Terms</a>
         <a href="#t-5">5. Google Drive &amp; Third-Party APIs</a>
         <a href="#t-6">6. Skills &amp; Acceptable Use</a>
@@ -401,7 +401,7 @@
       <div>
         <div class="search-box">
           <span style="color:var(--cyan);font-weight:700;">⌕</span>
-          <input id="clauseSearch" type="search" placeholder="Filter terms clauses (e.g. signature, Drive, SDK, wallet, teen)..." aria-label="Filter terms clauses" />
+          <input id="clauseSearch" type="search" placeholder="Filter terms clauses (e.g. Drive, compliance, wallet, teen)..." aria-label="Filter terms clauses" />
           <span class="search-count" id="searchCount">8 / 8 sections</span>
         </div>
 
@@ -426,10 +426,10 @@
         </article>
 
         <article class="clause-card" id="t-3">
-          <h2>3. Android SDK Alignment, Google Signature Integrity &amp; Foreground Service</h2>
+          <h2>3. Platform Alignment, OAuth Readiness &amp; Foreground Service</h2>
           <ul>
-            <li><strong>Android SDK &amp; Clean Coordinator Architecture:</strong> Aqua AI compiles against Android 16 (<code>compileSdk 36.1</code>, <code>targetSdk 36</code>, <code>minSdk 24</code>) and organizes platform modules into clean coordinators (including <code>DriveVaultScreen</code> and <code>SdkAndSignatureScreen</code>).</li>
-            <li><strong>Google Signature Check Utility:</strong> The built-in Google Signature Check helps verify whether your installed APK certificate (<code>SHA-1</code> / <code>SHA-256</code>) and Google Play Services environment match the registered OAuth configuration for reliable Google Sign-In.</li>
+            <li><strong>Clean Coordinator Architecture:</strong> Aqua AI targets Android 16 (<code>targetSdk 36</code>, <code>minSdk 24</code>) and organizes platform modules into clean coordinators (including <code>DriveVaultScreen</code> and <code>AquaSystemAndDriveCoordinator</code>).</li>
+            <li><strong>Google OAuth Readiness:</strong> Google Sign-In and Drive Vault rely on Google Identity / Credential Manager APIs and Google Play Services verification on supported devices.</li>
             <li><strong>Foreground Keep-Alive Service:</strong> Enabling background wake-word detection or prioritized task execution launches a transparent Android foreground service notification; battery impact depends on device OS scheduling and wake-word usage.</li>
           </ul>
         </article>
@@ -525,7 +525,7 @@
         });
       }
 
-      const DEFAULT_CLIENT_ID = "299712147014-tr9jkmpjf6nj5h66ekissl1arb2es3rp.apps.googleusercontent.com";
+      const DEFAULT_CLIENT_ID = "299712147014-amb6enesbfid5ko65b0jir9affnkthrk.apps.googleusercontent.com";
       const CLIENT_OVERRIDE_KEY = "aqua_web_oauth_client_id";
       const queryClientId = new URLSearchParams(window.location.search).get("client_id");
       if (queryClientId && queryClientId.endsWith(".apps.googleusercontent.com")) {

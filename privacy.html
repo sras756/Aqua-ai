@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Privacy Policy — Aqua AI</title>
-  <meta name="description" content="Privacy Policy for Aqua AI (com.aistudio.aquaai.vqrzmn), including Google Sign-In, Google Signature Check, Google Drive Limited Use disclosure, Android SDK telemetry, and self-custodial wallet privacy." />
+  <meta name="description" content="Privacy Policy for Aqua AI (com.aistudio.aquaai.vqrzmn), including Google Sign-In, Google Drive Limited Use disclosure, least-privilege permissions, and self-custodial wallet privacy." />
   <link rel="canonical" href="https://sras756.github.io/Aqua-ai/privacy.html" />
   <meta property="og:url" content="https://sras756.github.io/Aqua-ai/privacy.html" />
   <link rel="icon" type="image/png" href="public/branding/aqua-ai-logo-512.png" />
@@ -334,7 +334,7 @@
       <h1>Privacy Policy for Aqua AI</h1>
       <p style="margin:0;color:var(--muted);">
         This Privacy Policy explains how Aqua AI collects, processes, protects, and lets you verify, export, or delete information
-        across AI conversations, Google Signature Check, Android SDK diagnostics, Age 13+ &amp; optional gender preferences,
+        across AI conversations, Play Compliance checks, Age 13+ &amp; optional gender preferences,
         Google Drive Vault backups (with approved API key), and the self-custodial crypto wallet.
       </p>
       <div class="meta-chips">
@@ -389,8 +389,8 @@
         <p>Only least-privilege Google Drive backup scopes run on request (no Gmail, Calendar, or Contacts access).</p>
       </div>
       <div class="summary-card">
-        <div class="label">SIGNATURE &amp; SDK</div>
-        <p>On-device SHA-1/SHA-256 Signature Check &amp; Android SDK Inspector stay strictly local with zero tracking.</p>
+        <div class="label">PLAY COMPLIANCE</div>
+        <p>Live environment policy checks verify Photo Picker media privacy, cleartext-free TLS, and Age 13+ gating locally.</p>
       </div>
       <div class="summary-card">
         <div class="label">PORTABILITY &amp; DELETE</div>
@@ -403,7 +403,7 @@
         <p class="toc-title">On This Page</p>
         <a href="#sec-1">1. Information &amp; Portal Sign-In</a>
         <a href="#sec-2">2. AI Keys, Age &amp; Gender</a>
-        <a href="#sec-3">3. Permissions &amp; Android SDK</a>
+        <a href="#sec-3">3. Permissions &amp; Foreground Service</a>
         <a href="#sec-4">4. Google Drive &amp; Limited Use</a>
         <a href="#sec-5">5. Self-Custodial Wallet</a>
         <a href="#sec-6">6. Storage &amp; Data Exports</a>
@@ -414,14 +414,14 @@
       <div>
         <div class="search-box">
           <span style="color:var(--cyan);font-weight:700;">⌕</span>
-          <input id="clauseSearch" type="search" placeholder="Filter privacy clauses (e.g. signature, Drive, SDK, wallet, delete)..." aria-label="Filter privacy clauses" />
+          <input id="clauseSearch" type="search" placeholder="Filter privacy clauses (e.g. Drive, compliance, wallet, delete)..." aria-label="Filter privacy clauses" />
           <span class="search-count" id="searchCount">8 / 8 sections</span>
         </div>
 
         <article class="clause-card" id="sec-1">
-          <h2>1. Information We Access, Google Signature Check &amp; Portal Sign-In</h2>
+          <h2>1. Information We Access &amp; Portal Sign-In</h2>
           <ul>
-            <li><strong>App Account &amp; Google Signature Check:</strong> When you sign in with Google via Firebase Authentication, Aqua AI receives your Firebase UID, display name, email address, and profile photo URL solely to authenticate your session and isolate your user data. An on-device <code>GoogleSignatureVerifier</code> inspects the installed APK's <code>SHA-1</code> / <code>SHA-256</code> certificates, OAuth Web Client ID configuration, and Google Play Services status locally to safeguard sign-in integrity.</li>
+            <li><strong>App Account Authentication:</strong> When you sign in with Google via Firebase Authentication, Aqua AI receives your Firebase UID, display name, email address, and profile photo URL solely to authenticate your session and isolate your user data.</li>
             <li><strong>Website Sign in with Google (Privacy &amp; Terms Portal):</strong> When you sign in on this web portal via Google Identity Services (<code>accounts.google.com/gsi/client</code>), your signed Google ID token (JWT) is decoded strictly client-side in your browser to display your name, email, and avatar and store a local policy acknowledgement receipt inside browser <code>localStorage</code>. No third-party tracking server stores your website session.</li>
             <li><strong>Age Tier &amp; Optional Gender Profile:</strong> You may provide your age (validated 13+) and an optional gender identity/pronoun preference stored inside your user-scoped Firestore settings document (<code>users/{uid}/settings/preferences</code>) solely to enforce 13+ safety guardrails and adapt conversational tone.</li>
             <li><strong>User-Initiated Prompts &amp; Attachments:</strong> Text messages, voice transcripts, documents, and images selected via Android Photo Picker or Storage Access Framework (SAF) are processed only when you submit them to generate AI responses.</li>
@@ -438,11 +438,11 @@
         </article>
 
         <article class="clause-card" id="sec-3">
-          <h2>3. Android Permissions, Foreground Service &amp; Android SDK Inspector</h2>
+          <h2>3. Android Permissions &amp; Foreground Service Transparency</h2>
           <ul>
             <li><strong>Least-Privilege Runtime Permissions:</strong> Opt-in Microphone (<code>RECORD_AUDIO</code>), Camera (QR scanning and vision), Biometrics (wallet unlock), Coarse Location (opt-in map context), and Alarms. Legacy contact and calendar permissions (<code>READ_CONTACTS</code>, <code>READ_CALENDAR</code>) have been permanently removed.</li>
             <li><strong>Zero Broad Storage Scans:</strong> Uses Android Photo Picker and SAF (<code>OpenDocument</code> / <code>CreateDocument</code>) rather than broad media storage permissions.</li>
-            <li><strong>On-Device Android SDK &amp; Hardware Telemetry:</strong> <code>AndroidSdkInspector</code> reads local <code>Build.VERSION.SDK_INT</code>, ABI architectures, Security Patch, <code>PackageManager.hasSystemFeature()</code> flags, battery, and JVM heap memory strictly on-device.</li>
+            <li><strong>On-Device Battery &amp; Memory Diagnostics:</strong> Device battery and heap memory telemetry are inspected strictly on-device for live chat sparklines and never sold or used for tracking.</li>
             <li><strong>Foreground Priority Service Transparency:</strong> Optional background wake-word/automation mode shows a persistent Android notification (<code>AquaWakeWordService</code>, type <code>microphone|dataSync</code>) with pause and stop controls.</li>
           </ul>
         </article>
@@ -472,7 +472,7 @@
         <article class="clause-card" id="sec-6">
           <h2>6. Data Storage, Security &amp; Markdown / JSON Portability</h2>
           <p>
-            Cloud conversations, skills, routines, and memories reside inside user-scoped Firebase Firestore collections protected by zero-trust authentication rules so only your authenticated account can read or write them. You can export active conversations anytime to Markdown (<code>.md</code>) or JSON (<code>.json</code>), export Android SDK diagnostic reports, or create a password-encrypted portable wallet JSON.
+            Cloud conversations, skills, routines, and memories reside inside user-scoped Firebase Firestore collections protected by zero-trust authentication rules so only your authenticated account can read or write them. You can export active conversations anytime to Markdown (<code>.md</code>) or JSON (<code>.json</code>), export device diagnostic summaries, or create a password-encrypted portable wallet JSON.
           </p>
         </article>
 
@@ -546,7 +546,7 @@
         });
       }
 
-      const DEFAULT_CLIENT_ID = "299712147014-tr9jkmpjf6nj5h66ekissl1arb2es3rp.apps.googleusercontent.com";
+      const DEFAULT_CLIENT_ID = "299712147014-amb6enesbfid5ko65b0jir9affnkthrk.apps.googleusercontent.com";
       const CLIENT_OVERRIDE_KEY = "aqua_web_oauth_client_id";
       const queryClientId = new URLSearchParams(window.location.search).get("client_id");
       if (queryClientId && queryClientId.endsWith(".apps.googleusercontent.com")) {

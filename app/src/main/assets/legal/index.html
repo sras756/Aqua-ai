@@ -184,10 +184,10 @@
   <main class="wrap">
     <section class="hero">
       <span class="badge">EFFECTIVE NOV 18, 2026 • GOOGLE PLAY &amp; API 36.1 COMPLIANT</span>
-      <h1>Verified Android Architecture, Google Signature Check &amp; All Aqua AI Features</h1>
+      <h1>Verified Android Architecture, Play Compliance &amp; All Aqua AI Features</h1>
       <p>
-        Aqua AI (<code>com.aistudio.aquaai.vqrzmn</code>) runs on Android SDK 36.1 (minSdk 24) with clean Coordinator architecture,
-        APK Google Signature verification, Google Drive Vault + approved <code>GOOGLE_DRIVE_API_KEY</code> support, optional BYOK Google AI Studio &amp; ElevenLabs voice,
+        Aqua AI (<code>com.aistudio.aquaai.vqrzmn</code>) runs on Android 16 (minSdk 24) with clean Coordinator architecture,
+        Google Play compliance auditing, Google Drive Vault + approved <code>GOOGLE_DRIVE_API_KEY</code> support, optional BYOK Google AI Studio &amp; ElevenLabs voice,
         Age 13+ &amp; Teen guardrails, and a strictly self-custodial crypto wallet.
       </p>
       <div class="cta-row">
@@ -307,8 +307,8 @@
         <p>Modular <code>AquaSystemAndDriveCoordinator</code> &amp; <code>AquaWalletCoordinator</code> with spring-motion UI &amp; 5-tab bar/rail.</p>
       </article>
       <article class="card">
-        <h2>Google Signature &amp; SDK</h2>
-        <p>Live <code>SHA-1</code>/<code>SHA-256</code> APK verification + <code>AndroidSdkInspector</code> for API 36.1 hardware telemetry.</p>
+        <h2>Play Compliance &amp; Trend</h2>
+        <p>Live <code>PlayComplianceInspector</code> checks (permissions, TLS, Age 13+, FGS) with a D3.js trend dashboard.</p>
       </article>
       <article class="card">
         <h2>Google Drive Vault Only</h2>
@@ -322,23 +322,13 @@
 
     <section class="card" id="features">
       <h2>All Aqua AI Features — Foundation &amp; Latest Releases</h2>
-      <p style="margin-bottom:6px;">Browse our latest Coordinator Architecture, Google Signature Check, Drive Vault &amp; Android SDK upgrades alongside Aqua AI's core capabilities.</p>
+      <p style="margin-bottom:6px;">Browse our latest Coordinator Architecture, Drive Vault, Age 13+ &amp; Voice Studio upgrades alongside Aqua AI's core capabilities.</p>
       <div class="filter-tabs">
-        <button class="filter-tab active" type="button" data-filter="all">All (14)</button>
-        <button class="filter-tab" type="button" data-filter="new">New Releases (10)</button>
+        <button class="filter-tab active" type="button" data-filter="all">All (12)</button>
+        <button class="filter-tab" type="button" data-filter="new">New Releases (8)</button>
         <button class="filter-tab" type="button" data-filter="core">Core Foundation (4)</button>
       </div>
       <div class="f-grid" id="featuresGrid">
-        <article class="f-card" data-era="new">
-          <span class="era era-new">NEW • SECURITY</span>
-          <h3>Google Signature Check</h3>
-          <p>Verifies live APK SHA-1/SHA-256 certificates against Firebase OAuth <code>5B:FA:1D:7E:...</code>, <code>default_web_client_id</code> &amp; Play Services.</p>
-        </article>
-        <article class="f-card" data-era="new">
-          <span class="era era-new">NEW • ANDROID SDK</span>
-          <h3>Android SDK &amp; Hardware Inspector</h3>
-          <p>Reports Compile 36.1 / Target 36 / Min 24, Security Patch, ABIs, StrongBox/Biometric/BLE/NFC features, and exports Markdown diagnostics.</p>
-        </article>
         <article class="f-card" data-era="new">
           <span class="era era-new">NEW • DRIVE VAULT</span>
           <h3>Google Drive + Approved API Key</h3>
@@ -410,7 +400,6 @@
           <tbody>
             <tr><td><strong>Google Profile</strong></td><td>Firebase Auth / Portal localStorage</td><td>Sign out or email for deletion</td></tr>
             <tr><td><strong>Google Drive Vault</strong></td><td>Personal Drive (<code>drive.appdata</code>, <code>drive.file</code>)</td><td>Backup, restore, delete, or revoke anytime</td></tr>
-            <tr><td><strong>Android SDK &amp; Signature</strong></td><td>Device memory only (never uploaded)</td><td>Inspect or export Markdown anytime</td></tr>
             <tr><td><strong>Wallet Keys &amp; PIN</strong></td><td>Device Android Keystore only</td><td>PIN/Biometric &amp; Emergency Lock</td></tr>
             <tr><td><strong>Age Tier &amp; Gender</strong></td><td>User-scoped Firestore preferences</td><td>Update or reset anytime in Setup/Settings</td></tr>
           </tbody>
@@ -465,7 +454,7 @@
           }
         });
       }
-      const tabs = Array.from(document.querySelectorAll(".filter-tab"));
+      const tabs = Array.from(document.querySelectorAll(".filter-tab[data-filter]"));
       const cards = Array.from(document.querySelectorAll("#featuresGrid .f-card"));
       tabs.forEach((tab) => {
         tab.addEventListener("click", () => {
@@ -475,7 +464,7 @@
         });
       });
 
-      const CLIENT_ID = "299712147014-tr9jkmpjf6nj5h66ekissl1arb2es3rp.apps.googleusercontent.com";
+      const CLIENT_ID = "299712147014-amb6enesbfid5ko65b0jir9affnkthrk.apps.googleusercontent.com";
       const USER_KEY = "aqua_google_user";
       const ACK_KEY = "aqua_legal_ack";
       const signedOutEl = document.getElementById("gsiSignedOutInfo");

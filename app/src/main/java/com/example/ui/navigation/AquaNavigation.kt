@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Dashboard
@@ -25,7 +24,6 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -77,10 +75,8 @@ import com.example.ui.screens.BrowserScreen
 import com.example.ui.screens.DriveVaultScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.HubScreen
-import com.example.ui.screens.ImagePluginScreen
 import com.example.ui.screens.MemoryAndHistoryScreen
 import com.example.ui.screens.RoutinesScreen
-import com.example.ui.screens.SdkAndSignatureScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.SkillsScreen
 import com.example.ui.screens.WalletScreen
@@ -112,9 +108,7 @@ private val AQUA_RAIL_TABS = listOf(
     AquaTab("home", "Core", Icons.Filled.GraphicEq),
     AquaTab("hub", "Hub", Icons.Filled.Dashboard),
     AquaTab("routines", "Routines", Icons.Filled.AutoMode),
-    AquaTab("image_plugin", "Studio", Icons.Filled.AutoAwesome),
     AquaTab("drive", "Drive", Icons.Filled.CloudSync),
-    AquaTab("sdk", "SDK", Icons.Filled.VerifiedUser),
     AquaTab("skills", "Skills", Icons.Filled.Extension),
     AquaTab("browser", "Browser", Icons.Filled.Language),
     AquaTab("wallet", "Wallet", Icons.Filled.AccountBalanceWallet),
@@ -284,7 +278,7 @@ private fun AuthenticatedAquaShell(
         }
     }
 
-    val hubSubRoutes = setOf("image_plugin", "drive", "sdk", "skills", "memory", "settings")
+    val hubSubRoutes = setOf("drive", "skills", "memory", "settings")
     if (currentTab != "home") {
         BackHandler {
             currentTab = if (currentTab in hubSubRoutes) {
@@ -387,9 +381,7 @@ private fun AuthenticatedAquaShell(
                                     onOpenCommandPalette = { showCommandPalette = true }
                                 )
                                 "routines" -> RoutinesScreen(viewModel = viewModel)
-                                "image_plugin" -> ImagePluginScreen(viewModel = viewModel)
                                 "drive" -> DriveVaultScreen(viewModel = viewModel)
-                                "sdk" -> SdkAndSignatureScreen(viewModel = viewModel)
                                 "skills" -> SkillsScreen(viewModel = viewModel)
                                 "browser" -> BrowserScreen(viewModel = viewModel)
                                 "wallet" -> WalletScreen(viewModel = viewModel)
