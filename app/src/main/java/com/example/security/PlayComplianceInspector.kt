@@ -184,7 +184,11 @@ object PlayComplianceInspector {
             } else {
                 pm.getServiceInfo(component, PackageManager.GET_META_DATA)
             }
-            svcInfo.foregroundServiceType
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                svcInfo.foregroundServiceType
+            } else {
+                0
+            }
         }.getOrDefault(0)
 
         return ComplianceEnvironmentSnapshot(

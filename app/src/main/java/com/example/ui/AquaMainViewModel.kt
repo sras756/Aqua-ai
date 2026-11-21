@@ -22,16 +22,26 @@ import com.example.browser.BrowserTabSession
 import com.example.core.agent.AgentOrchestrator
 import com.example.core.agent.RiskTier
 import com.example.core.agent.TaskState
+import com.example.core.automation.AquaAutomationStudio
+import com.example.core.connectors.ConnectorAuthLaunchResult
+import com.example.core.connectors.ConnectorStatus
+import com.example.core.connectors.GoogleConnectorManager
+import com.example.core.connectors.GoogleServiceId
 import com.example.core.database.AgentTaskEntity
 import com.example.core.database.AiUsageMeterEntity
 import com.example.core.database.AuditLogEntity
+import com.example.core.database.AutomationWorkflowEntity
 import com.example.core.database.BookmarkEntity
 import com.example.core.database.DriveFileMetadataEntity
 import com.example.core.database.DriveSyncQueueEntity
 import com.example.core.database.MemoryEntity
 import com.example.core.database.MemoryTier
 import com.example.core.database.WorkspaceDocumentEntity
+import com.example.core.developer.AquaDeveloperModeClient
+import com.example.core.developer.GitHubRepoSummary
 import com.example.core.drive.ConflictResolutionStrategy
+import com.example.core.knowledge.AquaKnowledgeBrain
+import com.example.core.knowledge.KnowledgeCitation
 import com.example.core.memory.AquaMemoryEngine
 import com.example.core.security.PermissionDomain
 import com.example.core.security.PermissionPolicyStore
@@ -39,6 +49,7 @@ import com.example.core.voice.DetectedVoiceLanguage
 import com.example.core.workspace.AquaWorkspaceEngine
 import com.example.core.workspace.WorkspaceFolderType
 import com.example.core.workspace.WorkspaceMode
+import com.example.device.AquaScreenIntelligence
 import com.example.data.local.AiFreedomConfig
 import com.example.data.local.AquaCacheDatabase
 import com.example.data.local.AquaLocalPreferences
@@ -158,6 +169,25 @@ class AquaMainViewModel(
         driveSyncCoordinator = systemAndDriveCoordinator.syncCoordinator,
         userIdProvider = { currentUserId }
     )
+
+    val automationStudio = AquaAutomationStudio(
+        context = appContext,
+        workflowDao = cacheDb.automationWorkflowDao(),
+        permissionPolicyStore = permissionPolicyStore,
+        driveSyncCoordinator = systemAndDriveCoordinator.syncCoordinator,
+        userIdProvider = { currentUserId }
+    )
+
+    val knowledgeBrain = AquaKnowledgeBrain(
+        memoryEngine = memoryEngine,
+        workspaceEngine = workspaceEngine,
+        driveMetadataDao = cacheDb.driveFileMetadataDao(),
+        userIdProvider = { currentUserId }
+    )
+
+    val connectorManager = GoogleConnectorManager(appContext, currentUserId)
+    val developerModeClient = AquaDeveloperModeClient(secureConfigStore)
+    val screenIntelligence = AquaScreenIntelligence(appContext, permissionPolicyStore)
 
     val personaId: StateFlow<String> = localPrefs.personaId
     val customDirective: StateFlow<String> = localPrefs.customDirective
@@ -283,6 +313,23 @@ class AquaMainViewModel(
         workspaceEngine.observeBookmarks(currentUserId)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
     val browserTabSessions: StateFlow<List<BrowserTabSession>> = browserController.tabSessions
+
+    val automationWorkflows: StateFlow<List<AutomationWorkflowEntity>> =
+        automationStudio.observeWorkflows(currentUserId)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    val connectorStatuses: StateFlow<Map<GoogleServiceId, ConnectorStatus>> = connectorManager.statuses
+
+    private val _knowledgeCitations = MutableStateFlow<List<KnowledgeCitation>>(emptyList())
+    val knowledgeCitations: StateFlow<List<KnowledgeCitation>> = _knowledgeCitations.asStateFlow()
+
+    private val _githubRepos = MutableStateFlow<List<GitHubRepoSummary>>(emptyList())
+    val githubRepos: StateFlow<List<GitHubRepoSummary>> = _githubRepos.asStateFlow()
+
+    private val _connectorAuthPending = MutableStateFlow<Pair<GoogleServiceId, PendingIntent>?>(null)
+    val connectorAuthPending: StateFlow<Pair<GoogleServiceId, PendingIntent>?> = _connectorAuthPending.asStateFlow()
+
+    private val _githubConnectedState = MutableStateFlow(secureConfigStore.hasGithubPat())
+    val githubConnectedState: StateFlow<Boolean> = _githubConnectedState.asStateFlow()
 
     val permissionPolicies: StateFlow<Map<PermissionDomain, Boolean>> = permissionPolicyStore.domainStates
     val activeAgentTaskId: StateFlow<String?> = agentOrchestrator.activeTaskId
@@ -1815,6 +1862,129 @@ class AquaMainViewModel(
 
     fun verifyGoogleDriveApiKey() =
         systemAndDriveCoordinator.verifyGoogleDriveApiKey()
+
+    // --- PHASE 9: ECOSYSTEM CONNECTORS, KNOWLEDGE BRAIN, AUTOMATION STUDIO & DEVELOPER MODE ---
+
+    fun runKnowledgeSearch(query: String) {
+        viewModelScope.launch {
+            _knowledgeCitations.value = knowledgeBrain.queryCitations(query = query)
+        }
+    }
+
+    fun createAutomationWorkflow(
+        name: String,
+        description: String,
+        triggerType: String,
+        intervalMinutes: Long,
+        steps: List<String>,
+        riskTier: RiskTier = RiskTier.TIER_1_WORKSPACE
+    ) {
+        viewModelScope.launch {
+            automationStudio.saveWorkflow(
+                name = name,
+                description = description,
+                triggerType = triggerType,
+                intervalMinutes = intervalMinutes,
+                steps = steps,
+                riskTier = riskTier
+            ).onSuccess {
+                _bannerMessage.value = "Saved Automation workflow '${it.name}'."
+            }.onFailure {
+                _bannerMessage.value = it.localizedMessage
+            }
+        }
+    }
+
+    fun deleteAutomationWorkflow(workflowId: String) {
+        viewModelScope.launch {
+            automationStudio.deleteWorkflow(workflowId)
+            _bannerMessage.value = "Deleted workflow and queued Drive removal."
+        }
+    }
+
+    fun setGoogleConnectorEnabled(service: GoogleServiceId, enabled: Boolean) {
+        connectorManager.setConnectorEnabled(service, enabled)
+    }
+
+    fun authorizeGoogleConnector(service: GoogleServiceId) {
+        viewModelScope.launch {
+            val res: ConnectorAuthLaunchResult = connectorManager.authorizeConnector(service)
+            if (res.pendingIntent != null) {
+                _connectorAuthPending.value = service to res.pendingIntent
+            } else if (res.authorized && !res.accessToken.isNullOrBlank()) {
+                connectorManager.fetchLivePreview(service, res.accessToken)
+                    .onSuccess { summary -> _bannerMessage.value = "${service.title}: $summary" }
+                    .onFailure { _bannerMessage.value = it.localizedMessage }
+            } else {
+                _bannerMessage.value = res.statusMessage
+            }
+        }
+    }
+
+    fun consumeConnectorAuthPending() {
+        _connectorAuthPending.value = null
+    }
+
+    fun handleConnectorConsentResult(service: GoogleServiceId, data: Intent?) {
+        viewModelScope.launch {
+            connectorManager.handleConsentResult(service, data)
+                .onSuccess { token ->
+                    connectorManager.fetchLivePreview(service, token)
+                        .onSuccess { summary -> _bannerMessage.value = "${service.title}: $summary" }
+                        .onFailure { _bannerMessage.value = "${service.title} linked: ${it.localizedMessage}" }
+                }
+                .onFailure { _bannerMessage.value = it.localizedMessage }
+        }
+    }
+
+    fun revokeGoogleConnector(service: GoogleServiceId) {
+        viewModelScope.launch {
+            connectorManager.revokeConnectorScope(service)
+            _bannerMessage.value = "Revoked ${service.title} OAuth scope."
+        }
+    }
+
+    fun saveGithubPat(pat: String) {
+        secureConfigStore.saveGithubPat(pat)
+        _githubConnectedState.value = secureConfigStore.hasGithubPat()
+        _bannerMessage.value = if (_githubConnectedState.value) {
+            "GitHub PAT saved encrypted in Android Keystore."
+        } else {
+            "Cleared empty GitHub PAT."
+        }
+    }
+
+    fun clearGithubPat() {
+        secureConfigStore.clearGithubPat()
+        _githubConnectedState.value = false
+        _githubRepos.value = emptyList()
+        _bannerMessage.value = "Cleared GitHub credentials."
+    }
+
+    fun loadGithubRepositories() {
+        viewModelScope.launch {
+            developerModeClient.fetchUserRepositories()
+                .onSuccess { repos ->
+                    _githubRepos.value = repos
+                    _bannerMessage.value = "Loaded ${repos.size} GitHub repositories."
+                }
+                .onFailure { err ->
+                    _bannerMessage.value = err.localizedMessage
+                }
+        }
+    }
+
+    fun captureOnDemandScreenSummary() {
+        screenIntelligence.captureScreenSummaryOnDemand()
+            .onSuccess { text ->
+                _bannerMessage.value = "Captured ${text.length} chars from active screen."
+                _navigateToTabEvent.value = "home"
+                sendMessage("Summarize what is currently visible on my Android screen:\n\n${text.take(4000)}")
+            }
+            .onFailure { err ->
+                _bannerMessage.value = err.localizedMessage
+            }
+    }
 
     private fun handleFlowError(source: String, error: Throwable) {
         val firestoreError = generateSequence(error) { it.cause }

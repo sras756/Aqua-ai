@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -96,6 +97,7 @@ import com.example.ui.components.AiSetupSheet
 import com.example.ui.components.AquaAdaptiveContainer
 import com.example.ui.components.AuthorizationModal
 import com.example.ui.components.CommandPaletteSheet
+import com.example.ui.screens.AquaEcosystemHubScreen
 import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.BrowserScreen
 import com.example.ui.screens.DriveVaultScreen
@@ -139,6 +141,7 @@ private val AQUA_RAIL_TABS = listOf(
     AquaTab("browser", "Browser", Icons.Filled.Language),
     AquaTab("wallet", "Wallet", Icons.Filled.AccountBalanceWallet),
     AquaTab("memory", "Memory", Icons.Filled.Memory),
+    AquaTab("ecosystem", "Control", Icons.Filled.Security),
     AquaTab("settings", "Settings", Icons.Filled.Settings)
 )
 
@@ -304,7 +307,7 @@ private fun AuthenticatedAquaShell(
         }
     }
 
-    val hubSubRoutes = setOf("drive", "skills", "memory", "settings")
+    val hubSubRoutes = setOf("drive", "skills", "memory", "ecosystem", "settings")
     if (currentTab != "home") {
         BackHandler {
             currentTab = if (currentTab in hubSubRoutes) {
@@ -494,6 +497,7 @@ private fun AuthenticatedAquaShell(
                                 "browser" -> BrowserScreen(viewModel = viewModel)
                                 "wallet" -> WalletScreen(viewModel = viewModel)
                                 "memory" -> MemoryAndHistoryScreen(viewModel = viewModel, onOpenHomeChat = { currentTab = "home" })
+                                "ecosystem" -> AquaEcosystemHubScreen(viewModel = viewModel)
                                 "settings" -> SettingsScreen(viewModel = viewModel)
                                 else -> HomeScreen(
                                     viewModel = viewModel,

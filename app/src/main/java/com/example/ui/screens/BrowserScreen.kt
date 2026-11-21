@@ -860,7 +860,7 @@ fun BrowserScreen(viewModel: AquaMainViewModel) {
                             setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
                                 viewModel.browserController.enqueueDownload(url, userAgent, contentDisposition, mimetype)
                             }
-                            addJavascriptInterface(portalAuthBridge, "AquaAndroidPortal")
+                            portalAuthBridge.attachTo(this)
                             viewModel.browserController.attachWebView(this)
                             webViewInstance = this
                         }

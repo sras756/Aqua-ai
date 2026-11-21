@@ -63,6 +63,7 @@ import com.example.ui.screens.wallet.WalletSendSection
 import com.example.ui.screens.wallet.WalletToolsAndAddressBookSection
 import com.example.ui.screens.wallet.WalletTransactionsSection
 import com.example.ui.theme.AquaTheme
+import com.example.wallet.security.SecureWalletWindowEffect
 
 private val WALLET_SECTIONS = listOf(
     "Overview",
@@ -147,6 +148,8 @@ fun WalletScreen(viewModel: AquaMainViewModel) {
     } else if (activeSection != 0) {
         BackHandler { activeSection = 0 }
     }
+
+    SecureWalletWindowEffect(enabled = true)
 
     val c = AquaTheme.colors
     AquaBackdropBox(

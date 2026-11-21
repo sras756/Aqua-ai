@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -172,6 +173,14 @@ fun HubScreen(
             accent = c.accentAzure,
             tag = "hub_card_memory",
             onClick = { onOpenTab("memory") }
+        ),
+        HubTileSpec(
+            icon = Icons.Filled.Security,
+            title = "Security & Brain",
+            subtitle = "Domains • RAG • Connectors",
+            accent = c.accentCyan,
+            tag = "hub_card_ecosystem",
+            onClick = { onOpenTab("ecosystem") }
         )
     )
 

@@ -70,6 +70,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.core.drive.ConflictResolutionStrategy
 import com.example.data.repository.DriveBackupMetadata
 import com.example.ui.AquaMainViewModel
 import com.example.ui.components.AquaAdaptiveContainer
@@ -107,6 +108,9 @@ fun DriveVaultScreen(viewModel: AquaMainViewModel) {
     val hasCustomDriveApiKey by viewModel.hasCustomDriveApiKey.collectAsStateWithLifecycle()
     val driveAuthPendingIntent by viewModel.driveAuthPendingIntent.collectAsStateWithLifecycle()
     val preferredDriveEmail by viewModel.preferredDriveEmail.collectAsStateWithLifecycle()
+    val syncPendingCount by viewModel.driveSyncPendingCount.collectAsStateWithLifecycle()
+    val syncConflicts by viewModel.driveSyncConflicts.collectAsStateWithLifecycle()
+    val syncBadge by viewModel.driveSyncStateBadge.collectAsStateWithLifecycle()
 
     var apiKeyInput by remember { mutableStateOf("") }
 
@@ -174,9 +178,71 @@ fun DriveVaultScreen(viewModel: AquaMainViewModel) {
                                     )
                                 }
                                 AquaStatusPill(
-                                    label = if (driveConnected) "OAUTH ACTIVE" else "CONNECT",
-                                    accent = if (driveConnected) c.success else c.accentCyan
+                                    label = syncBadge.uppercase(),
+                                    accent = when {
+                                        syncConflicts.isNotEmpty() -> c.amber
+                                        driveConnected -> c.success
+                                        syncPendingCount > 0 -> c.accentTeal
+                                        else -> c.accentCyan
+                                    }
                                 )
+                            }
+
+                            if (syncPendingCount > 0 || syncConflicts.isNotEmpty()) {
+                                Surface(
+                                    color = c.deepSurface,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "Offline Queue: $syncPendingCount pending • ${syncConflicts.size} conflict(s)",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = c.accentCyan
+                                            )
+                                            TextButton(onClick = { viewModel.syncDriveNow(activity) }) {
+                                                Text("Sync Now", color = c.accentTeal)
+                                            }
+                                        }
+                                        syncConflicts.forEach { conf ->
+                                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                Text(
+                                                    text = "Conflict: ${conf.driveFolder}/${conf.fileName} (${conf.lastError})",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = c.amber
+                                                )
+                                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                    OutlinedButton(
+                                                        onClick = {
+                                                            viewModel.resolveDriveConflict(
+                                                                activity,
+                                                                conf.mutationId,
+                                                                ConflictResolutionStrategy.KEEP_LOCAL
+                                                            )
+                                                        }
+                                                    ) { Text("Keep Local") }
+                                                    OutlinedButton(
+                                                        onClick = {
+                                                            viewModel.resolveDriveConflict(
+                                                                activity,
+                                                                conf.mutationId,
+                                                                ConflictResolutionStrategy.KEEP_CLOUD
+                                                            )
+                                                        }
+                                                    ) { Text("Keep Cloud") }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
 
                             Text(

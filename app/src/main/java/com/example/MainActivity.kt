@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.fragment.app.FragmentActivity
 import com.example.ai.configureAppCheck
+import com.example.core.notifications.AquaNotificationChannels
 import com.example.security.hasOfficialPlaySigningCertificate
 import com.example.ui.navigation.AquaRootApp
 import com.example.voice.AquaWakeWordService
@@ -35,6 +36,7 @@ class MainActivity : FragmentActivity() {
         }
         // MUST run before setContent or any Firebase.ai call
         configureAppCheck(this, intent)
+        AquaNotificationChannels.ensureAllChannels(this)
         enableEdgeToEdge()
         handleIncomingIntent(intent)
 

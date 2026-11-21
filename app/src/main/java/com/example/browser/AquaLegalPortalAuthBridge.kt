@@ -4,6 +4,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.webkit.JavascriptInterface
+import android.webkit.WebView
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import org.json.JSONObject
@@ -24,6 +25,10 @@ class AquaLegalPortalAuthBridge(
 
     fun updateVerifiedUrl(url: String?) {
         verifiedPortalUrl = if (isTrustedAquaPortalUrl(url)) url else null
+    }
+
+    fun attachTo(webView: WebView) {
+        webView.addJavascriptInterface(this, "AquaAndroidPortal")
     }
 
     @JavascriptInterface

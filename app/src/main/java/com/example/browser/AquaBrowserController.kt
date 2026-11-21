@@ -10,6 +10,7 @@ import android.webkit.WebStorage
 import android.webkit.WebView
 import com.example.core.browser.PromptInjectionFirewall
 import com.example.core.browser.PromptInjectionScanResult
+import com.example.core.security.AquaSecurityGuardian
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -176,11 +177,13 @@ class AquaBrowserController(private val context: Context) {
 
     fun navigateTo(urlOrQuery: String): String {
         val resolved = normalizeUrlOrSearch(urlOrQuery)
+        val urlAlert = AquaSecurityGuardian.inspectUrl(resolved)
         _hasActiveSession.value = true
         _pendingUrl.value = resolved
         updatePageState {
             it.copy(
                 currentUrl = resolved,
+                lastSecurityWarning = if (urlAlert.isHighRisk) "${urlAlert.title}: ${urlAlert.detail}" else null,
                 lastError = null
             )
         }

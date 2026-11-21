@@ -617,7 +617,7 @@ fun LegalReaderFullScreenModal(
                                     domStorageEnabled = true
                                     allowFileAccess = true
                                 }
-                                addJavascriptInterface(portalBridge, "AquaAndroidPortal")
+                                portalBridge.attachTo(this)
                                 webViewClient = object : WebViewClient() {
                                     override fun shouldOverrideUrlLoading(
                                         view: WebView?,

@@ -1,6 +1,7 @@
 package com.example.wallet.core
 
 import android.net.Uri
+import com.example.core.security.AquaSecurityGuardian
 import com.example.data.local.CachedWalletTxEntity
 import com.example.data.local.WalletCacheDao
 import com.example.data.local.WalletCustomNetworkEntity
@@ -370,7 +371,11 @@ class AquaWalletEngine(
             vault.checkSpendingLimit(estimatedUsd).getOrThrow()
         }
 
-        // 3. Risk inspection + Trusted Address Book match
+        // 3. Risk inspection + Security Guardian check + Trusted Address Book match
+        val guardianAlert = AquaSecurityGuardian.inspectWalletTransfer(fromAddress, cleanDest)
+        if (guardianAlert.isHighRisk) {
+            throw SecurityException("${guardianAlert.title}: ${guardianAlert.detail}")
+        }
         val rawRiskReport = adapter.analyzeAddressRisk(fromAddress, cleanDest, network)
         if (rawRiskReport.riskLevel == RiskLevel.CRITICAL) {
             throw SecurityException(rawRiskReport.findings.joinToString(" "))
